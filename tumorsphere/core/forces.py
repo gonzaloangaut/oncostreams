@@ -421,9 +421,9 @@ class Anisotropic_Grosmann(Force):
         noise. If shrinking is True, we update the attribute of the cell
         in order to shrink if the force is strong enough.
         """
-        name = f"Anisotropic_Grosmann_k={self.kRep}_gamma={self.bExp}"
+        name = f"Anisotropic_Grosmann_k={self.kRep:.2f}_gamma={self.bExp}"
         if self.noise_eta is not None:
-            name += f"_With_Noise_eta={self.noise_eta}"
+            name += f"_With_Noise_eta={self.noise_eta:.3f}"
         if self.shrinking is True:
             name += f"_With_Shrinking"
         return name   
@@ -493,7 +493,7 @@ class Anisotropic_Grosmann(Force):
         """
         If there is noise in the force, calculate it.
         """
-        cell = self.cells[cell_index]
+        cell = cells[cell_index]
         # we add the noise in the position:
         # we need the direction vectors
         direction_vector = np.array(
@@ -513,8 +513,8 @@ class Anisotropic_Grosmann(Force):
         mP, mS, mR = self.calculate_mobilities(cell, area)
 
         # and the noise
-        s_nP = self.eta*np.sqrt(mP*delta_t)
-        s_nS = self.eta*np.sqrt(mS*delta_t)
+        s_nP = self.noise_eta*np.sqrt(mP*delta_t)
+        s_nS = self.noise_eta*np.sqrt(mS*delta_t)
 
         nP = s_nP*cell.culture.rng.normal(0, 1)
         nS = s_nS*cell.culture.rng.normal(0, 1)
