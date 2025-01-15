@@ -470,7 +470,7 @@ class DatOutput(TumorsphereOutput):
         pass
 
 class DatOutput_position_aspectratio(TumorsphereOutput):
-    def __init__(self, culture_name, output_dir=".", save_step=100):
+    def __init__(self, culture_name, output_dir=".", save_step=1):
         self.output_dir = output_dir
         self.save_step = save_step
         self.culture_name = culture_name
@@ -505,7 +505,7 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
         side,
         cell_area,
     ):
-        if np.mod(tic, self.save_step) == 0 or tic == 0:
+        if np.mod(tic, self.save_step) == 0:
             filename = (
                 f"{self.output_dir}/{self.culture_name}_step={tic:05}.dat"
             )
@@ -538,7 +538,7 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
 class OvitoOutput(TumorsphereOutput):
     """Class for handling output to a file for visualization in Ovito."""
 
-    def __init__(self, culture_name, output_dir=".", save_step=1000):
+    def __init__(self, culture_name, output_dir=".", save_step=1):
         self.output_dir = output_dir
         self.culture_name = culture_name
         self.save_step = save_step
@@ -581,9 +581,7 @@ class OvitoOutput(TumorsphereOutput):
         # we save the ovito if tic is multiple of the save_step or in some special situations
         # in order to see the deformation
         if (
-            #np.mod(tic, self.save_step) == 0
-            #and tic >= 120 or tic==0
-            tic == 2000 or tic == 5000 or tic == 30000
+            np.mod(tic, self.save_step) == 0
         ):
             path_to_write = os.path.join(
                 self.output_dir, f"ovito_data_{self.culture_name}.{tic:05}"
@@ -828,6 +826,8 @@ def create_output_demux(
     culture_name: str,
     requested_outputs: list[str],
     output_dir: str = ".",
+    save_step_dat_pos_ar: int = 1,
+    save_step_ovito: int = 1,
 ):
     """Create an OutputDemux object with the requested output types."""
     output_types = {
@@ -840,7 +840,12 @@ def create_output_demux(
     outputs = []
     for out in requested_outputs:
         if out in output_types:
-            outputs.append(output_types[out](culture_name, output_dir))
+            if out == "dat_pos_ar":
+                outputs.append(output_types[out](culture_name, output_dir, save_step_dat_pos_ar))
+            elif out == "ovito":
+                outputs.append(output_types[out](culture_name, output_dir, save_step_ovito))
+            else:
+                outputs.append(output_types[out](culture_name, output_dir))
         else:
             logging.warning(f"Invalid output {out} requested")
     return OutputDemux(culture_name, outputs)

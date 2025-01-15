@@ -43,10 +43,8 @@ class Culture:
         rng_seed: int = 110293658491283598,
         swap_probability: float = 0.5,
         initial_number_of_cells: int = 1,
-        density: float = 0.5,
         reproduction: bool = False,
         movement: bool = True,
-        cell_area: float = np.pi, # si se calcula con el radio, sacar
         stabilization_time: int = 120,
         threshold_overlap: float = 0.61,
         delta_t: float = 0.05,
@@ -83,8 +81,6 @@ class Culture:
             110293658491283598.
         initial_number_of_cells : int, optional
             The initial number of cells in the culture.
-        density : float
-            The density of the cells in the culture. Used to calculate the side 
             length of the box.
         reproduction : bool
             Whether the cells reproduces or not.
@@ -162,14 +158,12 @@ class Culture:
         self.prob_stem = prob_stem
         self.prob_diff = prob_diff
         self.swap_probability = swap_probability
-        #self.cell_area = cell_area
         self.initial_number_of_cells = initial_number_of_cells
         self.reproduction = reproduction
         self.movement = movement
         self.threshold_overlap = threshold_overlap
         self.delta_t = delta_t
         self.aspect_ratio_max = aspect_ratio_max
-        self.density = density # Si side no se calcula, sacar porque no se usa
         self.stabilization_time = stabilization_time
 
         # we instantiate the culture's RNG with the provided entropy
@@ -199,8 +193,7 @@ class Culture:
         # we set the grid's culture to this one
         self.grid.culture = self
 
-        # calculation of the side of the culture using other parameters 
-        #self.side = np.sqrt(self.initial_number_of_cells * self.cell_area / self.density)
+        # calculation of the side of the culture using other parameters
         self.side = self.grid.bounds
         # and calculation of the cells_area given the radius
         self.cell_area = np.pi*self.cell_radius**2
@@ -934,6 +927,7 @@ class Culture:
             cell_area=self.cell_area,
         )
 
+        last_time_deformation = 0
         # we simulate for num_times time steps
         for i in range(1, num_times + 1):
             # we reproduce and (or) move the cells
@@ -947,13 +941,15 @@ class Culture:
                     self.reproduce(cell_index=index, tic=i)
 
             if self.movement:
+                #if i-last_time_deformation>=10000:
+                #    break              PROBAR ESTOOOOOOOOOOOOOOOOOOOOOOOOOOOO CON SIMULACIONES MAS LARGAS
                 # Wait for the system to stabilize before deformation
                 if i>self.stabilization_time:
                     # Deform all cells (try)
                     succesful_deformations = [
                         self.deformation(cell_index=index) for index in self.active_cell_indexes
                     ]
-                    # If at least one cell deforms, we change the las_time_deformation
+                    # If at least one cell deforms, we change the last_time_deformation
                     if any(succesful_deformations):
                         last_time_deformation = i #
 
@@ -971,6 +967,28 @@ class Culture:
                     dif_phies[index] = dif_phi
                 # Move all cells
                 self.move(dif_positions=dif_positions, dif_phies=dif_phies)
+
+                # At the time 2001 we see if there has been any deformation.
+                # If not, we stop the procedure
+                if i == 2001:
+                    # calculo todas las relaciones de aspecto
+                    aspect_ratios = [self.cells[index].aspect_ratio for index in self.active_cell_indexes]
+                    # sumo si la relacion de aspecto es mayor que 1
+                    differences = sum(ar > 1 for ar in aspect_ratios)
+                    # si ninguna se deformó nunca o alguna se deformó pero volvió a ser redonda,
+                    # terminamos el asunto
+                    if last_time_deformation == 0 or differences == 0:
+                        break
+                # At 5001 if the particles elongated are less or equal than 2
+                # we also stop
+                if i == 5001:
+                    # calculo todas las relaciones de aspecto
+                    aspect_ratios = [self.cells[index].aspect_ratio for index in self.active_cell_indexes]
+                    # sumo si la relacion de aspecto es mayor que 1
+                    differences = sum(ar > 1 for ar in aspect_ratios)
+                    # si 2 o menos son mayores que 2, entonces break
+                    if differences <= 2:
+                        break
 
             # Save the data (for dat, ovito, and/or SQLite)
             self.output.record_culture_state(

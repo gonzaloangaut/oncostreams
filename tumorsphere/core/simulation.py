@@ -127,6 +127,10 @@ class Simulation:
         initial_density: Optional[List[float]] = None,
         reproduction: bool = False,
         movement: bool = True,
+        stabilization_time: int = 120,
+        threshold_overlap: float = 0.61,
+        delta_t: float = 0.05,
+        aspect_ratio_max: float = 5,
     ):
         # main simulation attributes
         self.forces = forces
@@ -143,6 +147,10 @@ class Simulation:
         self.swap_probability = swap_probability
         self._rng_seed = rng_seed
         self.rng = np.random.default_rng(rng_seed)
+        self.stabilization_time = stabilization_time
+        self.threshold_overlap = threshold_overlap
+        self.delta_t = delta_t
+        self.aspect_ratio_max = aspect_ratio_max
 
         # dictionary storing the culture objects
         self.cultures = {}
@@ -248,7 +256,9 @@ class Simulation:
         sql: bool = True,
         dat_files: bool = False,
         dat_pos_ar: bool = False,
+        save_step_dat_pos_ar: int = 1,
         ovito: bool = False,
+        save_step_ovito: int = 1,
         df: bool = False,
         number_of_processes: int = None,
         output_dir: str = ".",
@@ -308,6 +318,8 @@ class Simulation:
                         seeds[j],
                         self,
                         outputs,
+                        save_step_dat_pos_ar,
+                        save_step_ovito,
                         m,
                         output_dir,
                         self.culture_bounds,
@@ -394,6 +406,8 @@ def simulate_single_culture(
         seed,
         sim,
         outputs,
+        save_step_dat_pos_ar,
+        save_step_ovito,
         m,
         output_dir,
         culture_bounds,
@@ -415,7 +429,7 @@ def simulate_single_culture(
     )
 
     # We create the output object
-    output = create_output_demux(current_realization_name, outputs, output_dir)
+    output = create_output_demux(current_realization_name, outputs, output_dir, save_step_dat_pos_ar, save_step_ovito)
 
     # We create the spatial hash grid object
     if sim.initial_density is not None:
@@ -446,7 +460,13 @@ def simulate_single_culture(
         prob_stem=sim.prob_stem[i],
         prob_diff=sim.prob_diff[k],
         rng_seed=seed,
-        swap_probability=sim.swap_probability,
+        swap_probability=sim.swap_probability,    
+        reproduction=sim.reproduction,
+        movement=sim.movement,
+        stabilization_time=sim.stabilization_time,
+        threshold_overlap=sim.threshold_overlap,
+        delta_t=sim.delta_t,
+        aspect_ratio_max=sim.aspect_ratio_max,
     )
     sim.cultures[current_realization_name].simulate(
         sim.num_of_steps_per_realization,
