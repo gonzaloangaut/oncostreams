@@ -89,10 +89,11 @@ class Spring_Force(Force):
         neighbors_indexes,
     ):
         cell = cells[cell_index]
+
         # initialization of the parameters of interaction
-        dif_phi = 0
         dif_velocity = np.zeros(3)
-        # Calculate interaction with filtered neighbors
+        
+        # Calculate interaction with neighbors
         for neighbor_index in neighbors_indexes:
             relative_pos = cell.neighbors_relative_pos[neighbor_index]
             # we first calculate the force
@@ -102,14 +103,15 @@ class Spring_Force(Force):
             dif_velocity_2 = np.array([fx, fy, 0])
             # Accumulate changes in velocity
             dif_velocity += dif_velocity_2
+        
         # In this model the change in the velocity is equal to the force
         dif_position = (cell.velocity() + dif_velocity)*delta_t
-        # and the change in the orientation is given by the new velocity
-        dif_phi = (
-            np.arctan2((cell.velocity()[1] + dif_velocity[1]), (cell.velocity()[0] + dif_velocity[0]))
-            - phies[cell_index]
-        )
-
+        # Orientation change is based on the new velocity (if the cell moves intrinsically)
+        dif_phi = 0
+        if np.linalg.norm(cell.velocity()) != 0:
+            dif_phi = np.arctan2(cell.velocity()[1] + dif_velocity[1], cell.velocity()[0] + dif_velocity[0]) - phies[cell_index]
+            dif_phi = np.arctan2(np.sin(dif_phi), np.cos(dif_phi))  # Normalize to [-pi, pi]
+        
         return dif_position, dif_phi
 
 
@@ -136,19 +138,21 @@ class Vicsek(Force):
     ):
         # In this model there is no change in the velocity but in the orientation
         cell = cells[cell_index]
-        # initialization of the parameters of interaction
-        dif_phi = 0
         # Calculate interaction with filtered neighbors
-        for neighbor_index in neighbors_indexes:
-            alpha = np.arctan2(
-                np.sin(phies[cell_index]) + np.sin(phies[neighbor_index]),
-                np.cos(phies[cell_index]) + np.cos(phies[neighbor_index]),
-            )
-            dif_phi_2 = alpha - phies[cell_index]
+        dif_phi = 0  # Default value in case the cell is not moving
+        # Their orientations allign (if the cell move)
+        if np.linalg.norm(cell.velocity()) != 0: # Check if the cell is moving
+            # We take into account only the cells that move
+            neighbors_indexes_moving = [index for index in neighbors_indexes if np.linalg.norm(cells[index].velocity()) != 0]
+            # Calculate the alignment based on moving neighbors
+            sin_sum = np.sum(np.sin(phies[neighbors_indexes_moving]))
+            cos_sum = np.sum(np.cos(phies[neighbors_indexes_moving]))
+            alpha = np.arctan2(sin_sum + np.sin(phies[cell_index]), cos_sum + np.cos(phies[cell_index]))
+            dif_phi = alpha - phies[cell_index]
             # Normalize increment to the range [-pi, pi]
-            dif_phi_2 = np.arctan2(np.sin(dif_phi_2), np.cos(dif_phi_2))
-            dif_phi += dif_phi_2
-            #dif_phi = np.mod(dif_phi, 2*np.pi)
+            dif_phi = np.arctan2(np.sin(dif_phi), np.cos(dif_phi))
+
+        # No change in velocity, movement is straight with constant speed
         dif_position = cell.velocity()*delta_t
         return dif_position, dif_phi
 
@@ -181,28 +185,33 @@ class Vicsek_and_Spring_Force(Force):
     ):
         cell = cells[cell_index]
         # initialization of the parameters of interaction
-        dif_phi = 0
         dif_velocity = np.zeros(3)
         # Calculate interaction with filtered neighbors
+        dif_phi = 0  # Default value in case the cell is not moving
+        # Their orientations allign (if the cell move)
+        if np.linalg.norm(cell.velocity()) != 0: # Check if the cell is moving
+            # We take into account only the cells that move
+            neighbors_indexes_moving = [index for index in neighbors_indexes if np.linalg.norm(cells[index].velocity()) != 0]
+            # Calculate the alignment based on moving neighbors
+            sin_sum = np.sum(np.sin(phies[neighbors_indexes_moving]))
+            cos_sum = np.sum(np.cos(phies[neighbors_indexes_moving]))
+            alpha = np.arctan2(sin_sum + np.sin(phies[cell_index]), cos_sum + np.cos(phies[cell_index]))
+            dif_phi = alpha - phies[cell_index]
+            # Normalize increment to the range [-pi, pi]
+            dif_phi = np.arctan2(np.sin(dif_phi), np.cos(dif_phi))
+
+        # And the difference in position is given by the spring force
         for neighbor_index in neighbors_indexes:
             relative_pos = cell.neighbors_relative_pos[neighbor_index]
-            # We first calculate the force
-            fx = -self.k_spring_force * (-relative_pos[0]) 
+            # we first calculate the force
+            fx = -self.k_spring_force * (-relative_pos[0])
             fy = -self.k_spring_force * (-relative_pos[1])
             # Calculate change in velocity given by the force model
             dif_velocity_2 = np.array([fx, fy, 0])
             # Accumulate changes in velocity
             dif_velocity += dif_velocity_2
-            # and the change in the orientation is given by Vicsek
-            alpha = np.arctan2(
-                np.sin(phies[cell_index]) + np.sin(phies[neighbor_index]),
-                np.cos(phies[cell_index]) + np.cos(phies[neighbor_index]),
-            )
-            dif_phi_2 = alpha - phies[cell_index]
-            # Normalize increment to the range [-pi, pi]
-            dif_phi_2 = np.arctan2(np.sin(dif_phi_2), np.cos(dif_phi_2))
-            dif_phi += dif_phi_2
-        # In this model the change in velocity is equal to the force
+        
+        # In this model the change in the velocity is equal to the force
         dif_position = (cell.velocity() + dif_velocity)*delta_t
         return dif_position, dif_phi
 
