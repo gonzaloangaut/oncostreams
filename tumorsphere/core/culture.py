@@ -45,9 +45,11 @@ class Culture:
         initial_number_of_cells: int = 1,
         reproduction: bool = False,
         movement: bool = True,
+        deformation: bool = True,
         stabilization_time: int = 120,
         threshold_overlap: float = 0.61,
         delta_t: float = 0.05,
+        initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
     ):
         """
@@ -86,6 +88,8 @@ class Culture:
             Whether the cells reproduces or not.
         movement : bool
             Whether the cells moves or not.
+        deformation : bool
+            Whether the cells deforms or not.
         cell_area : float
             the area of all cells in the culture.
         stabilization_time : int
@@ -94,6 +98,8 @@ class Culture:
             the threshold for the overlap for which the cells start to interact and deform.
         delta_t : float
             the time interval used to move the cells.
+        initial_apect_ratio : float
+            the aspect_ratio of all cells in the culture at the begining of the simulation.
         apect_ratio_max : float
             the max value of the aspect ratio that a cell can have after deforms.
 
@@ -125,6 +131,8 @@ class Culture:
             Whether the cells reproduce or not
         movement : bool
             Whether the cells move or not
+        deformation : bool
+            Whether the cells deforms or not.
         cell_area : float
             The area of all cells in the culture.
         stabilization_time : int
@@ -134,6 +142,8 @@ class Culture:
             to deform
         delta_t : float
             The time interval used to move
+        initial_apect_ratio : float
+            the aspect_ratio of all cells in the culture at the begining of the simulation.
         apect_ratio_max : float
             The max value of the aspect ratio that a cell can have after deforms
         rng : numpy.random.Generator
@@ -161,8 +171,10 @@ class Culture:
         self.initial_number_of_cells = initial_number_of_cells
         self.reproduction = reproduction
         self.movement = movement
+        self.deformation = deformation
         self.threshold_overlap = threshold_overlap
         self.delta_t = delta_t
+        self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
         self.stabilization_time = stabilization_time
 
@@ -613,7 +625,7 @@ class Culture:
         new_position = np.mod(new_position, self.side)
         return new_position
 
-    def deformation(self, cell_index: int) -> bool:
+    def deform(self, cell_index: int) -> bool:
         """If the cell is round, an angle is chosen randomly.
         If the new cell with these angle and aspect ratio = maximum (given as an
         attribute) does not overlap with others, it remains.
@@ -909,8 +921,8 @@ class Culture:
                         ),
                         culture=self,
                         is_stem=self.first_cell_is_stem,
-                        phi=0,
-                        aspect_ratio=1,
+                        phi=0 if self.initial_aspect_ratio==1 else self.rng.uniform(low=0, high=2*np.pi),
+                        aspect_ratio=self.initial_aspect_ratio,
                         parent_index=0,
                         shrink=False,
                         available_space=True,
@@ -941,17 +953,15 @@ class Culture:
                     self.reproduce(cell_index=index, tic=i)
 
             if self.movement:
-                #if i-last_time_deformation>=10000:
-                #    break              PROBAR ESTOOOOOOOOOOOOOOOOOOOOOOOOOOOO CON SIMULACIONES MAS LARGAS
                 # Wait for the system to stabilize before deformation
-                if i>self.stabilization_time:
+                if i>self.stabilization_time and self.deformation:
                     # Deform all cells (try)
                     succesful_deformations = [
-                        self.deformation(cell_index=index) for index in self.active_cell_indexes
+                        self.deform(cell_index=index) for index in self.active_cell_indexes
                     ]
                     # If at least one cell deforms, we change the last_time_deformation
                     if any(succesful_deformations):
-                        last_time_deformation = i #
+                        last_time_deformation = i
 
                 # We initialize the change in the position and angle of all cells
                 dif_positions = np.zeros((len(self.active_cell_indexes), 3))
@@ -967,28 +977,6 @@ class Culture:
                     dif_phies[index] = dif_phi
                 # Move all cells
                 self.move(dif_positions=dif_positions, dif_phies=dif_phies)
-
-                # At the time 2001 we see if there has been any deformation.
-                # If not, we stop the procedure
-                if i == 2001:
-                    # calculo todas las relaciones de aspecto
-                    aspect_ratios = [self.cells[index].aspect_ratio for index in self.active_cell_indexes]
-                    # sumo si la relacion de aspecto es mayor que 1
-                    differences = sum(ar > 1 for ar in aspect_ratios)
-                    # si ninguna se deformó nunca o alguna se deformó pero volvió a ser redonda,
-                    # terminamos el asunto
-                    if last_time_deformation == 0 or differences == 0:
-                        break
-                # At 5001 if the particles elongated are less or equal than 2
-                # we also stop
-                if i == 5001:
-                    # calculo todas las relaciones de aspecto
-                    aspect_ratios = [self.cells[index].aspect_ratio for index in self.active_cell_indexes]
-                    # sumo si la relacion de aspecto es mayor que 1
-                    differences = sum(ar > 1 for ar in aspect_ratios)
-                    # si 2 o menos son mayores que 2, entonces break
-                    if differences <= 2:
-                        break
 
             # Save the data (for dat, ovito, and/or SQLite)
             self.output.record_culture_state(

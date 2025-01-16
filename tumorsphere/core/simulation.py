@@ -70,6 +70,19 @@ class Simulation:
         Whether the cells reproduces or not
     movement : bool
         Whether the cells moves or not
+    deformation : bool
+        Whether the cells deforms or not.
+    stabilization_time : int
+        The time we have to wait in order to start the deformation
+    threshold_overlap : float
+        The threshold for the overlap for which the cells start to interact and deform
+        to deform
+    delta_t : float
+        The time interval used to move
+    initial_apect_ratio : float
+        the aspect_ratio of all cells in the culture at the begining of the simulation.
+    apect_ratio_max : float
+        The max value of the aspect ratio that a cell can have after deforms
     culture_bounds : int, optional
         The bounds of the grid, by default None. If None, the space is
         unbouded. If provided, the space is bounded to the
@@ -127,9 +140,11 @@ class Simulation:
         initial_density: Optional[List[float]] = None,
         reproduction: bool = False,
         movement: bool = True,
+        deformation: bool = True,
         stabilization_time: int = 120,
         threshold_overlap: float = 0.61,
         delta_t: float = 0.05,
+        initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
     ):
         # main simulation attributes
@@ -137,6 +152,7 @@ class Simulation:
         self.initial_number_of_cells = initial_number_of_cells
         self.reproduction = reproduction
         self.movement = movement
+        self.deformation = deformation
         self.initial_density = initial_density
         self.first_cell_is_stem = first_cell_is_stem
         self.prob_stem = prob_stem
@@ -150,6 +166,7 @@ class Simulation:
         self.stabilization_time = stabilization_time
         self.threshold_overlap = threshold_overlap
         self.delta_t = delta_t
+        self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
 
         # dictionary storing the culture objects
@@ -463,9 +480,11 @@ def simulate_single_culture(
         swap_probability=sim.swap_probability,    
         reproduction=sim.reproduction,
         movement=sim.movement,
+        deformation=sim.deformation,
         stabilization_time=sim.stabilization_time,
         threshold_overlap=sim.threshold_overlap,
         delta_t=sim.delta_t,
+        initial_aspect_ratio=sim.initial_aspect_ratio,
         aspect_ratio_max=sim.aspect_ratio_max,
     )
     sim.cultures[current_realization_name].simulate(
