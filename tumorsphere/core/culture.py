@@ -955,6 +955,10 @@ class Culture:
             if self.movement:
                 # Wait for the system to stabilize before deformation
                 if i>self.stabilization_time and self.deformation:
+                    # we get a permuted copy of the cells list
+                    active_cell_indexes = self.rng.permutation(
+                        self.active_cell_indexes
+                    )
                     # Deform all cells (try)
                     succesful_deformations = [
                         self.deform(cell_index=index) for index in self.active_cell_indexes
