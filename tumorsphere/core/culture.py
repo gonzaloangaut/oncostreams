@@ -625,7 +625,7 @@ class Culture:
         new_position = np.mod(new_position, self.side)
         return new_position
 
-    def deform(self, cell_index: int) -> bool:
+    def elongate(self, cell_index: int) -> bool:
         """If the cell is round, an angle is chosen randomly.
         If the new cell with these angle and aspect ratio = maximum (given as an
         attribute) does not overlap with others, it remains.
@@ -637,103 +637,118 @@ class Culture:
         cell_index : int
             The index of the cell.
 
-        Return
+        Returns
         ----------
-        succesful_deformation : bool
+        succesful_elongation : bool
+            True if the elongation was successful, False otherwise.
+        """
+        cell = self.cells[cell_index]
+        #if np.isclose(cell.aspect_ratio, 1):
+        # we save the old attributes
+        old_position = np.array(self.cell_positions[cell_index])
+        old_phi = self.cell_phies[cell_index]
+        old_aspect_ratio = cell.aspect_ratio
+        # and get the place of the grid that correspond to the cell
+        # old_index = self.get_tuple_grid(old_position)
+        old_index = self.grid.get_hash_key(old_position)
+        for attempt in range(self.cell_max_def_attempts):
+            # random phi and aspect ratio=max and generate a position with them
+            new_phi = self.rng.uniform(low=0, high=2 * np.pi)
+            new_aspect_ratio = self.aspect_ratio_max
+            new_position = self.propose_new_position_to_deform(
+                cell_index, new_phi, new_aspect_ratio
+            )
+            # updating attributes
+            self.cell_positions[cell_index] = new_position
+            self.cell_phies[cell_index] = new_phi
+            self.cells[cell_index].aspect_ratio = new_aspect_ratio
+            # and calculate the new place in the grid
+            #new_index = self.get_tuple_grid(new_position)
+            new_index = self.grid.get_hash_key(new_position)
+            #candidate_neighbors = self.find_neighbors_grid(cell_index, box_index=new_index)
+            candidate_neighbors = list(
+                self.grid.find_neighbors(
+                    position=new_position,
+                )
+            )
+            # modifies the set in-place to remove the actual cell index
+            candidate_neighbors.remove(cell_index)
+            # Calculate relative positions for all neighbors
+            relative_positions = np.array(
+                [
+                    self.relative_pos(
+                        self.cell_positions[cell_index],
+                        self.cell_positions[neighbor_index],
+                    )
+                    for neighbor_index in candidate_neighbors
+                ]
+            )
+            # Filter neighbors whose distance is less than the sum of the major semi axes
+            filtered_neighbors = [
+                (neighbor_index, relative_pos)
+                for neighbor_index, relative_pos in zip(candidate_neighbors, relative_positions)
+                if np.linalg.norm(relative_pos) < (
+                    np.sqrt((self.cell_area * cell.aspect_ratio) / np.pi)
+                    + np.sqrt((self.cell_area * self.cells[neighbor_index].aspect_ratio) / np.pi)
+                )
+            ]
+            
+            # calculation of overlap
+            no_overlap = True
+            for neighbor_index, relative_pos in filtered_neighbors:
+                overlap = self.calculate_overlap(
+                    cell_index,
+                    neighbor_index,
+                    relative_pos,
+                )
+                if overlap > self.threshold_overlap:
+                    # if the new cell overlaps with another, we turn back to the
+                    # original values
+                    self.cell_positions[cell_index] = old_position
+                    self.cell_phies[cell_index] = old_phi
+                    self.cells[cell_index].aspect_ratio = old_aspect_ratio
+                    no_overlap = False
+                    break
+
+            if no_overlap:
+                # if there is no overlap, the new cell remains and we finish the loop
+                succesful_elongation = True
+                # if we have change the index, the candidate for neighbors also change
+                # Update the index of the cell if necessary
+                if old_index != new_index:
+                    #self.change_neighbors_in_grid(cell_index, old_index, new_index)
+                    self.grid.remove_cell_from_hash_table(cell_index, old_position)
+                    self.grid.add_cell_to_hash_table(cell_index, new_position)
+                return succesful_elongation
+
+        succesful_elongation = False
+        return succesful_elongation
+
+    def shrink_from_elliptical(self, cell_index: int) -> bool:
+        """If the cell is not round and its `shrink` attribute is True, it attempts to 
+        shrink.
+
+        Parameters
+        ----------
+        cell_index : int
+            The index of the cell.
+
+        Returns
+        ----------
+        succesful_shrinking : bool
             True if the deformation was successful, False otherwise.
         """
         cell = self.cells[cell_index]
-        if np.isclose(cell.aspect_ratio, 1):
-            # we save the old attributes
-            old_position = np.array(self.cell_positions[cell_index])
-            old_phi = self.cell_phies[cell_index]
-            old_aspect_ratio = cell.aspect_ratio
-            # and get the place of the grid that correspond to the cell
-            # old_index = self.get_tuple_grid(old_position)
-            old_index = self.grid.get_hash_key(old_position)
-            for attempt in range(self.cell_max_def_attempts):
-                # random phi and aspect ratio=max and generate a position with them
-                new_phi = self.rng.uniform(low=0, high=2 * np.pi)
-                new_aspect_ratio = self.aspect_ratio_max
-                new_position = self.propose_new_position_to_deform(
-                    cell_index, new_phi, new_aspect_ratio
-                )
-                # updating attributes
-                self.cell_positions[cell_index] = new_position
-                self.cell_phies[cell_index] = new_phi
-                self.cells[cell_index].aspect_ratio = new_aspect_ratio
-                # and calculate the new place in the grid
-                #new_index = self.get_tuple_grid(new_position)
-                new_index = self.grid.get_hash_key(new_position)
-                #candidate_neighbors = self.find_neighbors_grid(cell_index, box_index=new_index)
-                candidate_neighbors = list(
-                    self.grid.find_neighbors(
-                        position=new_position,
-                    )
-                )
-                # modifies the set in-place to remove the actual cell index
-                candidate_neighbors.remove(cell_index)
-                # Calculate relative positions for all neighbors
-                relative_positions = np.array(
-                    [
-                        self.relative_pos(
-                            self.cell_positions[cell_index],
-                            self.cell_positions[neighbor_index],
-                        )
-                        for neighbor_index in candidate_neighbors
-                    ]
-                )
-                # Filter neighbors whose distance is less than the sum of the major semi axes
-                filtered_neighbors = [
-                    (neighbor_index, relative_pos)
-                    for neighbor_index, relative_pos in zip(candidate_neighbors, relative_positions)
-                    if np.linalg.norm(relative_pos) < (
-                        np.sqrt((self.cell_area * cell.aspect_ratio) / np.pi)
-                        + np.sqrt((self.cell_area * self.cells[neighbor_index].aspect_ratio) / np.pi)
-                    )
-                ]
-                
-                # calculation of overlap
-                no_overlap = True
-                for neighbor_index, relative_pos in filtered_neighbors:
-                    overlap = self.calculate_overlap(
-                        cell_index,
-                        neighbor_index,
-                        relative_pos,
-                    )
-                    if overlap > self.threshold_overlap:
-                        # if the new cell overlaps with another, we turn back to the
-                        # original values
-                        self.cell_positions[cell_index] = old_position
-                        self.cell_phies[cell_index] = old_phi
-                        self.cells[cell_index].aspect_ratio = old_aspect_ratio
-                        no_overlap = False
-                        break
-
-                if no_overlap:
-                    # if there is no overlap, the new cell remains and we finish the loop
-                    succesful_deformation = True
-                    # if we have change the index, the candidate for neighbors also change
-                    # Update the index of the cell if necessary
-                    if old_index != new_index:
-                       #self.change_neighbors_in_grid(cell_index, old_index, new_index)
-                       self.grid.remove_cell_from_hash_table(cell_index, old_position)
-                       self.grid.add_cell_to_hash_table(cell_index, new_position)
-                    return succesful_deformation
-
-            succesful_deformation = False
-            return succesful_deformation
+        if cell.shrink == True:
+            # turn the cell back to round
+            self.cells[cell_index].aspect_ratio = 1
+            self.cell_phies[cell_index] = 0
+            # and the shrink turns back to False 
+            cell.shrink = False
+            succesful_shrinking = True
         else:
-            if cell.shrink == True:
-                # turn the cell back to round
-                self.cells[cell_index].aspect_ratio = 1
-                self.cell_phies[cell_index] = 0
-                # and the shrink turns back to False 
-                cell.shrink = False
-                succesful_deformation = True
-            else:
-                succesful_deformation = False
-            return succesful_deformation
+            succesful_shrinking = False
+        return succesful_shrinking
 
     def interaction(self, cell_index: int, delta_t: float) -> Tuple[np.ndarray, float]:
         """The given cell interacts with others if they are close enough.
@@ -778,7 +793,7 @@ class Culture:
                 cell.neighbors_relative_pos[neighbor_index] = relative_pos
                 # we update also the attribute of the neighbor corresponding to the actual cell                
                 neighbor = self.cells[neighbor_index]
-                neighbor.neighbors_relative_pos[cell_index] = -np.array(relative_pos) # SE HACE FALTA EL ARRAY?
+                neighbor.neighbors_relative_pos[cell_index] = -relative_pos
 
         # Filter neighbors whose distance is less than the sum of the major semi axes
         cell_semi_major_axis = np.sqrt((self.cell_area * cell.aspect_ratio) / np.pi)
@@ -939,7 +954,6 @@ class Culture:
             cell_area=self.cell_area,
         )
 
-        last_time_deformation = 0
         # we simulate for num_times time steps
         for i in range(1, num_times + 1):
             # we reproduce and (or) move the cells
@@ -959,13 +973,19 @@ class Culture:
                     active_cell_indexes = self.rng.permutation(
                         self.active_cell_indexes
                     )
-                    # Deform all cells (try)
-                    succesful_deformations = [
-                        self.deform(cell_index=index) for index in self.active_cell_indexes
-                    ]
-                    # If at least one cell deforms, we change the last_time_deformation
-                    if any(succesful_deformations):
-                        last_time_deformation = i
+
+                    # Create a list of the successful deformations
+                    deformation_success = []
+                    for index in active_cell_indexes:
+                        cell = self.cells[index]
+                        # if the cell is round
+                        if np.isclose(cell.aspect_ratio, 1):
+                            # We try to elongate the cell
+                            success = self.elongate(index)
+                        else:
+                            # We try to shrink the cell
+                            success = self.shrink_from_elliptical(index)
+                        deformation_success.append(success)
 
                 # We initialize the change in the position and angle of all cells
                 dif_positions = np.zeros((len(self.active_cell_indexes), 3))
