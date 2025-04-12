@@ -47,7 +47,7 @@ class Culture:
         movement: bool = True,
         deformation: bool = True,
         stabilization_time: int = 120,
-        threshold_overlap: float = 0.61,
+        overlap_threshold_ratio: float = 0.2,
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
@@ -94,8 +94,8 @@ class Culture:
             the area of all cells in the culture.
         stabilization_time : int
             the time we have to wait in order to start the deformation.
-        threshold_overlap : float
-            the threshold for the overlap for which the cells start to interact and deform.
+        overlap_threshold_ratio : float
+            a fraction (between 0 and 1) of the maximum allowed overlap between cells.
         delta_t : float
             the time interval used to move the cells.
         initial_apect_ratio : float
@@ -137,9 +137,8 @@ class Culture:
             The area of all cells in the culture.
         stabilization_time : int
             The time we have to wait in order to start the deformation
-        threshold_overlap : float
-            The threshold for the overlap for which the cells start to interact and deform
-            to deform
+        overlap_threshold_ratio : float
+            a fraction (between 0 and 1) of the maximum allowed overlap between cells.
         delta_t : float
             The time interval used to move
         initial_apect_ratio : float
@@ -172,7 +171,7 @@ class Culture:
         self.reproduction = reproduction
         self.movement = movement
         self.deformation = deformation
-        self.threshold_overlap = threshold_overlap
+        self.overlap_threshold_ratio = overlap_threshold_ratio
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
@@ -625,6 +624,66 @@ class Culture:
         new_position = np.mod(new_position, self.side)
         return new_position
 
+    def calculate_max_overlap(
+        self,
+        cell_index: int,
+        neighbor_index: int,
+    ) -> float:
+        """
+        Calculates the maximum overlap between two cells using overlap calculated 
+        in the TF.
+
+        Parameters
+        ----------
+        cell_index : int
+            The index of the cell.
+        neighbor_index : int
+            The index of the neighbor.
+
+        Returns
+        -------
+        max_overlap : float
+            The maximum overlap between cells
+        """
+        cell = self.cells[cell_index]
+        neighbor = self.cells[neighbor_index]
+
+        # we introduce the anisotropy (eps) and the diagonal squared (alpha) of the cell
+        eps_cell = (cell.aspect_ratio**2 - 1) / (cell.aspect_ratio**2 + 1)
+        # alpha = l_parallel**2+l_perp**2
+        # with l_parallel = np.sqrt((cell_area*cell.aspect_ratio)/np.pi)
+        # and l_perp = sqrt(cell_area/(np.pi*cell.aspect_ratio))
+        alpha_cell = (self.cell_area / np.pi) * (
+            cell.aspect_ratio + 1 / cell.aspect_ratio
+        )
+
+        # and the neighbor
+        eps_neighbor = (neighbor.aspect_ratio**2 - 1) / (
+            neighbor.aspect_ratio**2 + 1
+        )
+        alpha_neighbor = (self.cell_area / np.pi) * (
+            neighbor.aspect_ratio + 1 / neighbor.aspect_ratio
+        )
+
+        # now we introduce the constant beta introduced by us in the TF
+        beta = (
+            (alpha_cell + alpha_neighbor) ** 2
+            - (alpha_cell * eps_cell - alpha_neighbor * eps_neighbor) ** 2
+            - 4
+            * alpha_cell
+            * eps_cell
+            * alpha_neighbor
+            * eps_neighbor
+        )
+
+        # finally we can calculate i_0
+        # i_0 = (4*pi*l_par_k*l_perp_k*l_par_j*l_perp_j)/sqrt(beta)
+        # with l_parallel = np.sqrt((cell_area*cell.aspect_ratio)/np.pi)
+        # and l_perp = sqrt(cell_area/(np.pi*cell.aspect_ratio))
+        max_overlap = 4 * self.cell_area**2 / (np.pi * np.sqrt(beta))
+
+        return max_overlap
+
     def elongate(self, cell_index: int) -> bool:
         """If the cell is round, an angle is chosen randomly.
         If the new cell with these angle and aspect ratio = maximum (given as an
@@ -701,7 +760,10 @@ class Culture:
                     neighbor_index,
                     relative_pos,
                 )
-                if overlap > self.threshold_overlap:
+                # we calculate the overlap threshold
+                max_overlap = self.calculate_max_overlap(cell_index, neighbor_index)
+                if overlap > self.overlap_threshold_ratio*max_overlap:
+                    print(self.overlap_threshold_ratio*max_overlap)
                     # if the new cell overlaps with another, we turn back to the
                     # original values
                     self.cell_positions[cell_index] = old_position
@@ -826,7 +888,7 @@ class Culture:
         significant_neighbors_indexes = [
             neighbor_index
             for neighbor_index, overlap in cell.neighbors_overlap.items()
-            if overlap > self.threshold_overlap
+            if overlap > self.overlap_threshold_ratio*self.calculate_max_overlap(cell_index, neighbor_index)
         ]
         # Calculate interaction with final neighbors
         dif_position, dif_phi = self.force.calculate_interaction(

@@ -74,9 +74,8 @@ class Simulation:
         Whether the cells deforms or not.
     stabilization_time : int
         The time we have to wait in order to start the deformation
-    threshold_overlap : float
-        The threshold for the overlap for which the cells start to interact and deform
-        to deform
+    overlap_threshold_ratio : float
+        a fraction (between 0 and 1) of the maximum allowed overlap between cells.
     delta_t : float
         The time interval used to move
     initial_apect_ratio : float
@@ -142,7 +141,7 @@ class Simulation:
         movement: bool = True,
         deformation: bool = True,
         stabilization_time: int = 120,
-        threshold_overlap: float = 0.61,
+        overlap_threshold_ratio: float = 0.2,
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
@@ -164,7 +163,7 @@ class Simulation:
         self._rng_seed = rng_seed
         self.rng = np.random.default_rng(rng_seed)
         self.stabilization_time = stabilization_time
-        self.threshold_overlap = threshold_overlap
+        self.overlap_threshold_ratio = overlap_threshold_ratio
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
@@ -482,7 +481,7 @@ def simulate_single_culture(
         movement=sim.movement,
         deformation=sim.deformation,
         stabilization_time=sim.stabilization_time,
-        threshold_overlap=sim.threshold_overlap,
+        overlap_threshold_ratio=sim.overlap_threshold_ratio,
         delta_t=sim.delta_t,
         initial_aspect_ratio=sim.initial_aspect_ratio,
         aspect_ratio_max=sim.aspect_ratio_max,
