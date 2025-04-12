@@ -59,6 +59,8 @@ class Culture:
         ----------
         output : TumorsphereOutput
             The output object to record the simulation data.
+        force : Force
+            The force used in the interaction between cells.
         grid : SpatialHashGrid
             The spatial hash grid to be used in the simulation.
         adjacency_threshold : int, optional
@@ -494,32 +496,15 @@ class Culture:
         cell = self.cells[cell_index]
         neighbor = self.cells[neighbor_index]
 
-        # we introduce the anisotropy (eps) and the diagonal squared (alpha) of the cell
-        eps_cell = (cell.aspect_ratio**2 - 1) / (cell.aspect_ratio**2 + 1)
-        # alpha = l_parallel**2+l_perp**2
-        # with l_parallel = np.sqrt((cell_area*cell.aspect_ratio)/np.pi)
-        # and l_perp = sqrt(cell_area/(np.pi*cell.aspect_ratio))
-        alpha_cell = (self.cell_area / np.pi) * (
-            cell.aspect_ratio + 1 / cell.aspect_ratio
-        )
-
-        # and the neighbor
-        eps_neighbor = (neighbor.aspect_ratio**2 - 1) / (
-            neighbor.aspect_ratio**2 + 1
-        )
-        alpha_neighbor = (self.cell_area / np.pi) * (
-            neighbor.aspect_ratio + 1 / neighbor.aspect_ratio
-        )
-
         # now we introduce the constant beta introduced by us in the TF
         beta = (
-            (alpha_cell + alpha_neighbor) ** 2
-            - (alpha_cell * eps_cell - alpha_neighbor * eps_neighbor) ** 2
+            (cell.squared_diagonal + neighbor.squared_diagonal) ** 2
+            - (cell.squared_diagonal * cell.anisotropy - neighbor.squared_diagonal * neighbor.anisotropy) ** 2
             - 4
-            * alpha_cell
-            * eps_cell
-            * alpha_neighbor
-            * eps_neighbor
+            * cell.squared_diagonal
+            * cell.anisotropy
+            * neighbor.squared_diagonal
+            * neighbor.anisotropy
             * (
                 np.cos(
                     self.cell_phies[cell_index]
@@ -565,9 +550,9 @@ class Culture:
         # and calculate the matriz M
 
         matrix_M = (
-            alpha_cell * eps_cell * Q_cell
-            + alpha_neighbor * eps_neighbor * Q_neighbor
-        ) / (alpha_cell + alpha_neighbor)
+            cell.squared_diagonal * cell.anisotropy * Q_cell
+            + neighbor.squared_diagonal * neighbor.anisotropy * Q_neighbor
+        ) / (cell.squared_diagonal + neighbor.squared_diagonal)
 
         # finally we can calculate i_0 and the overlap
         # i_0 = (4*pi*l_par_k*l_perp_k*l_par_j*l_perp_j)/sqrt(beta)
@@ -577,7 +562,7 @@ class Culture:
 
         #relative_pos = np.array([relative_pos_x, relative_pos_y, 0])
         overlap = i_0 * np.exp(
-            -((alpha_cell + alpha_neighbor) / beta)
+            -((cell.squared_diagonal + neighbor.squared_diagonal) / beta)
             * np.matmul(
                 relative_pos,
                 np.matmul(np.identity(3) - matrix_M, relative_pos),
@@ -648,32 +633,15 @@ class Culture:
         cell = self.cells[cell_index]
         neighbor = self.cells[neighbor_index]
 
-        # we introduce the anisotropy (eps) and the diagonal squared (alpha) of the cell
-        eps_cell = (cell.aspect_ratio**2 - 1) / (cell.aspect_ratio**2 + 1)
-        # alpha = l_parallel**2+l_perp**2
-        # with l_parallel = np.sqrt((cell_area*cell.aspect_ratio)/np.pi)
-        # and l_perp = sqrt(cell_area/(np.pi*cell.aspect_ratio))
-        alpha_cell = (self.cell_area / np.pi) * (
-            cell.aspect_ratio + 1 / cell.aspect_ratio
-        )
-
-        # and the neighbor
-        eps_neighbor = (neighbor.aspect_ratio**2 - 1) / (
-            neighbor.aspect_ratio**2 + 1
-        )
-        alpha_neighbor = (self.cell_area / np.pi) * (
-            neighbor.aspect_ratio + 1 / neighbor.aspect_ratio
-        )
-
         # now we introduce the constant beta introduced by us in the TF
         beta = (
-            (alpha_cell + alpha_neighbor) ** 2
-            - (alpha_cell * eps_cell - alpha_neighbor * eps_neighbor) ** 2
+            (cell.squared_diagonal + neighbor.squared_diagonal) ** 2
+            - (cell.squared_diagonal * cell.anisotropy - neighbor.squared_diagonal * neighbor.anisotropy) ** 2
             - 4
-            * alpha_cell
-            * eps_cell
-            * alpha_neighbor
-            * eps_neighbor
+            * cell.squared_diagonal
+            * cell.anisotropy
+            * neighbor.squared_diagonal
+            * neighbor.anisotropy
         )
 
         # finally we can calculate i_0
@@ -702,13 +670,11 @@ class Culture:
             True if the elongation was successful, False otherwise.
         """
         cell = self.cells[cell_index]
-        #if np.isclose(cell.aspect_ratio, 1):
         # we save the old attributes
         old_position = np.array(self.cell_positions[cell_index])
         old_phi = self.cell_phies[cell_index]
         old_aspect_ratio = cell.aspect_ratio
         # and get the place of the grid that correspond to the cell
-        # old_index = self.get_tuple_grid(old_position)
         old_index = self.grid.get_hash_key(old_position)
         for attempt in range(self.cell_max_def_attempts):
             # random phi and aspect ratio=max and generate a position with them
@@ -720,11 +686,9 @@ class Culture:
             # updating attributes
             self.cell_positions[cell_index] = new_position
             self.cell_phies[cell_index] = new_phi
-            self.cells[cell_index].aspect_ratio = new_aspect_ratio
+            cell.set_aspect_ratio(new_aspect_ratio)
             # and calculate the new place in the grid
-            #new_index = self.get_tuple_grid(new_position)
             new_index = self.grid.get_hash_key(new_position)
-            #candidate_neighbors = self.find_neighbors_grid(cell_index, box_index=new_index)
             candidate_neighbors = list(
                 self.grid.find_neighbors(
                     position=new_position,
@@ -763,12 +727,11 @@ class Culture:
                 # we calculate the overlap threshold
                 max_overlap = self.calculate_max_overlap(cell_index, neighbor_index)
                 if overlap > self.overlap_threshold_ratio*max_overlap:
-                    print(self.overlap_threshold_ratio*max_overlap)
                     # if the new cell overlaps with another, we turn back to the
                     # original values
                     self.cell_positions[cell_index] = old_position
                     self.cell_phies[cell_index] = old_phi
-                    self.cells[cell_index].aspect_ratio = old_aspect_ratio
+                    cell.set_aspect_ratio(old_aspect_ratio)
                     no_overlap = False
                     break
 
@@ -778,7 +741,6 @@ class Culture:
                 # if we have change the index, the candidate for neighbors also change
                 # Update the index of the cell if necessary
                 if old_index != new_index:
-                    #self.change_neighbors_in_grid(cell_index, old_index, new_index)
                     self.grid.remove_cell_from_hash_table(cell_index, old_position)
                     self.grid.add_cell_to_hash_table(cell_index, new_position)
                 return succesful_elongation
@@ -803,7 +765,7 @@ class Culture:
         cell = self.cells[cell_index]
         if cell.shrink == True:
             # turn the cell back to round
-            self.cells[cell_index].aspect_ratio = 1
+            cell.set_aspect_ratio(1)
             self.cell_phies[cell_index] = 0
             # and the shrink turns back to False 
             cell.shrink = False

@@ -263,10 +263,6 @@ class Grosmann(Force):
                 [0, 0, 0],
             ]
         )
-        # anisotropy
-        eps = (cell.aspect_ratio**2 - 1) / (cell.aspect_ratio**2 + 1)
-        # diagonal squared
-        diag2 = (area / np.pi) * (cell.aspect_ratio + 1 / cell.aspect_ratio)
         # longitudinal & transversal mobility
         if np.isclose(cell.aspect_ratio, 1):
             mP = 1 / np.sqrt((area * cell.aspect_ratio) / np.pi)
@@ -311,9 +307,7 @@ class Grosmann(Force):
         )
 
         # initialization of the parameters of interaction
-        # dif_phi = 0
         torque = 0
-        # dif_velocity = np.zeros(3)
         force = np.zeros(3)
         # Calculate interaction with filtered neighbors
         for neighbor_index in neighbors_indexes:
@@ -347,45 +341,44 @@ class Grosmann(Force):
                 -1
                 * np.matmul(
                     relative_pos,
-                    (np.matmul(np.identity(3) - eps * mean_nematic, relative_pos)),
+                    (np.matmul(np.identity(3) - cell.anisotropy * mean_nematic, relative_pos)),
                 )
-                / (2 * (1 - eps**2 * (np.cos(relative_angle)) ** 2) * diag2)
+                / (2 * (1 - cell.anisotropy**2 * (np.cos(relative_angle)) ** 2) * cell.squared_diagonal)
             )
 
             # the kernel is: (k_rep = k, b_exp=gamma (from the paper))
             kernel = (self.kRep * self.bExp * xi**self.bExp) / (
-                diag2 * (1 - eps**2 * (np.cos(relative_angle)) ** 2)
+                cell.squared_diagonal * (1 - cell.anisotropy**2 * (np.cos(relative_angle)) ** 2)
             )
 
             # finally we can calculate the force:
             force_2 = kernel * np.matmul(
-                np.identity(3) - eps * mean_nematic, relative_pos
+                np.identity(3) - cell.anisotropy * mean_nematic, relative_pos
             )
 
             # On the other way, we calculate the torque
             # we introduce the theta = angle of r_kj
             theta = np.arctan2(relative_pos[1], relative_pos[0])
             torque_2 = (kernel / 2) * (
-                eps
+                cell.anisotropy
                 * np.linalg.norm(relative_pos)
                 ** 2  # (relative_pos_x**2 + relative_pos_y**2)
                 * np.sin(2 * (phies[cell_index] - theta))
-                + eps**2
+                + cell.anisotropy**2
                 * (
                     np.matmul(
                         relative_pos,
                         (
                             np.matmul(
-                                np.identity(3) - eps * mean_nematic, relative_pos
+                                np.identity(3) - cell.anisotropy * mean_nematic, relative_pos
                             )
                         ),
                     )
                     * np.sin(2 * (-relative_angle))
-                    / (1 - eps**2 * (np.cos(relative_angle)) ** 2)
+                    / (1 - cell.anisotropy**2 * (np.cos(relative_angle)) ** 2)
                 )
             )
-            #dif_velocity_2 = np.array([0, 0, 0])
-            #dif_phi_2 = 0
+
             # Accumulate changes in force and torque
             force += force_2
             torque += torque_2
@@ -584,12 +577,7 @@ class Anisotropic_Grosmann(Force):
                 [0, 0, 0],
             ]
         )
-        # anisotropy
-        eps_cell = (cell.aspect_ratio**2 - 1) / (cell.aspect_ratio**2 + 1)
-        # diagonal squared (what we call alpha)
-        alpha_cell = (area / np.pi) * (
-            cell.aspect_ratio + 1 / cell.aspect_ratio
-        )
+
         # get the mobilities
         mP, mS, mR = self.calculate_mobilities(cell, area)
         # initialization of the parameters of interaction
@@ -618,33 +606,25 @@ class Anisotropic_Grosmann(Force):
                     [0, 0, 0],
                 ]
             )
-            # anisotropy
-            eps_neighbor = (neighbor.aspect_ratio**2 - 1) / (
-                neighbor.aspect_ratio**2 + 1
-            )
-            # diagonal squared (what we call alpha)
-            alpha_neighbor = (area / np.pi) * (
-                neighbor.aspect_ratio + 1 / neighbor.aspect_ratio
-            )
-            # and now some parameters of the cell and its neighbor
+
             # relative position and angle
             relative_angle = phies[cell_index] - phies[neighbor_index]
             
             # we now calculate the mean nematic matrix (different than before) (the matrix M)
             matrix_M = (
-                alpha_cell * eps_cell * Q_cell
-                + alpha_neighbor * eps_neighbor * Q_neighbor
-            ) / (alpha_cell + alpha_neighbor)
+                cell.squared_diagonal * cell.anisotropy * Q_cell
+                + neighbor.squared_diagonal * neighbor.anisotropy * Q_neighbor
+            ) / (cell.squared_diagonal + neighbor.squared_diagonal)
 
             # now we introduce the constant beta introduced by us in the TF
             beta = (
-                (alpha_cell + alpha_neighbor) ** 2
-                - (alpha_cell * eps_cell - alpha_neighbor * eps_neighbor) ** 2
+                (cell.squared_diagonal + neighbor.squared_diagonal) ** 2
+                - (cell.squared_diagonal * cell.anisotropy - neighbor.squared_diagonal * neighbor.anisotropy) ** 2
                 - 4
-                * alpha_cell
-                * eps_cell
-                * alpha_neighbor
-                * eps_neighbor
+                * cell.squared_diagonal
+                * cell.anisotropy
+                * neighbor.squared_diagonal
+                * neighbor.anisotropy
                 * (np.cos(relative_angle)) ** 2
             )
 
@@ -658,7 +638,7 @@ class Anisotropic_Grosmann(Force):
                 * self.kRep
                 * self.bExp
                 * xi**self.bExp
-                * ((alpha_cell + alpha_neighbor) / beta)
+                * ((cell.squared_diagonal + neighbor.squared_diagonal) / beta)
             )
 
             # finally we can calculate the force:
@@ -671,10 +651,10 @@ class Anisotropic_Grosmann(Force):
                 (
                     (
                         2
-                        * alpha_cell
-                        * eps_cell
-                        * alpha_neighbor
-                        * eps_neighbor
+                        * cell.squared_diagonal
+                        * cell.anisotropy
+                        * neighbor.squared_diagonal
+                        * neighbor.anisotropy
                         * np.sin(-2 * relative_angle)
                     )
                     / beta
@@ -683,7 +663,7 @@ class Anisotropic_Grosmann(Force):
                     relative_pos,
                     np.matmul(np.identity(3) - matrix_M, relative_pos),
                 )
-                + (alpha_cell * eps_cell / (alpha_cell + alpha_neighbor))
+                + (cell.squared_diagonal * cell.anisotropy / (cell.squared_diagonal + neighbor.squared_diagonal))
                 * np.linalg.norm(relative_pos) ** 2
                 * np.sin(2 * (phies[cell_index] - theta))
             )
