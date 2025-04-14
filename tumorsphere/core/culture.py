@@ -51,6 +51,7 @@ class Culture:
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
+        delta_aspect_ratio = 0.1,
     ):
         """
         Initialize a new culture of cells.
@@ -85,7 +86,6 @@ class Culture:
             110293658491283598.
         initial_number_of_cells : int, optional
             The initial number of cells in the culture.
-            length of the box.
         reproduction : bool
             Whether the cells reproduces or not.
         movement : bool
@@ -93,17 +93,19 @@ class Culture:
         deformation : bool
             Whether the cells deforms or not.
         cell_area : float
-            the area of all cells in the culture.
+            The area of all cells in the culture.
         stabilization_time : int
-            the time we have to wait in order to start the deformation.
+            The time we have to wait in order to start the deformation.
         overlap_threshold_ratio : float
-            a fraction (between 0 and 1) of the maximum allowed overlap between cells.
+            A fraction (between 0 and 1) of the maximum allowed overlap between cells.
         delta_t : float
-            the time interval used to move the cells.
+            The time interval used to move the cells.
         initial_apect_ratio : float
-            the aspect_ratio of all cells in the culture at the begining of the simulation.
-        apect_ratio_max : float
-            the max value of the aspect ratio that a cell can have after deforms.
+            The aspect_ratio of all cells in the culture at the begining of the simulation.
+        aspect_ratio_max : float
+            The max value of the aspect ratio that a cell can have after deforms.
+        delta_aspect_ratio : float
+            Increase in the aspect ratio during deformation.
 
 
         Attributes
@@ -140,13 +142,15 @@ class Culture:
         stabilization_time : int
             The time we have to wait in order to start the deformation
         overlap_threshold_ratio : float
-            a fraction (between 0 and 1) of the maximum allowed overlap between cells.
+            A fraction (between 0 and 1) of the maximum allowed overlap between cells.
         delta_t : float
             The time interval used to move
         initial_apect_ratio : float
             the aspect_ratio of all cells in the culture at the begining of the simulation.
-        apect_ratio_max : float
+        aspect_ratio_max : float
             The max value of the aspect ratio that a cell can have after deforms
+        delta_aspect_ratio : float
+            Increase in the aspect ratio during deformation.
         rng : numpy.random.Generator
             Random number generator.
         first_cell_is_stem : bool
@@ -177,6 +181,7 @@ class Culture:
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
+        self.delta_aspect_ratio = delta_aspect_ratio
         self.stabilization_time = stabilization_time
 
         # we instantiate the culture's RNG with the provided entropy
@@ -652,10 +657,10 @@ class Culture:
 
         return max_overlap
 
-    def elongate(self, cell_index: int) -> bool:
+    def elongate_from_round(self, cell_index: int) -> bool:
         """If the cell is round, an angle is chosen randomly.
-        If the new cell with these angle and aspect ratio = maximum (given as an
-        attribute) does not overlap with others, it remains.
+        If the new cell with these angle and an increment in the
+        aspect ratio does not overlap with others, it remains.
         If not, try again up to cell_max_def_attempts.
         If it fails to deform, it remains as it was originally.
 
@@ -676,10 +681,12 @@ class Culture:
         old_aspect_ratio = cell.aspect_ratio
         # and get the place of the grid that correspond to the cell
         old_index = self.grid.get_hash_key(old_position)
+        # create a dict that contains the total overlap of the cell with others
+        total_overlap = dict()
         for attempt in range(self.cell_max_def_attempts):
-            # random phi and aspect ratio=max and generate a position with them
+            # random phi and new aspect ratio and generate a position with them
             new_phi = self.rng.uniform(low=0, high=2 * np.pi)
-            new_aspect_ratio = self.aspect_ratio_max
+            new_aspect_ratio = old_aspect_ratio + self.delta_aspect_ratio
             new_position = self.propose_new_position_to_deform(
                 cell_index, new_phi, new_aspect_ratio
             )
@@ -687,8 +694,7 @@ class Culture:
             self.cell_positions[cell_index] = new_position
             self.cell_phies[cell_index] = new_phi
             cell.set_aspect_ratio(new_aspect_ratio)
-            # and calculate the new place in the grid
-            new_index = self.grid.get_hash_key(new_position)
+            # list of neighbors
             candidate_neighbors = list(
                 self.grid.find_neighbors(
                     position=new_position,
@@ -706,44 +712,149 @@ class Culture:
                     for neighbor_index in candidate_neighbors
                 ]
             )
-            # Filter neighbors whose distance is less than the sum of the major semi axes
-            filtered_neighbors = [
-                (neighbor_index, relative_pos)
-                for neighbor_index, relative_pos in zip(candidate_neighbors, relative_positions)
-                if np.linalg.norm(relative_pos) < (
-                    np.sqrt((self.cell_area * cell.aspect_ratio) / np.pi)
-                    + np.sqrt((self.cell_area * self.cells[neighbor_index].aspect_ratio) / np.pi)
-                )
-            ]
-            
-            # calculation of overlap
-            no_overlap = True
-            for neighbor_index, relative_pos in filtered_neighbors:
+
+            # initialize a number that is the sum of all the overlaps
+            total_overlap_angle = 0
+            # create a list with booleans that are True if cells overlap
+            existing_overlap = []
+
+            for neighbor_index, relative_pos in zip(candidate_neighbors, relative_positions):
                 overlap = self.calculate_overlap(
                     cell_index,
                     neighbor_index,
                     relative_pos,
                 )
+                # add the overlap to the total overlap of the cell
+                total_overlap_angle += overlap
                 # we calculate the overlap threshold
                 max_overlap = self.calculate_max_overlap(cell_index, neighbor_index)
-                if overlap > self.overlap_threshold_ratio*max_overlap:
-                    # if the new cell overlaps with another, we turn back to the
-                    # original values
-                    self.cell_positions[cell_index] = old_position
-                    self.cell_phies[cell_index] = old_phi
-                    cell.set_aspect_ratio(old_aspect_ratio)
-                    no_overlap = False
-                    break
 
-            if no_overlap:
-                # if there is no overlap, the new cell remains and we finish the loop
-                succesful_elongation = True
-                # if we have change the index, the candidate for neighbors also change
-                # Update the index of the cell if necessary
-                if old_index != new_index:
-                    self.grid.remove_cell_from_hash_table(cell_index, old_position)
-                    self.grid.add_cell_to_hash_table(cell_index, new_position)
-                return succesful_elongation
+                # if the overlap is greater than the threshold, add it to the list
+                if overlap > self.overlap_threshold_ratio*max_overlap:
+                    existing_overlap.append(True)
+                else:
+                    existing_overlap.append(False)
+            # if the list is empty or the cell does not overlap
+            if not existing_overlap or not any(existing_overlap):
+                # add the angle and overlap in the dict
+                #total_overlap[(new_phi, new_position)] = total_overlap_angle
+                total_overlap[(new_phi, tuple(new_position))] = total_overlap_angle
+
+            # turn back to the original values
+            self.cell_positions[cell_index] = old_position
+            self.cell_phies[cell_index] = old_phi
+            cell.set_aspect_ratio(old_aspect_ratio)
+
+        # Check if total_overlap is not empty (else, pass)
+        if total_overlap:
+            # get the minimum overlap value
+            min_overlap = min(total_overlap.values())
+            # find all angles and positions with the minimum overlap
+            min_angles_positions = [key for key, overlap in total_overlap.items() if overlap == min_overlap]
+            # choose a random key from those with the minimum overlap
+            #chosen_key = self.rng.choice(min_angles_positions)
+            chosen_key = self.rng.choice(np.array(min_angles_positions, dtype=object))
+            chosen_phi = chosen_key[0]
+            chosen_position = np.array(chosen_key[1]) 
+            # and set the new values of aspect ratio, position and orientation
+            cell.set_aspect_ratio(old_aspect_ratio + self.delta_aspect_ratio)
+            self.cell_phies[cell_index] = chosen_phi
+            self.cell_positions[cell_index] = chosen_position
+            # and calculate the new place in the grid
+            new_index = self.grid.get_hash_key(chosen_position)
+            succesful_elongation = True
+            if old_index != new_index:
+                self.grid.remove_cell_from_hash_table(cell_index, old_position)
+                self.grid.add_cell_to_hash_table(cell_index, chosen_position)
+        else:
+            succesful_elongation = False
+
+        return succesful_elongation
+
+    def elongate_from_elliptical(self, cell_index: int) -> bool:
+        """If the cell is round, an angle is chosen randomly.
+        If the new cell with these angle and aspect ratio = maximum (given as an
+        attribute) does not overlap with others, it remains.
+        If not, try again up to cell_max_def_attempts.
+        If it fails to deform, it remains as it was originally.
+
+        Parameters
+        ----------
+        cell_index : int
+            The index of the cell.
+
+        Returns
+        ----------
+        succesful_elongation : bool
+            True if the elongation was successful, False otherwise.
+        """
+        cell = self.cells[cell_index]
+        # we save the old attributes
+        old_position = np.array(self.cell_positions[cell_index])
+        # old_phi = self.cell_phies[cell_index]
+        old_aspect_ratio = cell.aspect_ratio
+        # and get the place of the grid that correspond to the cell
+        old_index = self.grid.get_hash_key(old_position)
+   
+        # for attempt in range(self.cell_max_def_attempts): # NO HAY ATTEMPTS AHORA
+        # random phi and aspect ratio=max and generate a position with them
+        #new_phi = self.rng.uniform(low=0, high=2 * np.pi)
+        new_aspect_ratio = old_aspect_ratio + self.delta_aspect_ratio
+        new_position = self.propose_new_position_to_deform(
+            cell_index, self.cell_phies[cell_index], new_aspect_ratio
+        )
+        # updating attributes
+        self.cell_positions[cell_index] = new_position
+        #self.cell_phies[cell_index] = new_phi
+        cell.set_aspect_ratio(new_aspect_ratio)
+        # and calculate the new place in the grid
+        new_index = self.grid.get_hash_key(new_position)
+        candidate_neighbors = list(
+            self.grid.find_neighbors(
+                position=new_position,
+            )
+        )
+        # modifies the set in-place to remove the actual cell index
+        candidate_neighbors.remove(cell_index)
+        # Calculate relative positions for all neighbors
+        relative_positions = np.array(
+            [
+                self.relative_pos(
+                    self.cell_positions[cell_index],
+                    self.cell_positions[neighbor_index],
+                )
+                for neighbor_index in candidate_neighbors
+            ]
+        )
+
+        # calculation of overlap
+        no_overlap = True
+        for neighbor_index, relative_pos in zip(candidate_neighbors, relative_positions):
+            overlap = self.calculate_overlap(
+                cell_index,
+                neighbor_index,
+                relative_pos,
+            )
+            # we calculate the overlap threshold
+            max_overlap = self.calculate_max_overlap(cell_index, neighbor_index)
+            if overlap > self.overlap_threshold_ratio*max_overlap:
+                # if the new cell overlaps with another, we turn back to the
+                # original values
+                self.cell_positions[cell_index] = old_position
+                # self.cell_phies[cell_index] = old_phi
+                cell.set_aspect_ratio(old_aspect_ratio)
+                no_overlap = False
+                break
+
+        if no_overlap:
+            # if there is no overlap, the new cell remains and we finish the loop
+            succesful_elongation = True
+            # if we have change the index, the candidate for neighbors also change
+            # Update the index of the cell if necessary
+            if old_index != new_index:
+                self.grid.remove_cell_from_hash_table(cell_index, old_position)
+                self.grid.add_cell_to_hash_table(cell_index, new_position)
+            return succesful_elongation
 
         succesful_elongation = False
         return succesful_elongation
@@ -765,8 +876,10 @@ class Culture:
         cell = self.cells[cell_index]
         if cell.shrink == True:
             # turn the cell back to round
-            cell.set_aspect_ratio(1)
-            self.cell_phies[cell_index] = 0
+            old_aspect_ratio = cell.aspect_ratio
+            cell.set_aspect_ratio(old_aspect_ratio-self.delta_aspect_ratio)
+            if np.isclose(old_aspect_ratio-self.delta_aspect_ratio, 1):
+                self.cell_phies[cell_index] = 0
             # and the shrink turns back to False 
             cell.shrink = False
             succesful_shrinking = True
@@ -819,20 +932,7 @@ class Culture:
                 neighbor = self.cells[neighbor_index]
                 neighbor.neighbors_relative_pos[cell_index] = -relative_pos
 
-        # Filter neighbors whose distance is less than the sum of the major semi axes
-        cell_semi_major_axis = np.sqrt((self.cell_area * cell.aspect_ratio) / np.pi)
-        
-        filtered_neighbors_indexes = [
-            neighbor_index
-            for neighbor_index, relative_pos in cell.neighbors_relative_pos.items()
-            if np.linalg.norm(relative_pos) < (
-                cell_semi_major_axis
-                + np.sqrt((self.cell_area * self.cells[neighbor_index].aspect_ratio) / np.pi)
-            )
-        ]
-
-        # Calculate overlap for filtered neighbors
-        for neighbor_index in filtered_neighbors_indexes:
+        for neighbor_index, relative_pos in cell.neighbors_relative_pos.items():
             # We make sure that it is not already calculated
             if neighbor_index not in cell.neighbors_overlap:
                 overlap = self.calculate_overlap(
@@ -1005,10 +1105,13 @@ class Culture:
                         # if the cell is round
                         if np.isclose(cell.aspect_ratio, 1):
                             # We try to elongate the cell
-                            success = self.elongate(index)
+                            success = self.elongate_from_round(index)
                         else:
                             # We try to shrink the cell
                             success = self.shrink_from_elliptical(index)
+                            # if it can´t shrink, we try to elongate it
+                            if not success and cell.aspect_ratio < self.aspect_ratio_max:
+                                success = self.elongate_from_elliptical(index)
                         deformation_success.append(success)
 
                 # We initialize the change in the position and angle of all cells

@@ -75,13 +75,15 @@ class Simulation:
     stabilization_time : int
         The time we have to wait in order to start the deformation
     overlap_threshold_ratio : float
-        a fraction (between 0 and 1) of the maximum allowed overlap between cells.
+        A fraction (between 0 and 1) of the maximum allowed overlap between cells.
     delta_t : float
         The time interval used to move
     initial_apect_ratio : float
-        the aspect_ratio of all cells in the culture at the begining of the simulation.
-    apect_ratio_max : float
+        The aspect_ratio of all cells in the culture at the begining of the simulation.
+    aspect_ratio_max : float
         The max value of the aspect ratio that a cell can have after deforms
+    delta_aspect_ratio : float
+        Increase in the aspect ratio during deformation.
     culture_bounds : int, optional
         The bounds of the grid, by default None. If None, the space is
         unbouded. If provided, the space is bounded to the
@@ -145,6 +147,7 @@ class Simulation:
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
+        delta_aspect_ratio: float = 0.1,
     ):
         # main simulation attributes
         self.forces = forces
@@ -167,6 +170,7 @@ class Simulation:
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
+        self.delta_aspect_ratio = delta_aspect_ratio
 
         # dictionary storing the culture objects
         self.cultures = {}
@@ -485,6 +489,7 @@ def simulate_single_culture(
         delta_t=sim.delta_t,
         initial_aspect_ratio=sim.initial_aspect_ratio,
         aspect_ratio_max=sim.aspect_ratio_max,
+        delta_aspect_ratio=sim.delta_aspect_ratio,
     )
     sim.cultures[current_realization_name].simulate(
         sim.num_of_steps_per_realization,

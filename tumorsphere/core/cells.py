@@ -195,17 +195,15 @@ class Cell:
 
     def velocity(self) -> np.ndarray:
         """
-        It returns the velocity vector of the given cell.
+        It returns the velocity vector of the given cell. Speed=0 for round cells
+        and speed=1 for maximum aspect ratio.
 
         Returns
         -------
         np.ndarray
             The velocity vector of the cell.
         """
-        if np.isclose(self.aspect_ratio, 1):
-            speed = 0
-        else:
-            speed = 1
+        speed = (self.aspect_ratio-1)/(self.culture.aspect_ratio_max-1)
         return speed * np.array(
             [
                 np.cos(self.culture.cell_phies[self._index]),
