@@ -965,6 +965,7 @@ class Culture:
             delta_t,
             self.cell_area,
             significant_neighbors_indexes,
+            self.nematic_tensors,
         )
 
         # Reset the neighbor dictionaries to empty

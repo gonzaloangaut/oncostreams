@@ -25,6 +25,7 @@ class Force(ABC):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         """
         Given the force/model, it returns the change in the position and in the
@@ -52,6 +53,7 @@ class No_Forces(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         cell = cells[cell_index]
         # there is no change in the orientation and no force so the only change in
@@ -87,6 +89,7 @@ class Spring_Force(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         cell = cells[cell_index]
 
@@ -135,6 +138,7 @@ class Vicsek(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         # In this model there is no change in the velocity but in the orientation
         cell = cells[cell_index]
@@ -182,6 +186,7 @@ class Vicsek_and_Spring_Force(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         cell = cells[cell_index]
         # initialization of the parameters of interaction
@@ -243,12 +248,13 @@ class Grosmann(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         # First of all we are going to calculate the force and the torque
         cell = cells[cell_index]
         # get some properties of the cell
         # nematic matrix
-        Q_cell = cell.culture.nematic_tensors[cell_index]
+        Q_cell = nematic_tensors[cell_index]
         # longitudinal & transversal mobility
         if np.isclose(cell.aspect_ratio, 1):
             mP = 1 / np.sqrt((area * cell.aspect_ratio) / np.pi)
@@ -303,7 +309,7 @@ class Grosmann(Force):
             # Calculate change in velocity and orientation given by the force model
             # First we calculate some parameters of the neighbor cell
             # nematic matrix
-            Q_neighbor = neighbor.culture.nematic_tensors[neighbor_index]
+            Q_neighbor = nematic_tensors[neighbor_index]
             # and some parameters useful for the force
             # mean nematic matrix
             mean_nematic = (1 / 2) * (Q_cell + Q_neighbor)
@@ -529,13 +535,14 @@ class Anisotropic_Grosmann(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         # First of all we are going to calculate the force and torque and then
         # we see how these change the velocity and orientation
         cell = cells[cell_index]
         # Get some properties of the cell
         # nematic matrix
-        Q_cell = cell.culture.nematic_tensors[cell_index]
+        Q_cell = nematic_tensors[cell_index]
 
         # get the mobilities
         mP, mS, mR = self.calculate_mobilities(cell, area)
@@ -550,7 +557,7 @@ class Anisotropic_Grosmann(Force):
             neighbor = cells[neighbor_index]
             # First we calculate some parameters of the neighbor cell
             # nematic matrix
-            Q_neighbor = neighbor.culture.nematic_tensors[neighbor_index]
+            Q_neighbor = nematic_tensors[neighbor_index]
 
             # relative position and angle
             relative_angle = phies[cell_index] - phies[neighbor_index]

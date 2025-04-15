@@ -599,11 +599,11 @@ class OvitoOutput(TumorsphereOutput):
                 )
                 for cell in cells: # csc activas
                     if cell.is_stem and cell.available_space:
-                        phi = cell.culture.cell_phies[cell._index]
+                        phi = cell_phies[cell._index]
                         line = (
                             (
                                 "active_stem "
-                                if cell.culture.cell_phies[cell._index] is None
+                                if cell_phies[cell._index] is None
                                 else "cell "
                             )
                             + str(cell_positions[cell._index][0])
