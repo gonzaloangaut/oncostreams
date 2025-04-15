@@ -194,8 +194,11 @@ class Culture:
         # initialize the positions matrix
         self.cell_positions = np.empty((0, 3), float)
 
-        # and the phies matrix
+        # the phies matrix
         self.cell_phies = np.array([])
+
+        # and the nematic tensors matrix
+        self.nematic_tensors = np.empty((0, 3, 3), float) 
 
         # we initialize the lists of cells
         self.cells = []
@@ -519,41 +522,10 @@ class Culture:
             ** 2
         )
 
-        # then we calculate the nematic matrixes/tensor
-        Q_cell = np.array(
-            [
-                [
-                    np.cos(2 * self.cell_phies[cell_index]),
-                    np.sin(2 * self.cell_phies[cell_index]),
-                    0,
-                ],
-                [
-                    np.sin(2 * self.cell_phies[cell_index]),
-                    -np.cos(2 * self.cell_phies[cell_index]),
-                    0,
-                ],
-                [0, 0, 0],
-            ]
-        )
-
-        Q_neighbor = np.array(
-            [
-                [
-                    np.cos(2 * self.cell_phies[neighbor_index]),
-                    np.sin(2 * self.cell_phies[neighbor_index]),
-                    0,
-                ],
-                [
-                    np.sin(2 * self.cell_phies[neighbor_index]),
-                    -np.cos(2 * self.cell_phies[neighbor_index]),
-                    0,
-                ],
-                [0, 0, 0],
-            ]
-        )
-
+        # then we obtain the nematic matrixes/tensor
+        Q_cell = self.nematic_tensors[cell_index]
+        Q_neighbor = self.nematic_tensors[neighbor_index]
         # and calculate the matriz M
-
         matrix_M = (
             cell.squared_diagonal * cell.anisotropy * Q_cell
             + neighbor.squared_diagonal * neighbor.anisotropy * Q_neighbor
@@ -660,8 +632,34 @@ class Culture:
         # with l_parallel = np.sqrt((cell_area*cell.aspect_ratio)/np.pi)
         # and l_perp = sqrt(cell_area/(np.pi*cell.aspect_ratio))
         max_overlap = 4 * self.cell_area**2 / (np.pi * np.sqrt(beta))
-
+        
         return max_overlap
+
+    def update_nematic_tensors(self, cell_indices: np.ndarray = None) -> None:
+        """
+        Updates the nematic tensors Q for the specified subset of cells.
+        If no indices are provided, all tensors are updated.
+
+        Parameters:
+        -----------
+        indices : np.ndarray or list of int, optional
+            Indices of the cells to update. If None, updates all cells.
+        """
+        if cell_indices is None:
+            cell_indices = np.arange(len(self.active_cell_indexes))
+
+        phies = self.cell_phies[cell_indices]
+        cos2 = np.cos(2 * phies)
+        sin2 = np.sin(2 * phies)
+
+        Q = np.zeros((len(cell_indices), 3, 3))
+        Q[:, 0, 0] = cos2
+        Q[:, 0, 1] = sin2
+        Q[:, 1, 0] = sin2
+        Q[:, 1, 1] = -cos2
+
+        self.nematic_tensors[cell_indices] = Q
+
 
     def elongate_from_round(self, cell_index: int) -> bool:
         """If the cell is round, an angle is chosen randomly.
@@ -699,6 +697,7 @@ class Culture:
             # updating attributes
             self.cell_positions[cell_index] = new_position
             self.cell_phies[cell_index] = new_phi
+            self.update_nematic_tensors([cell_index])
             cell.set_aspect_ratio(new_aspect_ratio)
             # list of neighbors
             candidate_neighbors = list(
@@ -749,6 +748,7 @@ class Culture:
             # turn back to the original values
             self.cell_positions[cell_index] = old_position
             self.cell_phies[cell_index] = old_phi
+            self.update_nematic_tensors([cell_index])
             cell.set_aspect_ratio(old_aspect_ratio)
 
         # Check if total_overlap is not empty (else, pass)
@@ -765,6 +765,7 @@ class Culture:
             # and set the new values of aspect ratio, position and orientation
             cell.set_aspect_ratio(old_aspect_ratio + self.delta_aspect_ratio)
             self.cell_phies[cell_index] = chosen_phi
+            self.update_nematic_tensors([cell_index])
             self.cell_positions[cell_index] = chosen_position
             # and calculate the new place in the grid
             new_index = self.grid.get_hash_key(chosen_position)
@@ -797,7 +798,6 @@ class Culture:
         cell = self.cells[cell_index]
         # we save the old attributes
         old_position = np.array(self.cell_positions[cell_index])
-        # old_phi = self.cell_phies[cell_index]
         old_aspect_ratio = cell.aspect_ratio
         # and get the place of the grid that correspond to the cell
         old_index = self.grid.get_hash_key(old_position)
@@ -811,7 +811,6 @@ class Culture:
         )
         # updating attributes
         self.cell_positions[cell_index] = new_position
-        #self.cell_phies[cell_index] = new_phi
         cell.set_aspect_ratio(new_aspect_ratio)
         # and calculate the new place in the grid
         new_index = self.grid.get_hash_key(new_position)
@@ -847,7 +846,6 @@ class Culture:
                 # if the new cell overlaps with another, we turn back to the
                 # original values
                 self.cell_positions[cell_index] = old_position
-                # self.cell_phies[cell_index] = old_phi
                 cell.set_aspect_ratio(old_aspect_ratio)
                 no_overlap = False
                 break
@@ -886,6 +884,7 @@ class Culture:
             cell.set_aspect_ratio(old_aspect_ratio-self.delta_aspect_ratio)
             if np.isclose(old_aspect_ratio-self.delta_aspect_ratio, 1):
                 self.cell_phies[cell_index] = 0
+                self.update_nematic_tensors([cell_index])
             # and the shrink turns back to False 
             cell.shrink = False
             succesful_shrinking = True
@@ -1001,7 +1000,8 @@ class Culture:
 
         # and the angle
         self.cell_phies = self.cell_phies + dif_phies
-
+        # Update the nematic tensors
+        self.update_nematic_tensors()
         # Enforcing boundary condition
         self.cell_positions = np.mod(self.cell_positions, self.side)
 

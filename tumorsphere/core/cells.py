@@ -160,6 +160,19 @@ class Cell:
         # and add the cell to the culture's phi matrix
         culture.cell_phies = np.append(culture.cell_phies, phi)
 
+        # Calculate the nematic tensor
+        new_tensor = np.array([
+            [np.cos(2 * phi), np.sin(2 * phi), 0],
+            [np.sin(2 * phi), -np.cos(2 * phi), 0],
+            [0, 0, 0]
+        ])
+
+        # add it to the matrix
+        culture.nematic_tensors = np.append(
+            culture.nematic_tensors, [new_tensor], axis=0
+        )
+
+
         # We also add the cell to the culture's spatial hash grid
         self.culture.grid.add_cell_to_hash_table(
             self._index,

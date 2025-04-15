@@ -248,21 +248,7 @@ class Grosmann(Force):
         cell = cells[cell_index]
         # get some properties of the cell
         # nematic matrix
-        Q_cell = np.array(
-            [
-                [
-                    np.cos(2 * phies[cell_index]),
-                    np.sin(2 * phies[cell_index]),
-                    0,
-                ],
-                [
-                    np.sin(2 * phies[cell_index]),
-                    -np.cos(2 * phies[cell_index]),
-                    0,
-                ],
-                [0, 0, 0],
-            ]
-        )
+        Q_cell = cell.culture.nematic_tensors[cell_index]
         # longitudinal & transversal mobility
         if np.isclose(cell.aspect_ratio, 1):
             mP = 1 / np.sqrt((area * cell.aspect_ratio) / np.pi)
@@ -311,26 +297,13 @@ class Grosmann(Force):
         force = np.zeros(3)
         # Calculate interaction with filtered neighbors
         for neighbor_index in neighbors_indexes:
+            neighbor = cells[neighbor_index]
             relative_pos = cell.neighbors_relative_pos[neighbor_index]
             overlap = cell.neighbors_overlap[neighbor_index]
             # Calculate change in velocity and orientation given by the force model
             # First we calculate some parameters of the neighbor cell
             # nematic matrix
-            Q_neighbor = np.array(
-                [
-                    [
-                        np.cos(2 * phies[neighbor_index]),
-                        np.sin(2 * phies[neighbor_index]),
-                        0,
-                    ],
-                    [
-                        np.sin(2 * phies[neighbor_index]),
-                        -np.cos(2 * phies[neighbor_index]),
-                        0,
-                    ],
-                    [0, 0, 0],
-                ]
-            )
+            Q_neighbor = neighbor.culture.nematic_tensors[neighbor_index]
             # and some parameters useful for the force
             # mean nematic matrix
             mean_nematic = (1 / 2) * (Q_cell + Q_neighbor)
@@ -562,21 +535,7 @@ class Anisotropic_Grosmann(Force):
         cell = cells[cell_index]
         # Get some properties of the cell
         # nematic matrix
-        Q_cell = np.array(
-            [
-                [
-                    np.cos(2 * phies[cell_index]),
-                    np.sin(2 * phies[cell_index]),
-                    0,
-                ],
-                [
-                    np.sin(2 * phies[cell_index]),
-                    -np.cos(2 * phies[cell_index]),
-                    0,
-                ],
-                [0, 0, 0],
-            ]
-        )
+        Q_cell = cell.culture.nematic_tensors[cell_index]
 
         # get the mobilities
         mP, mS, mR = self.calculate_mobilities(cell, area)
@@ -591,21 +550,7 @@ class Anisotropic_Grosmann(Force):
             neighbor = cells[neighbor_index]
             # First we calculate some parameters of the neighbor cell
             # nematic matrix
-            Q_neighbor = np.array(
-                [
-                    [
-                        np.cos(2 * phies[neighbor_index]),
-                        np.sin(2 * phies[neighbor_index]),
-                        0,
-                    ],
-                    [
-                        np.sin(2 * phies[neighbor_index]),
-                        -np.cos(2 * phies[neighbor_index]),
-                        0,
-                    ],
-                    [0, 0, 0],
-                ]
-            )
+            Q_neighbor = neighbor.culture.nematic_tensors[neighbor_index]
 
             # relative position and angle
             relative_angle = phies[cell_index] - phies[neighbor_index]
