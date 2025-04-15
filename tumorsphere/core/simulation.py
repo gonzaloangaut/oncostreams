@@ -143,7 +143,7 @@ class Simulation:
         movement: bool = True,
         deformation: bool = True,
         stabilization_time: int = 120,
-        overlap_threshold_ratio: float = 0.2,
+        overlap_threshold_ratio: float = 0.35,
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,

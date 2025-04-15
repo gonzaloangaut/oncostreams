@@ -47,7 +47,7 @@ class Culture:
         movement: bool = True,
         deformation: bool = True,
         stabilization_time: int = 120,
-        overlap_threshold_ratio: float = 0.2,
+        overlap_threshold_ratio: float = 0.35,
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
@@ -621,7 +621,7 @@ class Culture:
     ) -> float:
         """
         Calculates the maximum overlap between two cells using overlap calculated 
-        in the TF.
+        in the TF. (with the orientation of each cell)
 
         Parameters
         ----------
@@ -647,8 +647,14 @@ class Culture:
             * cell.anisotropy
             * neighbor.squared_diagonal
             * neighbor.anisotropy
+            * (
+                np.cos(
+                    self.cell_phies[cell_index]
+                    - self.cell_phies[neighbor_index]
+                )
+            )
+            ** 2
         )
-
         # finally we can calculate i_0
         # i_0 = (4*pi*l_par_k*l_perp_k*l_par_j*l_perp_j)/sqrt(beta)
         # with l_parallel = np.sqrt((cell_area*cell.aspect_ratio)/np.pi)
