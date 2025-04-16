@@ -548,6 +548,76 @@ class Culture:
         # we return the overlap between the cell and its neighbor
         return overlap
 
+    def calculate_overlaps(
+        self,
+        cell_index: int,
+        neighbor_indices: np.ndarray,        # shape (N,)
+        relative_positions: np.ndarray       # shape (N, 3)
+    ) -> np.ndarray:                         # returns shape (N,)
+        """
+        Calculates the overlap between a single cell and multiple neighbors using
+        overlap calculated in the TF in a vectorized way.
+
+        Parameters
+        ----------
+        cell_index : int
+            Index of the cell of reference.
+        neighbor_indices : np.ndarray
+            Indices of the neighboring cells.
+        relative_positions : np.ndarray
+            Array of relative positions of the cell with its neighbors (shape: (N, 3)).
+
+        Returns
+        -------
+        overlaps : np.ndarray
+            Array of overlaps with each neighbor.
+        """
+        cell = self.cells[cell_index]
+        neighbors = [self.cells[i] for i in neighbor_indices]
+
+        # extract phies
+        phi_i = self.cell_phies[cell_index]
+        phi_j = self.cell_phies[neighbor_indices]
+
+        # diagonal terms
+        d_i = cell.squared_diagonal
+        d_j = np.array([neighbor.squared_diagonal for neighbor in neighbors])
+
+        eps_i = cell.anisotropy
+        eps_j = np.array([neighbor.anisotropy for neighbor in neighbors])
+
+        cos_phi_diff = np.cos(phi_i - phi_j)
+
+        beta = (
+            (d_i + d_j)**2
+            - (d_i * eps_i - d_j * eps_j)**2
+            - 4 * d_i * d_j * eps_i * eps_j * (cos_phi_diff**2)
+        )
+
+        # get Q matrices
+        Q_i = self.nematic_tensors[cell_index]           # shape (3,3)
+        Q_j = self.nematic_tensors[neighbor_indices]     # shape (N,3,3)
+
+        # matrix M
+        M = (d_i * eps_i * Q_i + (d_j * eps_j)[:, None, None] * Q_j) / (d_i + d_j)[:, None, None]
+
+        I = np.eye(3)
+        diff_matrix = I - M                         # shape (N,3,3)
+
+        # calculate i_0
+        i_0 = 4 * self.cell_area**2 / (np.pi * np.sqrt(beta))  # shape (N,)
+
+        # quadratic form: rᵀ (I - M) r, vectorized
+        r = np.array(relative_positions)                      # shape (N,3)
+        r_T = r[:, :, None]                         # shape (N,3,1)
+        r_b = r[:, None, :]                         # shape (N,1,3)
+
+        quad = np.matmul(r_b, np.matmul(diff_matrix, r_T)).reshape(-1)  # shape (N,)
+
+        overlaps = i_0 * np.exp(-(d_i + d_j)/beta * quad)
+
+        return overlaps
+
     def propose_new_position_to_deform(
         self, cell_index: int, new_phi: float, new_aspect_ratio: float
     ) -> np.ndarray:
@@ -707,45 +777,31 @@ class Culture:
             )
             # modifies the set in-place to remove the actual cell index
             candidate_neighbors.remove(cell_index)
-            # Calculate relative positions for all neighbors
-            relative_positions = np.array(
-                [
-                    self.relative_pos(
-                        self.cell_positions[cell_index],
-                        self.cell_positions[neighbor_index],
-                    )
-                    for neighbor_index in candidate_neighbors
-                ]
-            )
 
-            # initialize a number that is the sum of all the overlaps
-            total_overlap_angle = 0
-            # create a list with booleans that are True if cells overlap
-            existing_overlap = []
-
-            for neighbor_index, relative_pos in zip(candidate_neighbors, relative_positions):
-                overlap = self.calculate_overlap(
-                    cell_index,
-                    neighbor_index,
-                    relative_pos,
+            if not candidate_neighbors:
+                # If there are no neighbors, total_overlap = 0
+                total_overlap[(new_phi, tuple(new_position))] = 0
+            else:
+                # Calculate relative positions for all neighbors
+                relative_positions = np.array(
+                    [
+                        self.relative_pos(
+                            self.cell_positions[cell_index],
+                            self.cell_positions[neighbor_index],
+                        )
+                        for neighbor_index in candidate_neighbors
+                    ]
                 )
-                # add the overlap to the total overlap of the cell
-                total_overlap_angle += overlap
-                # we calculate the overlap threshold
-                max_overlap = self.calculate_max_overlap(cell_index, neighbor_index)
+                # Vectorized overlap + threshold check
+                overlaps = self.calculate_overlaps(cell_index, candidate_neighbors, relative_positions)
+                max_overlaps = np.array([self.calculate_max_overlap(cell_index, neighbor_index) for neighbor_index in candidate_neighbors])
+                mask = overlaps > self.overlap_threshold_ratio * max_overlaps
 
-                # if the overlap is greater than the threshold, add it to the list
-                if overlap > self.overlap_threshold_ratio*max_overlap:
-                    existing_overlap.append(True)
-                else:
-                    existing_overlap.append(False)
-            # if the list is empty or the cell does not overlap
-            if not existing_overlap or not any(existing_overlap):
-                # add the angle and overlap in the dict
-                #total_overlap[(new_phi, new_position)] = total_overlap_angle
-                total_overlap[(new_phi, tuple(new_position))] = total_overlap_angle
+                # Sum total overlap if there is no significant overlap
+                if not mask.any():
+                    total_overlap[(new_phi, tuple(new_position))] = np.sum(overlaps)
 
-            # turn back to the original values
+            # Restore original values
             self.cell_positions[cell_index] = old_position
             self.cell_phies[cell_index] = old_phi
             self.update_nematic_tensors([cell_index])
@@ -821,34 +877,32 @@ class Culture:
         )
         # modifies the set in-place to remove the actual cell index
         candidate_neighbors.remove(cell_index)
-        # Calculate relative positions for all neighbors
-        relative_positions = np.array(
-            [
-                self.relative_pos(
-                    self.cell_positions[cell_index],
-                    self.cell_positions[neighbor_index],
-                )
-                for neighbor_index in candidate_neighbors
-            ]
-        )
 
-        # calculation of overlap
-        no_overlap = True
-        for neighbor_index, relative_pos in zip(candidate_neighbors, relative_positions):
-            overlap = self.calculate_overlap(
-                cell_index,
-                neighbor_index,
-                relative_pos,
+        if not candidate_neighbors:
+            no_overlap = True
+        else:
+            # Calculate relative positions for all neighbors
+            relative_positions = np.array(
+                [
+                    self.relative_pos(
+                        self.cell_positions[cell_index],
+                        self.cell_positions[neighbor_index],
+                    )
+                    for neighbor_index in candidate_neighbors
+                ]
             )
-            # we calculate the overlap threshold
-            max_overlap = self.calculate_max_overlap(cell_index, neighbor_index)
-            if overlap > self.overlap_threshold_ratio*max_overlap:
-                # if the new cell overlaps with another, we turn back to the
-                # original values
+            # Vectorized overlap + threshold check
+            overlaps = self.calculate_overlaps(cell_index, candidate_neighbors, relative_positions)
+            max_overlaps = np.array([self.calculate_max_overlap(cell_index, neighbor_index) for neighbor_index in candidate_neighbors])
+            mask = overlaps > self.overlap_threshold_ratio * max_overlaps
+
+            # If there is overlap, turn back to original values
+            if np.any(mask):
                 self.cell_positions[cell_index] = old_position
                 cell.set_aspect_ratio(old_aspect_ratio)
                 no_overlap = False
-                break
+            else:
+                no_overlap = True
 
         if no_overlap:
             # if there is no overlap, the new cell remains and we finish the loop
@@ -858,9 +912,9 @@ class Culture:
             if old_index != new_index:
                 self.grid.remove_cell_from_hash_table(cell_index, old_position)
                 self.grid.add_cell_to_hash_table(cell_index, new_position)
-            return succesful_elongation
+        else:
+            succesful_elongation = False
 
-        succesful_elongation = False
         return succesful_elongation
 
     def shrink_from_elliptical(self, cell_index: int) -> bool:
@@ -897,7 +951,7 @@ class Culture:
 
         It describes the interaction of the cells given a force. It changes the position
         of the cell (because of the forces exerted by all the other cells and the
-        intrinsic velocity) and it's angle in the x-y plane, phi (becuase of a torque).
+        intrinsic velocity) and it's angle in the x-y plane, phi (because of a torque).
 
         Parameters
         ----------
@@ -923,9 +977,13 @@ class Culture:
         )
         # modifies the set in-place to remove the actual cell index
         candidate_neighbors.remove(cell_index)
+        # Calculate the index and the relative position of the new cells (not calculated)
+        new_neighbors_indices = []
+        new_relative_pos = []
+        
         # For all the neighbor candidates, we calculate the relative position with the cell
         for neighbor_index in candidate_neighbors:
-            # We make sure that it is not already calculated
+            # Make sure that it is not already calculated
             if neighbor_index not in cell.neighbors_relative_pos:
                 relative_pos = self.relative_pos(
                     self.cell_positions[cell_index],
@@ -933,27 +991,28 @@ class Culture:
                 )
                 # Add the relative position to the dictionary
                 cell.neighbors_relative_pos[neighbor_index] = relative_pos
-                # we update also the attribute of the neighbor corresponding to the actual cell                
+                # Update also the attribute of the neighbor corresponding to the actual cell                
                 neighbor = self.cells[neighbor_index]
                 neighbor.neighbors_relative_pos[cell_index] = -relative_pos
-
-        for neighbor_index, relative_pos in cell.neighbors_relative_pos.items():
-            # We make sure that it is not already calculated
+        
+            # Check if overlap was calculated in the other cell
             if neighbor_index not in cell.neighbors_overlap:
-                overlap = self.calculate_overlap(
-                    cell_index,
-                    neighbor_index,
-                    cell.neighbors_relative_pos[neighbor_index]
-                )
-                # Add the overlap to the dictionary
-                cell.neighbors_overlap[neighbor_index] = overlap
-                # we update also the attribute of the neighbor corresponding to the actual cell
-                neighbor = self.cells[neighbor_index]
-                neighbor.neighbors_overlap[cell_index] = overlap
+                new_neighbors_indices.append(neighbor_index)
+                new_relative_pos.append(cell.neighbors_relative_pos[neighbor_index])
 
-        # The significant neighbors are those which the overlap is more than the threshold
+        # Calculate the overlap with every new neighbor
+        if new_neighbors_indices:
+            overlaps = self.calculate_overlaps(
+                cell_index=cell_index,
+                neighbor_indices=new_neighbors_indices,
+                relative_positions=new_relative_pos
+            )
+            for neighbor_index, overlap in zip(new_neighbors_indices, overlaps):
+                cell.neighbors_overlap[neighbor_index] = overlap
+                self.cells[neighbor_index].neighbors_overlap[cell_index] = overlap
+
         significant_neighbors_indexes = [
-            neighbor_index
+            int(neighbor_index)
             for neighbor_index, overlap in cell.neighbors_overlap.items()
             if overlap > self.overlap_threshold_ratio*self.calculate_max_overlap(cell_index, neighbor_index)
         ]
