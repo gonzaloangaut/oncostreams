@@ -503,6 +503,7 @@ class Culture:
             Array of overlaps with each neighbor.
         """
         cell = self.cells[cell_index]
+        neighbor_indices = np.array(neighbor_indices, dtype=int)
         neighbors = [self.cells[i] for i in neighbor_indices]
 
         # extract phies
@@ -586,46 +587,48 @@ class Culture:
         new_position = np.mod(new_position, self.side)
         return new_position
 
-    def calculate_max_overlap(
+    def calculate_max_overlaps(
         self,
         cell_index: int,
-        neighbor_index: int,
-    ) -> float:
+        neighbor_indices: list,        # shape (N,)
+    ) -> np.ndarray:                         # returns shape (N,)
         """
-        Calculates the maximum overlap between two cells using overlap calculated 
-        in the TF. (with the orientation of each cell)
+        Calculates the maximum overlap between a single cell and multiple neighbors using
+        overlap calculated in the TF in a vectorized way. (with the orientation of each cell)
 
         Parameters
         ----------
         cell_index : int
-            The index of the cell.
-        neighbor_index : int
-            The index of the neighbor.
+            Index of the cell of reference.
+        neighbor_indices : np.ndarray
+            Indices of the neighboring cells.
 
         Returns
         -------
-        max_overlap : float
-            The maximum overlap between cells
+        overlaps : np.ndarray
+            Array of maximum overlaps with each neighbor.
         """
         cell = self.cells[cell_index]
-        neighbor = self.cells[neighbor_index]
+        neighbor_indices = np.array(neighbor_indices, dtype=int)
+        neighbors = [self.cells[i] for i in neighbor_indices]
 
-        # now we introduce the constant beta introduced by us in the TF
+        # extract phies
+        phi_i = self.cell_phies[cell_index]
+        phi_j = self.cell_phies[neighbor_indices]
+
+        # diagonal terms
+        d_i = cell.squared_diagonal
+        d_j = np.array([neighbor.squared_diagonal for neighbor in neighbors])
+
+        eps_i = cell.anisotropy
+        eps_j = np.array([neighbor.anisotropy for neighbor in neighbors])
+
+        cos_phi_diff = np.cos(phi_i - phi_j)
+
         beta = (
-            (cell.squared_diagonal + neighbor.squared_diagonal) ** 2
-            - (cell.squared_diagonal * cell.anisotropy - neighbor.squared_diagonal * neighbor.anisotropy) ** 2
-            - 4
-            * cell.squared_diagonal
-            * cell.anisotropy
-            * neighbor.squared_diagonal
-            * neighbor.anisotropy
-            * (
-                np.cos(
-                    self.cell_phies[cell_index]
-                    - self.cell_phies[neighbor_index]
-                )
-            )
-            ** 2
+            (d_i + d_j)**2
+            - (d_i * eps_i - d_j * eps_j)**2
+            - 4 * d_i * d_j * eps_i * eps_j * (cos_phi_diff**2)
         )
         # finally we can calculate i_0
         # i_0 = (4*pi*l_par_k*l_perp_k*l_par_j*l_perp_j)/sqrt(beta)
@@ -724,7 +727,7 @@ class Culture:
                 )
                 # Vectorized overlap + threshold check
                 overlaps = self.calculate_overlaps(cell_index, candidate_neighbors, relative_positions)
-                max_overlaps = np.array([self.calculate_max_overlap(cell_index, neighbor_index) for neighbor_index in candidate_neighbors])
+                max_overlaps = self.calculate_max_overlaps(cell_index, candidate_neighbors)
                 mask = overlaps > self.overlap_threshold_ratio * max_overlaps
 
                 # Sum total overlap if there is no significant overlap
@@ -823,7 +826,7 @@ class Culture:
             )
             # Vectorized overlap + threshold check
             overlaps = self.calculate_overlaps(cell_index, candidate_neighbors, relative_positions)
-            max_overlaps = np.array([self.calculate_max_overlap(cell_index, neighbor_index) for neighbor_index in candidate_neighbors])
+            max_overlaps = self.calculate_max_overlaps(cell_index, candidate_neighbors)
             mask = overlaps > self.overlap_threshold_ratio * max_overlaps
 
             # If there is overlap, turn back to original values
@@ -941,11 +944,16 @@ class Culture:
                 cell.neighbors_overlap[neighbor_index] = overlap
                 self.cells[neighbor_index].neighbors_overlap[cell_index] = overlap
 
-        significant_neighbors_indexes = [
-            int(neighbor_index)
-            for neighbor_index, overlap in cell.neighbors_overlap.items()
-            if overlap > self.overlap_threshold_ratio*self.calculate_max_overlap(cell_index, neighbor_index)
-        ]
+        neighbor_indices = np.array(list(cell.neighbors_overlap.keys()))
+        overlaps = np.array(list(cell.neighbors_overlap.values()))
+
+        # calcular max overlaps en vector
+        max_overlaps = self.calculate_max_overlaps(cell_index, neighbor_indices)
+
+        # aplicar el filtro
+        mask = overlaps > self.overlap_threshold_ratio * max_overlaps
+        significant_neighbors_indexes = neighbor_indices[mask]
+
         # Calculate interaction with final neighbors
         dif_position, dif_phi = self.force.calculate_interaction(
             self.cells,
