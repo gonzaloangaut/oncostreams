@@ -64,6 +64,9 @@ class Simulation:
     initial_number_of_cells : int, optional
         The number of cells in the culture. If None, we start with a single
         cell.
+    initial_fraction_elongated : float, optional
+        The initial fraction of elongated cells in the culture. If None, we
+        start with all round cells.
     initial_density : float
         The initial density of the cells in the culture. None by default. If
         specified, it overrides the `culture_bounds` parameter to adjust the
@@ -140,6 +143,7 @@ class Simulation:
         grid_cube_size: Union[float, List[float]] = 2,
         grid_torus: bool = True,
         initial_number_of_cells: Optional[List[int]] = None,
+        initial_fraction_elongated: Optional[List[float]] = None,
         initial_density: Optional[List[float]] = None,
         reproduction: bool = False,
         movement: bool = True,
@@ -154,6 +158,7 @@ class Simulation:
         # main simulation attributes
         self.forces = forces
         self.initial_number_of_cells = initial_number_of_cells
+        self.initial_fraction_elongated = initial_fraction_elongated
         self.reproduction = reproduction
         self.movement = movement
         self.deformation = deformation
@@ -343,6 +348,7 @@ class Simulation:
                         k,
                         i,
                         f,
+                        t,
                         g if self.initial_density is not None else None,
                         seeds[j],
                         self,
@@ -359,6 +365,7 @@ class Simulation:
                     for k in range(len(self.prob_diff))
                     for i in range(len(self.prob_stem))
                     for f in range(len(self.initial_number_of_cells))
+                    for t in range(len(self.initial_fraction_elongated))
                     for g in range(len(self.initial_density))
                     if self.initial_density is not None
                     for j in range(self.num_of_realizations)
@@ -371,6 +378,7 @@ def realization_name(
     pd: float,
     ps: float,
     nc: int,
+    f_e: float,
     rho: float,
     seed: int,
     force_name: str,
@@ -392,11 +400,11 @@ def realization_name(
         name += f"_pd={pd}_ps={ps}"
     if moving:
         if rho is not None:
-            name += f"_initial_number_of_cells={nc}"
+            name += f"_initial_number_of_cells={nc}_initial_fraction_elongated={f_e}"
             name += f"_density={rho}_force={force_name}"
         else:
-            name += f"_initial_number_of_cells={nc}_culture_bounds={bounds}"
-            name += f"_force={force_name}"
+            name += f"_initial_number_of_cells={nc}_initial_fraction_elongated={f_e}"
+            name += f"_culture_bounds={bounds}_force={force_name}"
     name += f"_rng_seed={seed}"
     return name
 
@@ -432,6 +440,7 @@ def simulate_single_culture(
         k,
         i,
         f,
+        t,
         g,
         seed,
         sim,
@@ -451,6 +460,7 @@ def simulate_single_culture(
         sim.prob_diff[k],
         sim.prob_stem[i],
         sim.initial_number_of_cells[f],
+        sim.initial_fraction_elongated[t],
         sim.initial_density[g] if sim.initial_density is not None else None,
         seed,
         sim.forces[m].name(),
@@ -499,6 +509,7 @@ def simulate_single_culture(
             output=output,
             force=sim.forces[m],
             initial_number_of_cells=sim.initial_number_of_cells[f],
+            initial_fraction_elongated=sim.initial_fraction_elongated[t],
             grid=spatial_hash_grid,
             adjacency_threshold=sim.adjacency_threshold,
             cell_radius=sim.cell_radius,

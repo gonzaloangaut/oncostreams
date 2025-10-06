@@ -45,6 +45,7 @@ class Culture:
         rng_seed: int = 110293658491283598,
         swap_probability: float = 0.5,
         initial_number_of_cells: int = 1,
+        initial_fraction_elongated: float = 0.0,
         reproduction: bool = False,
         movement: bool = True,
         deformation: bool = True,
@@ -88,6 +89,8 @@ class Culture:
             110293658491283598.
         initial_number_of_cells : int, optional
             The initial number of cells in the culture.
+        initial_fraction_elongated : float, optional
+            The initial fraction of elongated cells.
         reproduction : bool
             Whether the cells reproduces or not.
         movement : bool
@@ -131,6 +134,8 @@ class Culture:
             The probability that a cell swaps its type with its offspring.
         initial_number_of_cells : int, optional
             The initial number of cells in the culture.
+        initial_fraction_elongated : float, optional
+            The initial fraction of elongated cells.
         side : int, optional
             The length of the side of the square where the cells move.
         reproduction : bool
@@ -176,6 +181,7 @@ class Culture:
         self.prob_diff = prob_diff
         self.swap_probability = swap_probability
         self.initial_number_of_cells = initial_number_of_cells
+        self.initial_fraction_elongated = initial_fraction_elongated
         self.reproduction = reproduction
         self.movement = movement
         self.deformation = deformation
@@ -1062,24 +1068,36 @@ class Culture:
 
             # We add all the cells in the case of movement
             if self.movement:
-                for i in range(0, self.initial_number_of_cells):
-                    # choose a random position and angle in the xy plane (phi)
+                # Calculate the number of elongated cells
+                n_elongated = int(self.initial_number_of_cells * self.initial_fraction_elongated)
+                # Choose random indices for the elongated cells
+                elongated_indices = self.rng.choice(
+                    self.initial_number_of_cells, size=n_elongated, replace=False
+                )
+                # We define the cell if it is elongated or not
+                for i in range(self.initial_number_of_cells):
+                    if i in elongated_indices:
+                        phi = self.rng.uniform(low=0, high=2*np.pi)
+                        aspect_ratio = self.aspect_ratio_max
+                    else:
+                        phi = 0 if self.initial_aspect_ratio == 1 else self.rng.uniform(low=0, high=2*np.pi)
+                        aspect_ratio = self.initial_aspect_ratio
+
                     Cell(
-                        position=np.array(
-                            [
-                                self.rng.uniform(low=0, high=self.side),
-                                self.rng.uniform(low=0, high=self.side),
-                                0,
-                            ]
-                        ),
+                        position=np.array([
+                            self.rng.uniform(low=0, high=self.side),
+                            self.rng.uniform(low=0, high=self.side),
+                            0,
+                        ]),
                         culture=self,
                         is_stem=self.first_cell_is_stem,
-                        phi=0 if self.initial_aspect_ratio==1 else self.rng.uniform(low=0, high=2*np.pi),
-                        aspect_ratio=self.initial_aspect_ratio,
+                        phi=phi,
+                        aspect_ratio=aspect_ratio,
                         parent_index=0,
                         shrink=False,
                         available_space=True,
                     )
+
 
             # Save the data (for dat, ovito, and/or SQLite)
             self.output.record_culture_state(
