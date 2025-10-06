@@ -13,6 +13,8 @@ from typing import Set, Dict, List, Tuple
 
 import pandas as pd
 import numpy as np
+import pickle
+import os
 
 from tumorsphere.core.cells import Cell
 from tumorsphere.core.output import TumorsphereOutput
@@ -1022,7 +1024,7 @@ class Culture:
 
     # ---------------------------------------------------------
 
-    def simulate(self, num_times: int) -> None:
+    def simulate(self, num_times: int, start_tic: int, checkpoint_path: str) -> None:
         """Simulate culture growth for a specified number of time steps.
 
         At each time step, we randomly sort the list of active cells and then
@@ -1035,7 +1037,7 @@ class Culture:
         """
         # if the culture is brand-new, we create the tables of the DB and the
         # first cell
-        if len(self.cells) == 0:
+        if len(self.cells) == 0 and start_tic == 0:
             # we insert the register corresponding to this culture
             self.output.begin_culture(
                 self.prob_stem,
@@ -1079,19 +1081,19 @@ class Culture:
                         available_space=True,
                     )
 
-        # Save the data (for dat, ovito, and/or SQLite)
-        self.output.record_culture_state(
-            tic=0,
-            cells=self.cells,
-            cell_positions=self.cell_positions,
-            cell_phies=self.cell_phies,
-            active_cell_indexes=self.active_cell_indexes,
-            side=self.side,
-            cell_area=self.cell_area,
-        )
+            # Save the data (for dat, ovito, and/or SQLite)
+            self.output.record_culture_state(
+                tic=0,
+                cells=self.cells,
+                cell_positions=self.cell_positions,
+                cell_phies=self.cell_phies,
+                active_cell_indexes=self.active_cell_indexes,
+                side=self.side,
+                cell_area=self.cell_area,
+            )
 
         # we simulate for num_times time steps
-        for i in range(1, num_times + 1):
+        for i in range(start_tic+1, num_times + 1):
             # we reproduce and (or) move the cells
             if self.reproduction:
                 # we get a permuted copy of the cells list
@@ -1151,6 +1153,13 @@ class Culture:
                 side=self.side,
                 cell_area=self.cell_area,
             )
+            if checkpoint_path and i % 500 == 0:
+                os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+                with open(checkpoint_path, "wb") as f:
+                    #pickle.dump((self, i), f)
+                    state = self.rng.bit_generator.state
+                    pickle.dump((self, i, state), f)
+
 
         self.output.record_final_state(
             tic=num_times,

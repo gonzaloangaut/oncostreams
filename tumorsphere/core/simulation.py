@@ -11,6 +11,8 @@ import multiprocessing as mp
 from typing import List, Tuple, Optional, Union
 
 import numpy as np
+import os
+import pickle
 
 from tumorsphere.core.culture import Culture
 from tumorsphere.core.output import create_output_demux
@@ -204,6 +206,7 @@ class Simulation:
         sql: bool = True,
         dat_files: bool = False,
         dat_pos_ar: bool = False,
+        dat_order_par: bool = False,
         ovito: bool = False,
         df: bool = False,
         output_dir: str = ".",
@@ -233,6 +236,8 @@ class Simulation:
             outputs.append("df")
         if dat_pos_ar:
             outputs.append("dat_pos_ar")
+        if dat_order_par:
+            outputs.append("dat_order_par")
 
         # We compute the name of the realization
         current_realization_name = realization_name(
@@ -277,6 +282,8 @@ class Simulation:
         dat_files: bool = False,
         dat_pos_ar: bool = False,
         save_step_dat_pos_ar: int = 1,
+        dat_order_par: bool = False,
+        save_step_dat_order_par: int = 1,
         ovito: bool = False,
         save_step_ovito: int = 1,
         df: bool = False,
@@ -325,6 +332,8 @@ class Simulation:
             outputs.append("df")
         if dat_pos_ar:
             outputs.append("dat_pos_ar")
+        if dat_order_par:
+            outputs.append("dat_order_par")
 
         with mp.Pool(number_of_processes) as p:
             p.map(
@@ -339,6 +348,7 @@ class Simulation:
                         self,
                         outputs,
                         save_step_dat_pos_ar,
+                        save_step_dat_order_par,
                         save_step_ovito,
                         m,
                         output_dir,
@@ -427,6 +437,7 @@ def simulate_single_culture(
         sim,
         outputs,
         save_step_dat_pos_ar,
+        save_step_dat_order_par,
         save_step_ovito,
         m,
         output_dir,
@@ -448,49 +459,68 @@ def simulate_single_culture(
         sim.movement,
     )
 
-    # We create the output object
-    output = create_output_demux(current_realization_name, outputs, output_dir, save_step_dat_pos_ar, save_step_ovito)
-
-    # We create the spatial hash grid object
-    if sim.initial_density is not None:
-        culture_bounds = sim.calculate_culture_bounds_from_density(
-            sim.initial_number_of_cells[f],
-            sim.initial_density[g],
-        )
+    checkpoint_path_save = os.path.join(output_dir, "checkpoints", current_realization_name + ".pkl")
+    # checkpoint_dir = os.path.join(os.environ["HOME"], "oncostream", "checkpoints")
+    # os.makedirs(checkpoint_dir, exist_ok=True)
+    checkpoint_dir = os.path.join(output_dir, "checkpoints") #
+    os.makedirs(checkpoint_dir, exist_ok=True) #
+    checkpoint_path = os.path.join(checkpoint_dir, current_realization_name + ".pkl")
+    # Verify if there is a checkpoint
+    if os.path.exists(checkpoint_path):
+        with open(checkpoint_path, "rb") as f:
+            #culture, start_tic = pickle.load(f)
+            #sim.cultures[current_realization_name] = culture
+            culture, start_tic, state = pickle.load(f)
+            sim.cultures[current_realization_name] = culture
+            sim.cultures[current_realization_name].rng = np.random.default_rng()
+            sim.cultures[current_realization_name].rng.bit_generator.state = state
     else:
-        culture_bounds = sim.culture_bounds
+        # We create the output object
+        output = create_output_demux(current_realization_name, outputs, output_dir, save_step_dat_pos_ar, save_step_dat_order_par, save_step_ovito)
 
-    spatial_hash_grid = SpatialHashGrid(
-        culture=None,
-        bounds=culture_bounds,
-        cube_size=grid_cube_size,
-        torus=grid_torus,
-    )
+        # We create the spatial hash grid object
+        if sim.initial_density is not None:
+            culture_bounds = sim.calculate_culture_bounds_from_density(
+                sim.initial_number_of_cells[f],
+                sim.initial_density[g],
+            )
+        else:
+            culture_bounds = sim.culture_bounds
 
-    # We create the culture object and simulate it
-    sim.cultures[current_realization_name] = Culture(
-        output=output,
-        force=sim.forces[m],
-        initial_number_of_cells=sim.initial_number_of_cells[f],
-        grid=spatial_hash_grid,
-        adjacency_threshold=sim.adjacency_threshold,
-        cell_radius=sim.cell_radius,
-        cell_max_repro_attempts=sim.cell_max_repro_attempts,
-        first_cell_is_stem=sim.first_cell_is_stem,
-        prob_stem=sim.prob_stem[i],
-        prob_diff=sim.prob_diff[k],
-        rng_seed=seed,
-        swap_probability=sim.swap_probability,    
-        reproduction=sim.reproduction,
-        movement=sim.movement,
-        deformation=sim.deformation,
-        stabilization_time=sim.stabilization_time,
-        overlap_threshold_ratio=sim.overlap_threshold_ratio,
-        delta_t=sim.delta_t,
-        initial_aspect_ratio=sim.initial_aspect_ratio,
-        aspect_ratio_max=sim.aspect_ratio_max,
-        delta_aspect_ratio=sim.delta_aspect_ratio,
-    )
+        spatial_hash_grid = SpatialHashGrid(
+            culture=None,
+            bounds=culture_bounds,
+            cube_size=grid_cube_size,
+            torus=grid_torus,
+        )
+
+        # We create the culture object and simulate it
+        sim.cultures[current_realization_name] = Culture(
+            output=output,
+            force=sim.forces[m],
+            initial_number_of_cells=sim.initial_number_of_cells[f],
+            grid=spatial_hash_grid,
+            adjacency_threshold=sim.adjacency_threshold,
+            cell_radius=sim.cell_radius,
+            cell_max_repro_attempts=sim.cell_max_repro_attempts,
+            first_cell_is_stem=sim.first_cell_is_stem,
+            prob_stem=sim.prob_stem[i],
+            prob_diff=sim.prob_diff[k],
+            rng_seed=seed,
+            swap_probability=sim.swap_probability,    
+            reproduction=sim.reproduction,
+            movement=sim.movement,
+            deformation=sim.deformation,
+            stabilization_time=sim.stabilization_time,
+            overlap_threshold_ratio=sim.overlap_threshold_ratio,
+            delta_t=sim.delta_t,
+            initial_aspect_ratio=sim.initial_aspect_ratio,
+            aspect_ratio_max=sim.aspect_ratio_max,
+            delta_aspect_ratio=sim.delta_aspect_ratio,
+        )
+        start_tic=0
     sim.cultures[current_realization_name].simulate(
         sim.num_of_steps_per_realization,
+        start_tic,
+        checkpoint_path_save,
     )
