@@ -495,6 +495,42 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
         """We do not record the individual deactivations."""
         pass
  
+    def calculate_order_parameters(self, cells, cell_phies):
+        """
+        Calculate the order parameters for all cells in the current step
+        """
+
+        # List of elongated cells
+        elongated_cells = [cell._index for cell in cells if not np.isclose(cell.aspect_ratio, 1)]
+        # Calculation of the number of elongated cells and cells
+        num_elongated = len(elongated_cells)
+        num_cells = len(cells)
+
+        # Calculate sin(phi), cos(phi), sin(2phi), cos(2phi) for every elongated cell
+        sin = np.sin(cell_phies[elongated_cells])
+        cos = np.cos(cell_phies[elongated_cells])
+        sin_2 = np.sin(2*cell_phies[elongated_cells])
+        cos_2 = np.cos(2*cell_phies[elongated_cells])
+        # Add them
+        sum_sin = sin.sum()
+        sum_cos = cos.sum()
+        sum_sin_2 = sin_2.sum()
+        sum_cos_2 = cos_2.sum()
+        # Calculate the parameters     
+        if num_elongated != 0:
+            nematic = np.sqrt(sum_sin_2**2 + sum_cos_2**2) / num_elongated
+            polar = np.sqrt(sum_sin**2 + sum_cos**2) / num_elongated
+            nematic_2 = np.sqrt(sum_sin_2**2 + sum_cos_2**2) / num_cells
+            polar_2 = np.sqrt(sum_sin**2 + sum_cos**2) / num_cells
+        else:
+            nematic = 0
+            polar = 0
+            nematic_2 = 0
+            polar_2 = 0
+        fraction_elongated = num_cells/num_elongated
+
+        return nematic, polar, nematic_2, polar_2, fraction_elongated
+
     def record_culture_state(
         self,
         tic,
@@ -506,8 +542,9 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
         cell_area,
     ):
         if np.mod(tic, self.save_step) == 0:
+            os.makedirs(f"{self.output_dir}/dat", exist_ok=True)
             filename = (
-                f"{self.output_dir}/{self.culture_name}_step={tic:05}.dat"
+                f"{self.output_dir}/dat/{self.culture_name}_step={tic:05}.dat"
             )
             with open(filename, "w") as datfile:
                 datfile.write(
@@ -534,6 +571,106 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
         """
         pass
 
+class DatOutput_order_parameters(TumorsphereOutput):
+    def __init__(self, culture_name, output_dir=".", save_step=1):
+        self.output_dir = output_dir
+        self.save_step = save_step
+        self.culture_name = culture_name
+     
+    def begin_culture(
+        self,
+        prob_stem,
+        prob_diff,
+        rng_seed,
+        simulation_start,
+        adjacency_threshold,
+        swap_probability,
+    ):
+        """We do not record the beginning of the simulation."""
+        pass
+
+    def record_stemness(self, cell_index, tic, stemness):
+        """We do not record the individual stemness changes."""
+        pass
+
+    def record_deactivation(self, cell_index, tic):
+        """We do not record the individual deactivations."""
+        pass
+ 
+    def calculate_order_parameters(self, cells, cell_phies):
+        """
+        Calculate the order parameters for all cells in the current step
+        """
+
+        # List of elongated cells
+        elongated_cells = [cell._index for cell in cells if not np.isclose(cell.aspect_ratio, 1)]
+        # Calculation of the number of elongated cells and cells
+        num_elongated = len(elongated_cells)
+        num_cells = len(cells)
+
+        # Calculate sin(phi), cos(phi), sin(2phi), cos(2phi) for every elongated cell
+        sin_phi = np.sin(cell_phies[elongated_cells])
+        cos_phi = np.cos(cell_phies[elongated_cells])
+        sin_2_phi = np.sin(2*cell_phies[elongated_cells])
+        cos_2_phi = np.cos(2*cell_phies[elongated_cells])
+        # Add them
+        sum_sin = sin_phi.sum()
+        sum_cos = cos_phi.sum()
+        sum_sin_2 = sin_2_phi.sum()
+        sum_cos_2 = cos_2_phi.sum()
+        # Calculate the parameters     
+        if num_elongated != 0:
+            nematic = np.sqrt(sum_sin_2**2 + sum_cos_2**2) / num_elongated
+            polar = np.sqrt(sum_sin**2 + sum_cos**2) / num_elongated
+            nematic_2 = np.sqrt(sum_sin_2**2 + sum_cos_2**2) / num_cells
+            polar_2 = np.sqrt(sum_sin**2 + sum_cos**2) / num_cells
+        else:
+            nematic = 0
+            polar = 0
+            nematic_2 = 0
+            polar_2 = 0
+        fraction_elongated = num_elongated/num_cells
+
+        return nematic, polar, nematic_2, polar_2, fraction_elongated
+
+    def record_culture_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        cell_phies,
+        active_cell_indexes,
+        side,
+        cell_area,
+    ):
+        if np.mod(tic, self.save_step) == 0:
+            os.makedirs(f"{self.output_dir}/dat_order_parameters", exist_ok=True)
+            filename = (
+                f"{self.output_dir}/dat_order_parameters/op_{self.culture_name}_step={tic:05}.dat"
+            )
+            nematic, polar, nematic_2, polar_2, fraction_elongated = self.calculate_order_parameters(cells, cell_phies)
+            with open(filename, "w") as datfile:
+                datfile.write(
+                    "nematic,polar,nematic_2,polar_2,fraction_elongated\n"
+                )
+                # we save the order parameters to the file
+                datfile.write(
+                    f"{nematic}, {polar}, {nematic_2}, {polar_2}, {fraction_elongated} \n"
+                )
+
+    def record_cell(
+        self, index, parent, pos_x, pos_y, pos_z, creation_time, is_stem
+    ):
+        """We do not record the individual cell creations."""
+        pass
+
+    def record_final_state(
+        self, tic, cells, cell_positions, active_cell_indexes
+    ):
+        """The final state of the culture is already recorded for the type of
+        data we are saving.
+        """
+        pass
 
 class OvitoOutput(TumorsphereOutput):
     """Class for handling output to a file for visualization in Ovito."""
@@ -583,8 +720,11 @@ class OvitoOutput(TumorsphereOutput):
         if (
             np.mod(tic, self.save_step) == 0
         ):
+            path_folder = os.path.join(self.output_dir, "ovito")
+            os.makedirs(path_folder, exist_ok=True)
+
             path_to_write = os.path.join(
-                self.output_dir, f"ovito_data_{self.culture_name}.{tic:05}"
+                path_folder, f"ovito_data_{self.culture_name}.{tic:05}"
             )
 
             with open(path_to_write, "w") as file_to_write:
@@ -827,6 +967,7 @@ def create_output_demux(
     requested_outputs: list[str],
     output_dir: str = ".",
     save_step_dat_pos_ar: int = 1,
+    save_step_dat_order_par: int = 1,
     save_step_ovito: int = 1,
 ):
     """Create an OutputDemux object with the requested output types."""
@@ -834,6 +975,7 @@ def create_output_demux(
         "sql": SQLOutput,
         "dat": DatOutput,
         "dat_pos_ar": DatOutput_position_aspectratio,
+        "dat_order_par": DatOutput_order_parameters,
         "ovito": OvitoOutput,
         "df": DfOutput,
     }
@@ -842,6 +984,8 @@ def create_output_demux(
         if out in output_types:
             if out == "dat_pos_ar":
                 outputs.append(output_types[out](culture_name, output_dir, save_step_dat_pos_ar))
+            elif out == "dat_order_par":
+                outputs.append(output_types[out](culture_name, output_dir, save_step_dat_order_par))
             elif out == "ovito":
                 outputs.append(output_types[out](culture_name, output_dir, save_step_ovito))
             else:
