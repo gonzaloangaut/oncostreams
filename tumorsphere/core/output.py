@@ -738,8 +738,18 @@ class OvitoOutput(TumorsphereOutput):
                     + "\n"
                 )
                 for cell in cells: # csc activas
+                    
                     if cell.is_stem and cell.available_space:
                         phi = cell_phies[cell._index]
+                        # Color condition in aspect ratio
+                        aspect_ratio_condition = (cell.aspect_ratio - 1) / (cell.culture.aspect_ratio_max - 1)
+
+                        if phi is None:
+                            color_value = 1
+                        elif np.isclose(aspect_ratio_condition, 0):
+                            color_value = 0
+                        else:
+                            color_value = phi % (2 * np.pi)
                         line = (
                             (
                                 "active_stem "
@@ -766,7 +776,7 @@ class OvitoOutput(TumorsphereOutput):
                             + " "
                             + f"{0 if phi is None else np.cos(phi / 2)}"  # W orientation
                             + " "
-                            + f"{1 if phi is None else phi % (2 * np.pi)}"  # color
+                            + f"{color_value}"  # color
                             + "\n"
                         )
                         file_to_write.write(line)

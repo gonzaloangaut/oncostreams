@@ -387,27 +387,33 @@ class Anisotropic_Grosmann(Force):
         self,
         kRep: float = 10,
         bExp: float = 3,
-        noise_eta: float = None,
+        D_par: float = None,
+        D_perp: float = None,
+        D_phi: float = None,
         shrinking: bool = False,
     ):
         self.kRep = kRep
         self.bExp = bExp
-        self.noise_eta = noise_eta
+        self.D_par = D_par
+        self.D_perp = D_perp
+        self.D_phi = D_phi
         self.shrinking = shrinking
 
     def name(self):
         """
         Force model given by the generalization of Grosmann paper with
-        parameters k and gamma. If noise_eta is None, then there is no 
+        parameters k and gamma. If some noise is None, then there is no 
         noise. If shrinking is True, we update the attribute of the cell
         in order to shrink if the force is strong enough.
         """
         name = f"Anisotropic_Grosmann_k={self.kRep:.2f}_gamma={self.bExp}"
-        if self.noise_eta is not None:
-            name += f"_With_Noise_eta={self.noise_eta:.3f}"
+        if (self.D_par is not None) or (self.D_perp is not None):
+            name += f"_D_par={self.D_par:.3f}_D_perp={self.D_perp:.3f}"
+        if self.D_phi is not None:
+            name += f"_D_phi={self.D_phi:.3f}"
         if self.shrinking is True:
             name += f"_With_Shrinking"
-        return name   
+        return name
 
     def calculate_mobilities(
         self,
@@ -475,33 +481,48 @@ class Anisotropic_Grosmann(Force):
         If there is noise in the force, calculate it.
         """
         cell = cells[cell_index]
-        # we add the noise in the position:
-        # we need the direction vectors
-        direction_vector = np.array(
-            [
-                np.cos(phies[cell_index]),
-                np.sin(phies[cell_index]),
-                0,
-            ])
-        perpendicular_vector = np.array(
-            [
-                np.cos(phies[cell_index]+np.pi/2),
-                np.sin(phies[cell_index]+np.pi/2),
-                0,
-            ])
-        
         # Get the mobilities of the cell
         mP, mS, mR = self.calculate_mobilities(cell, area)
 
-        # and the noise
-        s_nP = self.noise_eta*np.sqrt(mP*delta_t)
-        s_nS = self.noise_eta*np.sqrt(mS*delta_t)
-
-        nP = s_nP*cell.culture.rng.normal(0, 1)
-        nS = s_nS*cell.culture.rng.normal(0, 1)
-        noise = nP*direction_vector+nS*perpendicular_vector
+        # We add the noise in the position:
+        # First in the parallel direction
+        if (self.D_par is None) or np.isclose(self.D_par, 0):
+            noise_parallel = 0
+        else:
+            # We need the direction vector
+            direction_vector = np.array(
+                [
+                    np.cos(phies[cell_index]),
+                    np.sin(phies[cell_index]),
+                    0,
+                ])
+            s_nP = np.sqrt(2 * self.D_par * mP * delta_t)
+            nP = s_nP*cell.culture.rng.normal(0, 1)
+            noise_parallel = nP*direction_vector
+        # And in the perpendicular direction
+        if (self.D_perp is None) or np.isclose(self.D_perp, 0):
+            noise_perpendicular = 0
+        else:
+            perpendicular_vector = np.array(
+                [
+                    np.cos(phies[cell_index]+np.pi/2),
+                    np.sin(phies[cell_index]+np.pi/2),
+                    0,
+                ])
+            s_nS = np.sqrt(2 * self.D_perp * mS * delta_t)
+            nS = s_nS*cell.culture.rng.normal(0, 1)
+            noise_perpendicular = nS*perpendicular_vector
         
-        return noise
+        # Translational noise
+        translational_noise = noise_parallel+noise_perpendicular
+
+        # Rotational noise
+        if (self.D_phi is None) or np.isclose(self.D_phi, 0):
+            rotational_noise = 0
+        else:
+            s_nR = np.sqrt(2 * self.D_phi * mR * delta_t)
+            rotational_noise = s_nR * cell.culture.rng.normal(0, 1)
+        return translational_noise, rotational_noise
 
     def check_shrink_condition(
         self,
@@ -636,9 +657,10 @@ class Anisotropic_Grosmann(Force):
         dif_phi = mR * torque * delta_t
 
         # we calculate the noise if we are in that case
-        if self.noise_eta is not None:
-            noise = self.calculate_noise(cells, phies, cell_index, area, delta_t)
-            dif_position += noise
+        if (self.D_par is not None) or (self.D_perp is not None) or (self.D_phi is not None):
+            translational_noise, rotational_noise = self.calculate_noise(cells, phies, cell_index, area, delta_t)
+            dif_position += translational_noise
+            dif_phi += rotational_noise
         
         # We check if the cell should shrink or not
         if self.shrinking is True:
