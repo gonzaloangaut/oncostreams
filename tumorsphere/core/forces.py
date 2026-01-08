@@ -25,6 +25,7 @@ class Force(ABC):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         """
         Given the force/model, it returns the change in the position and in the
@@ -52,6 +53,7 @@ class No_Forces(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         cell = cells[cell_index]
         # there is no change in the orientation and no force so the only change in
@@ -87,6 +89,7 @@ class Spring_Force(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         cell = cells[cell_index]
 
@@ -135,6 +138,7 @@ class Vicsek(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         # In this model there is no change in the velocity but in the orientation
         cell = cells[cell_index]
@@ -182,6 +186,7 @@ class Vicsek_and_Spring_Force(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         cell = cells[cell_index]
         # initialization of the parameters of interaction
@@ -243,30 +248,13 @@ class Grosmann(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         # First of all we are going to calculate the force and the torque
         cell = cells[cell_index]
         # get some properties of the cell
         # nematic matrix
-        Q_cell = np.array(
-            [
-                [
-                    np.cos(2 * phies[cell_index]),
-                    np.sin(2 * phies[cell_index]),
-                    0,
-                ],
-                [
-                    np.sin(2 * phies[cell_index]),
-                    -np.cos(2 * phies[cell_index]),
-                    0,
-                ],
-                [0, 0, 0],
-            ]
-        )
-        # anisotropy
-        eps = (cell.aspect_ratio**2 - 1) / (cell.aspect_ratio**2 + 1)
-        # diagonal squared
-        diag2 = (area / np.pi) * (cell.aspect_ratio + 1 / cell.aspect_ratio)
+        Q_cell = nematic_tensors[cell_index]
         # longitudinal & transversal mobility
         if np.isclose(cell.aspect_ratio, 1):
             mP = 1 / np.sqrt((area * cell.aspect_ratio) / np.pi)
@@ -311,32 +299,17 @@ class Grosmann(Force):
         )
 
         # initialization of the parameters of interaction
-        # dif_phi = 0
         torque = 0
-        # dif_velocity = np.zeros(3)
         force = np.zeros(3)
         # Calculate interaction with filtered neighbors
         for neighbor_index in neighbors_indexes:
+            neighbor = cells[neighbor_index]
             relative_pos = cell.neighbors_relative_pos[neighbor_index]
             overlap = cell.neighbors_overlap[neighbor_index]
             # Calculate change in velocity and orientation given by the force model
             # First we calculate some parameters of the neighbor cell
             # nematic matrix
-            Q_neighbor = np.array(
-                [
-                    [
-                        np.cos(2 * phies[neighbor_index]),
-                        np.sin(2 * phies[neighbor_index]),
-                        0,
-                    ],
-                    [
-                        np.sin(2 * phies[neighbor_index]),
-                        -np.cos(2 * phies[neighbor_index]),
-                        0,
-                    ],
-                    [0, 0, 0],
-                ]
-            )
+            Q_neighbor = nematic_tensors[neighbor_index]
             # and some parameters useful for the force
             # mean nematic matrix
             mean_nematic = (1 / 2) * (Q_cell + Q_neighbor)
@@ -347,45 +320,44 @@ class Grosmann(Force):
                 -1
                 * np.matmul(
                     relative_pos,
-                    (np.matmul(np.identity(3) - eps * mean_nematic, relative_pos)),
+                    (np.matmul(np.identity(3) - cell.anisotropy * mean_nematic, relative_pos)),
                 )
-                / (2 * (1 - eps**2 * (np.cos(relative_angle)) ** 2) * diag2)
+                / (2 * (1 - cell.anisotropy**2 * (np.cos(relative_angle)) ** 2) * cell.squared_diagonal)
             )
 
             # the kernel is: (k_rep = k, b_exp=gamma (from the paper))
             kernel = (self.kRep * self.bExp * xi**self.bExp) / (
-                diag2 * (1 - eps**2 * (np.cos(relative_angle)) ** 2)
+                cell.squared_diagonal * (1 - cell.anisotropy**2 * (np.cos(relative_angle)) ** 2)
             )
 
             # finally we can calculate the force:
             force_2 = kernel * np.matmul(
-                np.identity(3) - eps * mean_nematic, relative_pos
+                np.identity(3) - cell.anisotropy * mean_nematic, relative_pos
             )
 
             # On the other way, we calculate the torque
             # we introduce the theta = angle of r_kj
             theta = np.arctan2(relative_pos[1], relative_pos[0])
             torque_2 = (kernel / 2) * (
-                eps
+                cell.anisotropy
                 * np.linalg.norm(relative_pos)
                 ** 2  # (relative_pos_x**2 + relative_pos_y**2)
                 * np.sin(2 * (phies[cell_index] - theta))
-                + eps**2
+                + cell.anisotropy**2
                 * (
                     np.matmul(
                         relative_pos,
                         (
                             np.matmul(
-                                np.identity(3) - eps * mean_nematic, relative_pos
+                                np.identity(3) - cell.anisotropy * mean_nematic, relative_pos
                             )
                         ),
                     )
                     * np.sin(2 * (-relative_angle))
-                    / (1 - eps**2 * (np.cos(relative_angle)) ** 2)
+                    / (1 - cell.anisotropy**2 * (np.cos(relative_angle)) ** 2)
                 )
             )
-            #dif_velocity_2 = np.array([0, 0, 0])
-            #dif_phi_2 = 0
+
             # Accumulate changes in force and torque
             force += force_2
             torque += torque_2
@@ -415,27 +387,33 @@ class Anisotropic_Grosmann(Force):
         self,
         kRep: float = 10,
         bExp: float = 3,
-        noise_eta: float = None,
+        D_par: float = None,
+        D_perp: float = None,
+        D_phi: float = None,
         shrinking: bool = False,
     ):
         self.kRep = kRep
         self.bExp = bExp
-        self.noise_eta = noise_eta
+        self.D_par = D_par
+        self.D_perp = D_perp
+        self.D_phi = D_phi
         self.shrinking = shrinking
 
     def name(self):
         """
         Force model given by the generalization of Grosmann paper with
-        parameters k and gamma. If noise_eta is None, then there is no 
+        parameters k and gamma. If some noise is None, then there is no 
         noise. If shrinking is True, we update the attribute of the cell
         in order to shrink if the force is strong enough.
         """
         name = f"Anisotropic_Grosmann_k={self.kRep:.2f}_gamma={self.bExp}"
-        if self.noise_eta is not None:
-            name += f"_With_Noise_eta={self.noise_eta:.3f}"
+        if (self.D_par is not None) or (self.D_perp is not None):
+            name += f"_D_par={self.D_par:.3f}_D_perp={self.D_perp:.3f}"
+        if self.D_phi is not None:
+            name += f"_D_phi={self.D_phi:.3f}"
         if self.shrinking is True:
             name += f"_With_Shrinking"
-        return name   
+        return name
 
     def calculate_mobilities(
         self,
@@ -503,33 +481,48 @@ class Anisotropic_Grosmann(Force):
         If there is noise in the force, calculate it.
         """
         cell = cells[cell_index]
-        # we add the noise in the position:
-        # we need the direction vectors
-        direction_vector = np.array(
-            [
-                np.cos(phies[cell_index]),
-                np.sin(phies[cell_index]),
-                0,
-            ])
-        perpendicular_vector = np.array(
-            [
-                np.cos(phies[cell_index]+np.pi/2),
-                np.sin(phies[cell_index]+np.pi/2),
-                0,
-            ])
-        
         # Get the mobilities of the cell
         mP, mS, mR = self.calculate_mobilities(cell, area)
 
-        # and the noise
-        s_nP = self.noise_eta*np.sqrt(mP*delta_t)
-        s_nS = self.noise_eta*np.sqrt(mS*delta_t)
-
-        nP = s_nP*cell.culture.rng.normal(0, 1)
-        nS = s_nS*cell.culture.rng.normal(0, 1)
-        noise = nP*direction_vector+nS*perpendicular_vector
+        # We add the noise in the position:
+        # First in the parallel direction
+        if (self.D_par is None) or np.isclose(self.D_par, 0):
+            noise_parallel = 0
+        else:
+            # We need the direction vector
+            direction_vector = np.array(
+                [
+                    np.cos(phies[cell_index]),
+                    np.sin(phies[cell_index]),
+                    0,
+                ])
+            s_nP = np.sqrt(2 * self.D_par * mP * delta_t)
+            nP = s_nP*cell.culture.rng.normal(0, 1)
+            noise_parallel = nP*direction_vector
+        # And in the perpendicular direction
+        if (self.D_perp is None) or np.isclose(self.D_perp, 0):
+            noise_perpendicular = 0
+        else:
+            perpendicular_vector = np.array(
+                [
+                    np.cos(phies[cell_index]+np.pi/2),
+                    np.sin(phies[cell_index]+np.pi/2),
+                    0,
+                ])
+            s_nS = np.sqrt(2 * self.D_perp * mS * delta_t)
+            nS = s_nS*cell.culture.rng.normal(0, 1)
+            noise_perpendicular = nS*perpendicular_vector
         
-        return noise
+        # Translational noise
+        translational_noise = noise_parallel+noise_perpendicular
+
+        # Rotational noise
+        if (self.D_phi is None) or np.isclose(self.D_phi, 0):
+            rotational_noise = 0
+        else:
+            s_nR = np.sqrt(2 * self.D_phi * mR * delta_t)
+            rotational_noise = s_nR * cell.culture.rng.normal(0, 1)
+        return translational_noise, rotational_noise
 
     def check_shrink_condition(
         self,
@@ -563,33 +556,15 @@ class Anisotropic_Grosmann(Force):
         delta_t,
         area,
         neighbors_indexes,
+        nematic_tensors,
     ):
         # First of all we are going to calculate the force and torque and then
         # we see how these change the velocity and orientation
         cell = cells[cell_index]
         # Get some properties of the cell
         # nematic matrix
-        Q_cell = np.array(
-            [
-                [
-                    np.cos(2 * phies[cell_index]),
-                    np.sin(2 * phies[cell_index]),
-                    0,
-                ],
-                [
-                    np.sin(2 * phies[cell_index]),
-                    -np.cos(2 * phies[cell_index]),
-                    0,
-                ],
-                [0, 0, 0],
-            ]
-        )
-        # anisotropy
-        eps_cell = (cell.aspect_ratio**2 - 1) / (cell.aspect_ratio**2 + 1)
-        # diagonal squared (what we call alpha)
-        alpha_cell = (area / np.pi) * (
-            cell.aspect_ratio + 1 / cell.aspect_ratio
-        )
+        Q_cell = nematic_tensors[cell_index]
+
         # get the mobilities
         mP, mS, mR = self.calculate_mobilities(cell, area)
         # initialization of the parameters of interaction
@@ -603,48 +578,26 @@ class Anisotropic_Grosmann(Force):
             neighbor = cells[neighbor_index]
             # First we calculate some parameters of the neighbor cell
             # nematic matrix
-            Q_neighbor = np.array(
-                [
-                    [
-                        np.cos(2 * phies[neighbor_index]),
-                        np.sin(2 * phies[neighbor_index]),
-                        0,
-                    ],
-                    [
-                        np.sin(2 * phies[neighbor_index]),
-                        -np.cos(2 * phies[neighbor_index]),
-                        0,
-                    ],
-                    [0, 0, 0],
-                ]
-            )
-            # anisotropy
-            eps_neighbor = (neighbor.aspect_ratio**2 - 1) / (
-                neighbor.aspect_ratio**2 + 1
-            )
-            # diagonal squared (what we call alpha)
-            alpha_neighbor = (area / np.pi) * (
-                neighbor.aspect_ratio + 1 / neighbor.aspect_ratio
-            )
-            # and now some parameters of the cell and its neighbor
+            Q_neighbor = nematic_tensors[neighbor_index]
+
             # relative position and angle
             relative_angle = phies[cell_index] - phies[neighbor_index]
             
             # we now calculate the mean nematic matrix (different than before) (the matrix M)
             matrix_M = (
-                alpha_cell * eps_cell * Q_cell
-                + alpha_neighbor * eps_neighbor * Q_neighbor
-            ) / (alpha_cell + alpha_neighbor)
+                cell.squared_diagonal * cell.anisotropy * Q_cell
+                + neighbor.squared_diagonal * neighbor.anisotropy * Q_neighbor
+            ) / (cell.squared_diagonal + neighbor.squared_diagonal)
 
             # now we introduce the constant beta introduced by us in the TF
             beta = (
-                (alpha_cell + alpha_neighbor) ** 2
-                - (alpha_cell * eps_cell - alpha_neighbor * eps_neighbor) ** 2
+                (cell.squared_diagonal + neighbor.squared_diagonal) ** 2
+                - (cell.squared_diagonal * cell.anisotropy - neighbor.squared_diagonal * neighbor.anisotropy) ** 2
                 - 4
-                * alpha_cell
-                * eps_cell
-                * alpha_neighbor
-                * eps_neighbor
+                * cell.squared_diagonal
+                * cell.anisotropy
+                * neighbor.squared_diagonal
+                * neighbor.anisotropy
                 * (np.cos(relative_angle)) ** 2
             )
 
@@ -658,7 +611,7 @@ class Anisotropic_Grosmann(Force):
                 * self.kRep
                 * self.bExp
                 * xi**self.bExp
-                * ((alpha_cell + alpha_neighbor) / beta)
+                * ((cell.squared_diagonal + neighbor.squared_diagonal) / beta)
             )
 
             # finally we can calculate the force:
@@ -671,10 +624,10 @@ class Anisotropic_Grosmann(Force):
                 (
                     (
                         2
-                        * alpha_cell
-                        * eps_cell
-                        * alpha_neighbor
-                        * eps_neighbor
+                        * cell.squared_diagonal
+                        * cell.anisotropy
+                        * neighbor.squared_diagonal
+                        * neighbor.anisotropy
                         * np.sin(-2 * relative_angle)
                     )
                     / beta
@@ -683,7 +636,7 @@ class Anisotropic_Grosmann(Force):
                     relative_pos,
                     np.matmul(np.identity(3) - matrix_M, relative_pos),
                 )
-                + (alpha_cell * eps_cell / (alpha_cell + alpha_neighbor))
+                + (cell.squared_diagonal * cell.anisotropy / (cell.squared_diagonal + neighbor.squared_diagonal))
                 * np.linalg.norm(relative_pos) ** 2
                 * np.sin(2 * (phies[cell_index] - theta))
             )
@@ -704,9 +657,10 @@ class Anisotropic_Grosmann(Force):
         dif_phi = mR * torque * delta_t
 
         # we calculate the noise if we are in that case
-        if self.noise_eta is not None:
-            noise = self.calculate_noise(cells, phies, cell_index, area, delta_t)
-            dif_position += noise
+        if (self.D_par is not None) or (self.D_perp is not None) or (self.D_phi is not None):
+            translational_noise, rotational_noise = self.calculate_noise(cells, phies, cell_index, area, delta_t)
+            dif_position += translational_noise
+            dif_phi += rotational_noise
         
         # We check if the cell should shrink or not
         if self.shrinking is True:

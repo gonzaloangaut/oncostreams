@@ -40,6 +40,16 @@ class Cell:
     _index: Optional[int]
         The index of the cell's position in the culture's cell_positions array.
         It's not directly settable during instantiation.
+    neighbors_relative_pos : Dict[int, np.ndarray]
+        A dictionary where the keys are the indices of the neighbors, and the values 
+        are their relative positions with respect to the reference cell.
+    neighbors_overlap : Dict[int, float]
+        A dictionary where the keys are the indices of the neighbors, and the values 
+        are their overlap with the reference cell.
+    anisotropy : float
+        Anisotropy of the cell (epsilon), calculated from the aspect ratio.
+    squared_diagonal : float
+        Squared diagonal of the cell (alpha), related to the cell shape and area.
 
     Methods
     -------
@@ -66,6 +76,8 @@ class Cell:
     shrink: bool = False
     neighbors_relative_pos: Dict[int, np.ndarray] =  field(default_factory=dict)
     neighbors_overlap: Dict[int, float] =  field(default_factory=dict)
+    anisotropy: float = None
+    squared_diagonal: float = None
 
     def __init__(
         self,
@@ -100,16 +112,12 @@ class Cell:
         parent_index : Optional[int], default=0
             The index of the parent cell in the culture's cell_positions
             array.
-        neighbors_relative_pos : Dict[int, np.ndarray]
-            A dictionary where the keys are the indices of the neighbors, and the values 
-            are their relative positions with respect to the reference cell.
-        neighbors_overlap : Dict[int, float]
-            A dictionary where the keys are the indices of the neighbors, and the values 
-            are their overlap with the reference cell.
         available_space : bool, default=True
             Whether the cell has available space around it or not.
         shrink : bool, default=False
             Whether the cell has to shrink or not.
+        
+
 
         Notes
         ------
@@ -124,8 +132,14 @@ class Cell:
         self.is_stem = is_stem
         self.parent_index = parent_index
         self.available_space = available_space
-        self.aspect_ratio = aspect_ratio
         self.shrink = shrink
+
+        # shape parameters
+        self.aspect_ratio = aspect_ratio
+        self.anisotropy = None
+        self.squared_diagonal = None
+        # we calculate the shape parameters given the aspect ratio
+        self.update_shape_parameters()
 
         # we initialize the dictionary for storing neighbors' relative 
         # positions
@@ -146,6 +160,19 @@ class Cell:
         # and add the cell to the culture's phi matrix
         culture.cell_phies = np.append(culture.cell_phies, phi)
 
+        # Calculate the nematic tensor
+        new_tensor = np.array([
+            [np.cos(2 * phi), np.sin(2 * phi), 0],
+            [np.sin(2 * phi), -np.cos(2 * phi), 0],
+            [0, 0, 0]
+        ])
+
+        # add it to the matrix
+        culture.nematic_tensors = np.append(
+            culture.nematic_tensors, [new_tensor], axis=0
+        )
+
+
         # We also add the cell to the culture's spatial hash grid
         self.culture.grid.add_cell_to_hash_table(
             self._index,
@@ -164,19 +191,32 @@ class Cell:
             self.is_stem,
         )
 
-    def velocity(self):
+    def update_shape_parameters(self) -> None:
         """
-        It returns the velocity vector of the given cell.
+        Updates de anisotropy and squared diagonal given the aspect ratio
+        """
+        ar = self.aspect_ratio
+        self.anisotropy = (ar**2 - 1) / (ar**2 + 1)
+        self.squared_diagonal = (self.culture.cell_area / np.pi) * (ar + 1 / ar)
+
+    def set_aspect_ratio(self, new_ar) -> None:
+        """
+        Sets the aspect ratio and updates the shape parameters accordingly.
+        """
+        self.aspect_ratio = new_ar
+        self.update_shape_parameters()
+
+    def velocity(self) -> np.ndarray:
+        """
+        It returns the velocity vector of the given cell. Speed=0 for round cells
+        and speed=1 for maximum aspect ratio.
 
         Returns
         -------
         np.ndarray
             The velocity vector of the cell.
         """
-        if np.isclose(self.aspect_ratio, 1):
-            speed = 0
-        else:
-            speed = 1
+        speed = (self.aspect_ratio-1)/(self.culture.aspect_ratio_max-1)
         return speed * np.array(
             [
                 np.cos(self.culture.cell_phies[self._index]),

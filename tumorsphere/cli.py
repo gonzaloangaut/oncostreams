@@ -31,6 +31,13 @@ def cli():
     help="Simulates tumorsphere growth with the indicated parameters."
 )
 @click.option(
+    "--forces",
+    required=True,
+    type=str,
+    help="List of the forces used in the interaction. "
+    "Values should be comma separated.",
+)
+@click.option(
     "--prob-stem",
     required=True,
     type=str,

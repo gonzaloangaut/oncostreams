@@ -11,6 +11,8 @@ import multiprocessing as mp
 from typing import List, Tuple, Optional, Union
 
 import numpy as np
+import os
+import pickle
 
 from tumorsphere.core.culture import Culture
 from tumorsphere.core.output import create_output_demux
@@ -62,6 +64,9 @@ class Simulation:
     initial_number_of_cells : int, optional
         The number of cells in the culture. If None, we start with a single
         cell.
+    initial_fraction_elongated : float, optional
+        The initial fraction of elongated cells in the culture. If None, we
+        start with all round cells.
     initial_density : float
         The initial density of the cells in the culture. None by default. If
         specified, it overrides the `culture_bounds` parameter to adjust the
@@ -74,15 +79,16 @@ class Simulation:
         Whether the cells deforms or not.
     stabilization_time : int
         The time we have to wait in order to start the deformation
-    threshold_overlap : float
-        The threshold for the overlap for which the cells start to interact and deform
-        to deform
+    overlap_threshold_ratio : float
+        A fraction (between 0 and 1) of the maximum allowed overlap between cells.
     delta_t : float
         The time interval used to move
     initial_apect_ratio : float
-        the aspect_ratio of all cells in the culture at the begining of the simulation.
-    apect_ratio_max : float
+        The aspect_ratio of all cells in the culture at the begining of the simulation.
+    aspect_ratio_max : float
         The max value of the aspect ratio that a cell can have after deforms
+    delta_aspect_ratio : float
+        Increase in the aspect ratio during deformation.
     culture_bounds : int, optional
         The bounds of the grid, by default None. If None, the space is
         unbouded. If provided, the space is bounded to the
@@ -137,19 +143,22 @@ class Simulation:
         grid_cube_size: Union[float, List[float]] = 2,
         grid_torus: bool = True,
         initial_number_of_cells: Optional[List[int]] = None,
+        initial_fraction_elongated: Optional[List[float]] = None,
         initial_density: Optional[List[float]] = None,
         reproduction: bool = False,
         movement: bool = True,
         deformation: bool = True,
         stabilization_time: int = 120,
-        threshold_overlap: float = 0.61,
+        overlap_threshold_ratio: float = 0.35,
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
+        delta_aspect_ratio: float = 0.1,
     ):
         # main simulation attributes
         self.forces = forces
         self.initial_number_of_cells = initial_number_of_cells
+        self.initial_fraction_elongated = initial_fraction_elongated
         self.reproduction = reproduction
         self.movement = movement
         self.deformation = deformation
@@ -164,10 +173,11 @@ class Simulation:
         self._rng_seed = rng_seed
         self.rng = np.random.default_rng(rng_seed)
         self.stabilization_time = stabilization_time
-        self.threshold_overlap = threshold_overlap
+        self.overlap_threshold_ratio = overlap_threshold_ratio
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
+        self.delta_aspect_ratio = delta_aspect_ratio
 
         # dictionary storing the culture objects
         self.cultures = {}
@@ -201,6 +211,7 @@ class Simulation:
         sql: bool = True,
         dat_files: bool = False,
         dat_pos_ar: bool = False,
+        dat_order_par: bool = False,
         ovito: bool = False,
         df: bool = False,
         output_dir: str = ".",
@@ -230,6 +241,8 @@ class Simulation:
             outputs.append("df")
         if dat_pos_ar:
             outputs.append("dat_pos_ar")
+        if dat_order_par:
+            outputs.append("dat_order_par")
 
         # We compute the name of the realization
         current_realization_name = realization_name(
@@ -274,6 +287,8 @@ class Simulation:
         dat_files: bool = False,
         dat_pos_ar: bool = False,
         save_step_dat_pos_ar: int = 1,
+        dat_order_par: bool = False,
+        save_step_dat_order_par: int = 1,
         ovito: bool = False,
         save_step_ovito: int = 1,
         df: bool = False,
@@ -322,6 +337,8 @@ class Simulation:
             outputs.append("df")
         if dat_pos_ar:
             outputs.append("dat_pos_ar")
+        if dat_order_par:
+            outputs.append("dat_order_par")
 
         with mp.Pool(number_of_processes) as p:
             p.map(
@@ -331,11 +348,13 @@ class Simulation:
                         k,
                         i,
                         f,
+                        t,
                         g if self.initial_density is not None else None,
                         seeds[j],
                         self,
                         outputs,
                         save_step_dat_pos_ar,
+                        save_step_dat_order_par,
                         save_step_ovito,
                         m,
                         output_dir,
@@ -346,6 +365,7 @@ class Simulation:
                     for k in range(len(self.prob_diff))
                     for i in range(len(self.prob_stem))
                     for f in range(len(self.initial_number_of_cells))
+                    for t in range(len(self.initial_fraction_elongated))
                     for g in range(len(self.initial_density))
                     if self.initial_density is not None
                     for j in range(self.num_of_realizations)
@@ -358,6 +378,7 @@ def realization_name(
     pd: float,
     ps: float,
     nc: int,
+    f_e: float,
     rho: float,
     seed: int,
     force_name: str,
@@ -379,11 +400,11 @@ def realization_name(
         name += f"_pd={pd}_ps={ps}"
     if moving:
         if rho is not None:
-            name += f"_initial_number_of_cells={nc}"
+            name += f"_initial_number_of_cells={nc}_initial_fraction_elongated={f_e}"
             name += f"_density={rho}_force={force_name}"
         else:
-            name += f"_initial_number_of_cells={nc}_culture_bounds={bounds}"
-            name += f"_force={force_name}"
+            name += f"_initial_number_of_cells={nc}_initial_fraction_elongated={f_e}"
+            name += f"_culture_bounds={bounds}_force={force_name}"
     name += f"_rng_seed={seed}"
     return name
 
@@ -419,11 +440,13 @@ def simulate_single_culture(
         k,
         i,
         f,
+        t,
         g,
         seed,
         sim,
         outputs,
         save_step_dat_pos_ar,
+        save_step_dat_order_par,
         save_step_ovito,
         m,
         output_dir,
@@ -437,6 +460,7 @@ def simulate_single_culture(
         sim.prob_diff[k],
         sim.prob_stem[i],
         sim.initial_number_of_cells[f],
+        sim.initial_fraction_elongated[t],
         sim.initial_density[g] if sim.initial_density is not None else None,
         seed,
         sim.forces[m].name(),
@@ -445,48 +469,69 @@ def simulate_single_culture(
         sim.movement,
     )
 
-    # We create the output object
-    output = create_output_demux(current_realization_name, outputs, output_dir, save_step_dat_pos_ar, save_step_ovito)
-
-    # We create the spatial hash grid object
-    if sim.initial_density is not None:
-        culture_bounds = sim.calculate_culture_bounds_from_density(
-            sim.initial_number_of_cells[f],
-            sim.initial_density[g],
-        )
+    checkpoint_path_save = os.path.join(output_dir, "checkpoints", current_realization_name + ".pkl")
+    # checkpoint_dir = os.path.join(os.environ["HOME"], "oncostream", "checkpoints")
+    # os.makedirs(checkpoint_dir, exist_ok=True)
+    checkpoint_dir = os.path.join(output_dir, "checkpoints") #
+    os.makedirs(checkpoint_dir, exist_ok=True) #
+    checkpoint_path = os.path.join(checkpoint_dir, current_realization_name + ".pkl")
+    # Verify if there is a checkpoint
+    if os.path.exists(checkpoint_path):
+        with open(checkpoint_path, "rb") as f:
+            #culture, start_tic = pickle.load(f)
+            #sim.cultures[current_realization_name] = culture
+            culture, start_tic, state = pickle.load(f)
+            sim.cultures[current_realization_name] = culture
+            sim.cultures[current_realization_name].rng = np.random.default_rng()
+            sim.cultures[current_realization_name].rng.bit_generator.state = state
     else:
-        culture_bounds = sim.culture_bounds
+        # We create the output object
+        output = create_output_demux(current_realization_name, outputs, output_dir, save_step_dat_pos_ar, save_step_dat_order_par, save_step_ovito)
 
-    spatial_hash_grid = SpatialHashGrid(
-        culture=None,
-        bounds=culture_bounds,
-        cube_size=grid_cube_size,
-        torus=grid_torus,
-    )
+        # We create the spatial hash grid object
+        if sim.initial_density is not None:
+            culture_bounds = sim.calculate_culture_bounds_from_density(
+                sim.initial_number_of_cells[f],
+                sim.initial_density[g],
+            )
+        else:
+            culture_bounds = sim.culture_bounds
 
-    # We create the culture object and simulate it
-    sim.cultures[current_realization_name] = Culture(
-        output=output,
-        force=sim.forces[m],
-        initial_number_of_cells=sim.initial_number_of_cells[f],
-        grid=spatial_hash_grid,
-        adjacency_threshold=sim.adjacency_threshold,
-        cell_radius=sim.cell_radius,
-        cell_max_repro_attempts=sim.cell_max_repro_attempts,
-        first_cell_is_stem=sim.first_cell_is_stem,
-        prob_stem=sim.prob_stem[i],
-        prob_diff=sim.prob_diff[k],
-        rng_seed=seed,
-        swap_probability=sim.swap_probability,    
-        reproduction=sim.reproduction,
-        movement=sim.movement,
-        deformation=sim.deformation,
-        stabilization_time=sim.stabilization_time,
-        threshold_overlap=sim.threshold_overlap,
-        delta_t=sim.delta_t,
-        initial_aspect_ratio=sim.initial_aspect_ratio,
-        aspect_ratio_max=sim.aspect_ratio_max,
-    )
+        spatial_hash_grid = SpatialHashGrid(
+            culture=None,
+            bounds=culture_bounds,
+            cube_size=grid_cube_size,
+            torus=grid_torus,
+        )
+
+        # We create the culture object and simulate it
+        sim.cultures[current_realization_name] = Culture(
+            output=output,
+            force=sim.forces[m],
+            initial_number_of_cells=sim.initial_number_of_cells[f],
+            initial_fraction_elongated=sim.initial_fraction_elongated[t],
+            grid=spatial_hash_grid,
+            adjacency_threshold=sim.adjacency_threshold,
+            cell_radius=sim.cell_radius,
+            cell_max_repro_attempts=sim.cell_max_repro_attempts,
+            first_cell_is_stem=sim.first_cell_is_stem,
+            prob_stem=sim.prob_stem[i],
+            prob_diff=sim.prob_diff[k],
+            rng_seed=seed,
+            swap_probability=sim.swap_probability,    
+            reproduction=sim.reproduction,
+            movement=sim.movement,
+            deformation=sim.deformation,
+            stabilization_time=sim.stabilization_time,
+            overlap_threshold_ratio=sim.overlap_threshold_ratio,
+            delta_t=sim.delta_t,
+            initial_aspect_ratio=sim.initial_aspect_ratio,
+            aspect_ratio_max=sim.aspect_ratio_max,
+            delta_aspect_ratio=sim.delta_aspect_ratio,
+        )
+        start_tic=0
     sim.cultures[current_realization_name].simulate(
         sim.num_of_steps_per_realization,
+        start_tic,
+        checkpoint_path_save,
     )
