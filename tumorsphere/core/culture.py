@@ -54,7 +54,8 @@ class Culture:
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
-        delta_aspect_ratio = 0.1,
+        delta_aspect_ratio: float = 0.1,
+        trabajo_final: bool = True, # DEJARLO EN FALSE
     ):
         """
         Initialize a new culture of cells.
@@ -111,6 +112,8 @@ class Culture:
             The max value of the aspect ratio that a cell can have after deforms.
         delta_aspect_ratio : float
             Increase in the aspect ratio during deformation.
+        trabajo_final : bool
+            Flag to determine wether to use or not mechanism of the TFG.
 
 
         Attributes
@@ -191,6 +194,9 @@ class Culture:
         self.aspect_ratio_max = aspect_ratio_max
         self.delta_aspect_ratio = delta_aspect_ratio
         self.stabilization_time = stabilization_time
+
+        # TFG 
+        self.trabajo_final = trabajo_final
 
         # we instantiate the culture's RNG with the provided entropy
         self.rng_seed = rng_seed
@@ -697,6 +703,14 @@ class Culture:
             True if the elongation was successful, False otherwise.
         """
         cell = self.cells[cell_index]
+
+        # Number of attempts
+        n_attempts = (
+            1
+            if self.trabajo_final
+            else self.cell_max_def_attempts
+        )
+
         # we save the old attributes
         old_position = np.array(self.cell_positions[cell_index])
         old_phi = self.cell_phies[cell_index]
@@ -705,7 +719,7 @@ class Culture:
         old_index = self.grid.get_hash_key(old_position)
         # create a dict that contains the total overlap of the cell with others
         total_overlap = dict()
-        for attempt in range(self.cell_max_def_attempts):
+        for attempt in range(n_attempts):
             # random phi and new aspect ratio and generate a position with them
             new_phi = self.rng.uniform(low=0, high=2 * np.pi)
             new_aspect_ratio = old_aspect_ratio + self.delta_aspect_ratio
@@ -736,10 +750,70 @@ class Culture:
                     np.array([self.cell_positions[i] for i in candidate_neighbors])
                 )
 
-                # Vectorized overlap + threshold check
+                # TFG criterion: only consider neighbors whose distance
+                # is smaller than the sum of the major semi-axes
+                if self.trabajo_final:
+
+                    cell_semi_major_axis = np.sqrt(
+                        (self.cell_area * cell.aspect_ratio) / np.pi
+                    )
+
+                    distances = np.linalg.norm(
+                        relative_positions,
+                        axis=1,
+                    )
+
+                    neighbor_semi_major_axes = np.sqrt(
+                        self.cell_area
+                        * np.array(
+                            [
+                                self.cells[i].aspect_ratio
+                                for i in candidate_neighbors
+                            ]
+                        )
+                        / np.pi
+                    )
+
+                    distance_mask = (
+                        distances
+                        <= (
+                            cell_semi_major_axis
+                            + neighbor_semi_major_axes
+                        )
+                    )
+
+                    candidate_neighbors = list(
+                        np.array(candidate_neighbors)[distance_mask]
+                    )
+
+                    relative_positions = relative_positions[
+                        distance_mask
+                    ]
+
+                # Calculate overlaps
                 overlaps = self.calculate_overlaps(cell_index, candidate_neighbors, relative_positions)
-                max_overlaps = self.calculate_max_overlaps(cell_index, candidate_neighbors)
-                mask = overlaps > self.overlap_threshold_ratio * max_overlaps
+
+                # Filter neighbors
+                if self.trabajo_final:
+
+                    # TFG criterion
+                    mask = overlaps > self.overlap_threshold_ratio
+
+                else:
+
+                    # Calculate max overlaps
+                    max_overlaps = self.calculate_max_overlaps(
+                        cell_index,
+                        candidate_neighbors,
+                    )
+
+                    mask = (
+                        overlaps
+                        > (
+                            self.overlap_threshold_ratio
+                            * max_overlaps
+                        )
+                    )
 
                 # Sum total overlap if there is no significant overlap
                 if not mask.any():
@@ -936,7 +1010,37 @@ class Culture:
                 cell.neighbors_relative_pos[neighbor_index] = rel_pos
                 self.cells[neighbor_index].neighbors_relative_pos[cell_index] = -rel_pos
 
-        # And those whose overlap has not been calculated
+        # TFG criterion: only consider neighbors whose distance
+        # is smaller than the sum of the major semi-axes
+        if self.trabajo_final and candidate_neighbors:
+
+            cell_semi_major_axis = np.sqrt(
+                (self.cell_area * cell.aspect_ratio) / np.pi
+            )
+
+            distances = np.array([
+                np.linalg.norm(cell.neighbors_relative_pos[idx])
+                for idx in candidate_neighbors
+            ])
+
+            neighbor_semi_major_axes = np.sqrt(
+                self.cell_area
+                * np.array(
+                    [self.cells[idx].aspect_ratio for idx in candidate_neighbors]
+                )
+                / np.pi
+            )
+
+            distance_mask = (
+                distances <=
+                (cell_semi_major_axis + neighbor_semi_major_axes)
+            )
+
+            candidate_neighbors = list(
+                np.array(candidate_neighbors)[distance_mask]
+            )
+
+        # Now, we take those whose overlap has not been calculated
         to_calculate_overlap = [
             neighbor_index for neighbor_index in candidate_neighbors
             if neighbor_index not in cell.neighbors_overlap
@@ -963,11 +1067,22 @@ class Culture:
         neighbor_indices = np.array(list(cell.neighbors_overlap.keys()))
         overlaps = np.array(list(cell.neighbors_overlap.values()))
 
-        # Calculate max overlap for each neighbor
-        max_overlaps = self.calculate_max_overlaps(cell_index, neighbor_indices)
-
         # Filter the neighbors
-        mask = overlaps > self.overlap_threshold_ratio * max_overlaps
+        if self.trabajo_final:
+            # TFG criterion
+            mask = overlaps > self.overlap_threshold_ratio
+
+        else:
+            # Calculate max overlap for each neighbor
+            max_overlaps = self.calculate_max_overlaps(
+                cell_index,
+                neighbor_indices
+            )
+            # Use the mask to filter
+            mask = overlaps > (
+                self.overlap_threshold_ratio * max_overlaps
+            )
+
         significant_neighbors_indexes = neighbor_indices[mask]
 
         # Calculate interaction with final neighbors
