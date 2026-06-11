@@ -51,6 +51,7 @@ class Culture:
         deformation: bool = True,
         stabilization_time: int = 120,
         overlap_threshold_ratio: float = 0.35,
+        overlap_threshold_tfg: float = 0.61,
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
@@ -104,6 +105,8 @@ class Culture:
             The time we have to wait in order to start the deformation.
         overlap_threshold_ratio : float
             A fraction (between 0 and 1) of the maximum allowed overlap between cells.
+        overlap_threshold_tfg : float
+            Overlap threshold used in the TFG.
         delta_t : float
             The time interval used to move the cells.
         initial_apect_ratio : float
@@ -153,6 +156,8 @@ class Culture:
             The time we have to wait in order to start the deformation
         overlap_threshold_ratio : float
             A fraction (between 0 and 1) of the maximum allowed overlap between cells.
+        overlap_threshold_tfg : float
+            Overlap threshold used in the TFG.
         delta_t : float
             The time interval used to move
         initial_apect_ratio : float
@@ -189,6 +194,7 @@ class Culture:
         self.movement = movement
         self.deformation = deformation
         self.overlap_threshold_ratio = overlap_threshold_ratio
+        self.overlap_threshold_tfg = overlap_threshold_tfg
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
@@ -797,7 +803,7 @@ class Culture:
                 if self.trabajo_final:
 
                     # TFG criterion
-                    mask = overlaps > self.overlap_threshold_ratio
+                    mask = overlaps > self.overlap_threshold_tfg
 
                 else:
 
@@ -1069,7 +1075,7 @@ class Culture:
         # Filter the neighbors
         if self.trabajo_final:
             # TFG criterion
-            mask = overlaps > self.overlap_threshold_ratio
+            mask = overlaps > self.overlap_threshold_tfg
 
         else:
             # Calculate max overlap for each neighbor

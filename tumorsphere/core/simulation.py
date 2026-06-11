@@ -84,6 +84,8 @@ class Simulation:
         The time we have to wait in order to start the deformation
     overlap_threshold_ratio : float
         A fraction (between 0 and 1) of the maximum allowed overlap between cells.
+    overlap_threshold_tfg : float
+        Overlap threshold used in the TFG.
     delta_t : float
         The time interval used to move
     initial_apect_ratio : float
@@ -156,6 +158,7 @@ class Simulation:
         deformation: bool = True,
         stabilization_time: int = 120,
         overlap_threshold_ratio: float = 0.35,
+        overlap_threshold_tfg: float = 0.61,
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
@@ -181,6 +184,7 @@ class Simulation:
         self.rng = np.random.default_rng(rng_seed)
         self.stabilization_time = stabilization_time
         self.overlap_threshold_ratio = overlap_threshold_ratio
+        self.overlap_threshold_tfg = overlap_threshold_tfg
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
@@ -538,6 +542,7 @@ def simulate_single_culture(
             deformation=sim.deformation,
             stabilization_time=sim.stabilization_time,
             overlap_threshold_ratio=sim.overlap_threshold_ratio,
+            overlap_threshold_tfg=sim.overlap_threshold_tfg,
             delta_t=sim.delta_t,
             initial_aspect_ratio=sim.initial_aspect_ratio,
             aspect_ratio_max=sim.aspect_ratio_max,
