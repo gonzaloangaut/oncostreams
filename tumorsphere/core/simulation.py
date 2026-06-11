@@ -150,8 +150,8 @@ class Simulation:
         culture_bounds: float = None,
         grid_cube_size: Union[float, List[float]] = 2,
         grid_torus: bool = True,
-        initial_number_of_cells: Optional[List[int]] = None,
-        initial_fraction_elongated: Optional[List[float]] = None,
+        initial_number_of_cells: Optional[List[int]] = [400],
+        initial_fraction_elongated: Optional[List[float]] = [0.0],
         initial_density: Optional[List[float]] = None,
         reproduction: bool = False,
         movement: bool = True,
@@ -366,7 +366,7 @@ class Simulation:
                         i,
                         f,
                         t,
-                        g if self.initial_density is not None else None,
+                        g,
                         seeds[j],
                         self,
                         outputs,
@@ -383,8 +383,11 @@ class Simulation:
                     for i in range(len(self.prob_stem))
                     for f in range(len(self.initial_number_of_cells))
                     for t in range(len(self.initial_fraction_elongated))
-                    for g in range(len(self.initial_density))
-                    if self.initial_density is not None
+                    for g in (
+                        range(len(self.initial_density))
+                        if self.initial_density is not None
+                        else [None]
+                    )
                     for j in range(self.num_of_realizations)
                     for m in range(len(self.forces))
                 ],
@@ -416,12 +419,14 @@ def realization_name(
     if repro:
         name += f"_pd={pd}_ps={ps}"
     if moving:
+        name += f"_initial_number_of_cells={nc}"
+        if not np.isclose(f_e, 0.0):
+            name += f"_initial_fraction_elongated={f_e}"
         if rho is not None:
-            name += f"_initial_number_of_cells={nc}_initial_fraction_elongated={f_e}"
-            name += f"_density={rho}_force={force_name}"
+            name += f"_density={rho}"
         else:
-            name += f"_initial_number_of_cells={nc}_initial_fraction_elongated={f_e}"
-            name += f"_culture_bounds={bounds}_force={force_name}"
+            name += f"_culture_bounds={bounds}"
+        name += f"_force={force_name}"
     name += f"_rng_seed={seed}"
     return name
 

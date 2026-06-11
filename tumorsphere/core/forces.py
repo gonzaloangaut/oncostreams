@@ -387,16 +387,14 @@ class Anisotropic_Grosmann(Force):
         self,
         kRep: float = 10,
         bExp: float = 3,
-        D_par: float = None,
-        D_perp: float = None,
-        D_phi: float = None,
+        noise_eta: float = None,
+        d_phi: float = None,
         shrinking: bool = False,
     ):
         self.kRep = kRep
         self.bExp = bExp
-        self.D_par = D_par
-        self.D_perp = D_perp
-        self.D_phi = D_phi
+        self.noise_eta = noise_eta
+        self.d_phi = d_phi
         self.shrinking = shrinking
 
     def name(self):
@@ -407,10 +405,12 @@ class Anisotropic_Grosmann(Force):
         in order to shrink if the force is strong enough.
         """
         name = f"Anisotropic_Grosmann_k={self.kRep:.2f}_gamma={self.bExp}"
-        if (self.D_par is not None) or (self.D_perp is not None):
-            name += f"_D_par={self.D_par:.3f}_D_perp={self.D_perp:.3f}"
-        if self.D_phi is not None:
-            name += f"_D_phi={self.D_phi:.3f}"
+        if (self.noise_eta is not None) or (self.d_phi is not None):
+            name += f"_With_Noise"
+        if self.noise_eta is not None:
+            name += f"_eta={self.noise_eta:.3f}"
+        if self.d_phi is not None:
+            name += f"_d_phi={self.d_phi:.3f}"
         if self.shrinking is True:
             name += f"_With_Shrinking"
         return name
@@ -486,8 +486,8 @@ class Anisotropic_Grosmann(Force):
 
         # We add the noise in the position:
         # First in the parallel direction
-        if (self.D_par is None) or np.isclose(self.D_par, 0):
-            noise_parallel = 0
+        if (self.noise_eta is None) or np.isclose(self.noise_eta, 0):
+            translational_noise = 0
         else:
             # We need the direction vector
             direction_vector = np.array(
@@ -496,31 +496,29 @@ class Anisotropic_Grosmann(Force):
                     np.sin(phies[cell_index]),
                     0,
                 ])
-            s_nP = np.sqrt(2 * self.D_par * mP * delta_t)
+            s_nP = self.noise_eta*np.sqrt(mP * delta_t)
             nP = s_nP*cell.culture.rng.normal(0, 1)
             noise_parallel = nP*direction_vector
-        # And in the perpendicular direction
-        if (self.D_perp is None) or np.isclose(self.D_perp, 0):
-            noise_perpendicular = 0
-        else:
+
+            # And in the perpendicular direction
             perpendicular_vector = np.array(
                 [
                     np.cos(phies[cell_index]+np.pi/2),
                     np.sin(phies[cell_index]+np.pi/2),
                     0,
                 ])
-            s_nS = np.sqrt(2 * self.D_perp * mS * delta_t)
+            s_nS = self.noise_eta*np.sqrt(mS * delta_t)
             nS = s_nS*cell.culture.rng.normal(0, 1)
             noise_perpendicular = nS*perpendicular_vector
         
-        # Translational noise
-        translational_noise = noise_parallel+noise_perpendicular
+            # Translational noise
+            translational_noise = noise_parallel+noise_perpendicular
 
         # Rotational noise
-        if (self.D_phi is None) or np.isclose(self.D_phi, 0):
+        if (self.d_phi is None) or np.isclose(self.d_phi, 0):
             rotational_noise = 0
         else:
-            s_nR = np.sqrt(2 * self.D_phi * mR * delta_t)
+            s_nR = np.sqrt(2 * self.d_phi * mR * delta_t)
             rotational_noise = s_nR * cell.culture.rng.normal(0, 1)
         return translational_noise, rotational_noise
 
@@ -657,7 +655,7 @@ class Anisotropic_Grosmann(Force):
         dif_phi = mR * torque * delta_t
 
         # we calculate the noise if we are in that case
-        if (self.D_par is not None) or (self.D_perp is not None) or (self.D_phi is not None):
+        if (self.noise_eta is not None) or (self.d_phi is not None):
             translational_noise, rotational_noise = self.calculate_noise(cells, phies, cell_index, area, delta_t)
             dif_position += translational_noise
             dif_phi += rotational_noise
