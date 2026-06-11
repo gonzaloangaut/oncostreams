@@ -61,6 +61,9 @@ class Simulation:
         Maximum number of attempts to create a new cell during the
         reproduction of an existing cell in a `Culture` object.
         Default is`1000`.
+    cell_max_def_attempts : int, optional
+        The maximum number of deformation attempts a cell can make,
+        by default 10.
     initial_number_of_cells : int, optional
         The number of cells in the culture. If None, we start with a single
         cell.
@@ -107,6 +110,8 @@ class Simulation:
         grid. If False, the grid is a bounded cube, so behavior should be
         defined to manage what happens when cells go out of the bounds of
         the simulation.
+    trabajo_final : bool
+        Flag to determine wether to use or not mechanism of the TFG.
 
     Attributes
     ----------
@@ -138,6 +143,7 @@ class Simulation:
         cell_radius: float = 1,
         adjacency_threshold: float = 4,
         cell_max_repro_attempts: int = 1000,
+        cell_max_def_attempts: int = 10,
         swap_probability: float = 0.5,
         culture_bounds: float = None,
         grid_cube_size: Union[float, List[float]] = 2,
@@ -154,6 +160,7 @@ class Simulation:
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
         delta_aspect_ratio: float = 0.1,
+        trabajo_final: bool = False,
     ):
         # main simulation attributes
         self.forces = forces
@@ -179,11 +186,15 @@ class Simulation:
         self.aspect_ratio_max = aspect_ratio_max
         self.delta_aspect_ratio = delta_aspect_ratio
 
+        # TFG 
+        self.trabajo_final = trabajo_final
+
         # dictionary storing the culture objects
         self.cultures = {}
 
         # attributes to pass to the culture (and to the cells)
         self.cell_max_repro_attempts = cell_max_repro_attempts
+        self.cell_max_def_attempts = cell_max_def_attempts
         self.adjacency_threshold = adjacency_threshold
         self.cell_radius = cell_radius
 
@@ -271,11 +282,13 @@ class Simulation:
             adjacency_threshold=self.adjacency_threshold,
             cell_radius=self.cell_radius,
             cell_max_repro_attempts=self.cell_max_repro_attempts,
+            cell_max_def_attempts=self.cell_max_def_attempts,
             first_cell_is_stem=self.first_cell_is_stem,
             prob_stem=self.prob_stem[prob_stem_index],
             prob_diff=self.prob_diff[prob_diff_index],
             rng_seed=seed.item(),
             swap_probability=self.swap_probability,
+            trabajo_final=self.trabajo_final,
         )
         self.cultures[current_realization_name].simulate(
             self.num_of_steps_per_realization,
@@ -514,6 +527,7 @@ def simulate_single_culture(
             adjacency_threshold=sim.adjacency_threshold,
             cell_radius=sim.cell_radius,
             cell_max_repro_attempts=sim.cell_max_repro_attempts,
+            cell_max_def_attempts=sim.cell_max_def_attempts,
             first_cell_is_stem=sim.first_cell_is_stem,
             prob_stem=sim.prob_stem[i],
             prob_diff=sim.prob_diff[k],
@@ -528,6 +542,7 @@ def simulate_single_culture(
             initial_aspect_ratio=sim.initial_aspect_ratio,
             aspect_ratio_max=sim.aspect_ratio_max,
             delta_aspect_ratio=sim.delta_aspect_ratio,
+            trabajo_final=sim.trabajo_final,
         )
         start_tic=0
     sim.cultures[current_realization_name].simulate(

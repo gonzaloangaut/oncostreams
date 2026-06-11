@@ -55,7 +55,7 @@ class Culture:
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
         delta_aspect_ratio: float = 0.1,
-        trabajo_final: bool = True, # DEJARLO EN FALSE
+        trabajo_final: bool = False,
     ):
         """
         Initialize a new culture of cells.
@@ -876,7 +876,6 @@ class Culture:
         # and get the place of the grid that correspond to the cell
         old_index = self.grid.get_hash_key(old_position)
    
-        # for attempt in range(self.cell_max_def_attempts): # NO HAY ATTEMPTS AHORA
         # random phi and aspect ratio=max and generate a position with them
         #new_phi = self.rng.uniform(low=0, high=2 * np.pi)
         new_aspect_ratio = old_aspect_ratio + self.delta_aspect_ratio
