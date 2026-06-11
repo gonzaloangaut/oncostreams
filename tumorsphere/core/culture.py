@@ -114,7 +114,8 @@ class Culture:
         aspect_ratio_max : float
             The max value of the aspect ratio that a cell can have after deforms.
         delta_aspect_ratio : float
-            Increase in the aspect ratio during deformation.
+            Increase in the aspect ratio during deformation. If trabajo_final is True, then
+            delta_aspect_ratio = aspect_ratio_max - 1
         trabajo_final : bool
             Flag to determine wether to use or not mechanism of the TFG.
 
@@ -198,12 +199,16 @@ class Culture:
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
-        self.delta_aspect_ratio = delta_aspect_ratio
         self.stabilization_time = stabilization_time
 
         # TFG 
         self.trabajo_final = trabajo_final
 
+        # delta aspect ratio
+        if trabajo_final is True:
+            self.delta_aspect_ratio = aspect_ratio_max-1
+        else:
+            self.delta_aspect_ratio = delta_aspect_ratio
         # we instantiate the culture's RNG with the provided entropy
         self.rng_seed = rng_seed
         self.rng = np.random.default_rng(rng_seed)
@@ -884,7 +889,10 @@ class Culture:
    
         # random phi and aspect ratio=max and generate a position with them
         #new_phi = self.rng.uniform(low=0, high=2 * np.pi)
-        new_aspect_ratio = old_aspect_ratio + self.delta_aspect_ratio
+        new_aspect_ratio = min(
+            old_aspect_ratio + self.delta_aspect_ratio,
+            self.aspect_ratio_max
+        )
         new_position = self.propose_new_position_to_deform(
             cell_index, self.cell_phies[cell_index], new_aspect_ratio
         )
@@ -953,8 +961,12 @@ class Culture:
         if cell.shrink == True:
             # turn the cell back to round
             old_aspect_ratio = cell.aspect_ratio
-            cell.set_aspect_ratio(old_aspect_ratio-self.delta_aspect_ratio)
-            if np.isclose(old_aspect_ratio-self.delta_aspect_ratio, 1):
+            new_aspect_ratio = max(
+                old_aspect_ratio - self.delta_aspect_ratio,
+                1
+            )
+            cell.set_aspect_ratio(new_aspect_ratio)
+            if np.isclose(new_aspect_ratio, 1):
                 self.cell_phies[cell_index] = 0
                 self.update_nematic_tensors([cell_index])
             # and the shrink turns back to False 
