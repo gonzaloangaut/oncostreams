@@ -30,7 +30,7 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "tumorsphere"
+name = "oncostream-tfg"
 version = "0.0.1"
 dependencies = [
     "click",
