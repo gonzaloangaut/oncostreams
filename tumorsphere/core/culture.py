@@ -55,6 +55,7 @@ class Culture:
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
+        cell_speed_max: float = 1,
         delta_aspect_ratio: float = 0.1,
         trabajo_final: bool = False,
     ):
@@ -113,6 +114,8 @@ class Culture:
             The aspect_ratio of all cells in the culture at the begining of the simulation.
         aspect_ratio_max : float
             The max value of the aspect ratio that a cell can have after deforms.
+        cell_speed_max : float
+            The max value of speed that an elongated cell can achieve.
         delta_aspect_ratio : float
             Increase in the aspect ratio during deformation. If trabajo_final is True, then
             delta_aspect_ratio = aspect_ratio_max - 1
@@ -165,6 +168,8 @@ class Culture:
             the aspect_ratio of all cells in the culture at the begining of the simulation.
         aspect_ratio_max : float
             The max value of the aspect ratio that a cell can have after deforms
+        cell_speed_max : float
+            The max value of speed that an elongated cell can achieve.
         delta_aspect_ratio : float
             Increase in the aspect ratio during deformation.
         rng : numpy.random.Generator
@@ -199,6 +204,7 @@ class Culture:
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
+        self.cell_speed_max = cell_speed_max
         self.stabilization_time = stabilization_time
 
         # TFG 

@@ -92,6 +92,8 @@ class Simulation:
         The aspect_ratio of all cells in the culture at the begining of the simulation.
     aspect_ratio_max : float
         The max value of the aspect ratio that a cell can have after deforms
+    cell_speed_max : float
+        The max value of speed that an elongated cell can achieve.
     delta_aspect_ratio : float
         Increase in the aspect ratio during deformation.
     culture_bounds : int, optional
@@ -162,6 +164,7 @@ class Simulation:
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
+        cell_speed_max : float = 1,
         delta_aspect_ratio: float = 0.1,
         trabajo_final: bool = False,
     ):
@@ -188,6 +191,7 @@ class Simulation:
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
+        self.cell_speed_max = cell_speed_max
         self.delta_aspect_ratio = delta_aspect_ratio
 
         # TFG 
@@ -551,6 +555,7 @@ def simulate_single_culture(
             delta_t=sim.delta_t,
             initial_aspect_ratio=sim.initial_aspect_ratio,
             aspect_ratio_max=sim.aspect_ratio_max,
+            cell_speed_max=sim.cell_speed_max,
             delta_aspect_ratio=sim.delta_aspect_ratio,
             trabajo_final=sim.trabajo_final,
         )

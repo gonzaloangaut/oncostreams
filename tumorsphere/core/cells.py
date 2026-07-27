@@ -216,7 +216,7 @@ class Cell:
         np.ndarray
             The velocity vector of the cell.
         """
-        speed = (self.aspect_ratio-1)/(self.culture.aspect_ratio_max-1)
+        speed = self.culture.cell_speed_max*(self.aspect_ratio-1)/(self.culture.aspect_ratio_max-1)
         return speed * np.array(
             [
                 np.cos(self.culture.cell_phies[self._index]),
