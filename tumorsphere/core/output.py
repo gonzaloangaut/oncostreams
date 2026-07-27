@@ -672,6 +672,195 @@ class DatOutput_order_parameters(TumorsphereOutput):
         """
         pass
 
+class DatOutput_motion_parameters(TumorsphereOutput):
+    def __init__(self, culture_name, output_dir=".", save_step=1):
+        self.output_dir = output_dir
+        self.save_step = save_step
+        self.culture_name = culture_name
+
+        # Store previous wrapped positions and unwrapped trajectories
+        self.previous_wrapped_positions = None
+        self.unwrapped_positions = None
+        self.initial_unwrapped_positions = None
+
+    def begin_culture(
+        self,
+        prob_stem,
+        prob_diff,
+        rng_seed,
+        simulation_start,
+        adjacency_threshold,
+        swap_probability,
+    ):
+        """We do not record the beginning of the simulation."""
+        pass
+
+    def record_stemness(self, cell_index, tic, stemness):
+        """We do not record the individual stemness changes."""
+        pass
+
+    def record_deactivation(self, cell_index, tic):
+        """We do not record the individual deactivations."""
+        pass
+
+    def calculate_motion_parameters(self, cell_positions, side):
+        """
+        Calculate motion observables using unwrapped trajectories.
+
+        """
+        # convert the wrapped position in an array
+        current_wrapped_positions = np.asarray(
+            cell_positions,
+            dtype=float,
+        ).copy()
+        
+        # First recorded state
+        if self.previous_wrapped_positions is None:
+            self.previous_wrapped_positions = (
+                current_wrapped_positions.copy()
+            )
+            self.unwrapped_positions = (
+                current_wrapped_positions.copy()
+            )
+            self.initial_unwrapped_positions = (
+                current_wrapped_positions.copy()
+            )
+
+            return 0.0, 0.0, 0.0, 0.0
+
+        # Wrapped displacement between consecutive simulation steps
+        delta_positions = (
+            current_wrapped_positions
+            - self.previous_wrapped_positions
+        )
+
+        # Minimum-image correction (Boundary conditions)
+        delta_positions -= (
+            side * np.round(delta_positions / side)
+        )
+
+        # Update unwrapped positions
+        self.unwrapped_positions += delta_positions
+
+        # Magnitude of the displacement of each cell
+        step_displacements = np.linalg.norm(
+            delta_positions,
+            axis=1,
+        )
+
+        mean_step_displacement = np.mean(
+            step_displacements
+        )
+
+        mean_squared_step_displacement = np.mean(
+            step_displacements**2
+        )
+
+        p95_step_displacement = np.percentile(
+            step_displacements,
+            95,
+        )
+
+        # MSD with respect to the initial state
+        displacement_from_initial = (
+            self.unwrapped_positions
+            - self.initial_unwrapped_positions
+        )
+
+        msd_t0 = np.mean(
+            np.sum(
+                displacement_from_initial**2,
+                axis=1,
+            )
+        )
+
+        # Update previous wrapped positions for next step
+        self.previous_wrapped_positions = (
+            current_wrapped_positions.copy()
+        )
+
+        return (
+            mean_step_displacement,
+            mean_squared_step_displacement,
+            p95_step_displacement,
+            msd_t0,
+        )
+
+
+    def record_culture_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        cell_phies,
+        active_cell_indexes,
+        side,
+        cell_area,
+    ):
+        (
+            mean_step_displacement,
+            mean_squared_step_displacement,
+            p95_step_displacement,
+            msd_t0,
+        ) = self.calculate_motion_parameters(
+            cell_positions,
+            side,
+        )
+
+        if np.mod(tic, self.save_step) != 0:
+            return
+
+        os.makedirs(
+            f"{self.output_dir}/dat_motion_parameters",
+            exist_ok=True,
+        )
+
+        filename = (
+            f"{self.output_dir}/dat_motion_parameters/"
+            f"motion_{self.culture_name}_step={tic:05}.dat"
+        )
+
+        with open(filename, "w") as datfile:
+            datfile.write(
+                "mean_step_displacement,"
+                "mean_squared_step_displacement,"
+                "p95_step_displacement,"
+                "msd_t0\n"
+            )
+
+            datfile.write(
+                f"{mean_step_displacement},"
+                f"{mean_squared_step_displacement},"
+                f"{p95_step_displacement},"
+                f"{msd_t0}\n"
+            )
+
+
+    def record_cell(
+        self,
+        index,
+        parent,
+        pos_x,
+        pos_y,
+        pos_z,
+        creation_time,
+        is_stem,
+    ):
+        """We do not record the individual cell creations."""
+        pass
+
+    def record_final_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        active_cell_indexes,
+    ):
+        """The final state of the culture is already recorded for the type of
+        data we are saving.
+        """
+        pass
+
 class OvitoOutput(TumorsphereOutput):
     """Class for handling output to a file for visualization in Ovito."""
 
@@ -978,6 +1167,7 @@ def create_output_demux(
     output_dir: str = ".",
     save_step_dat_pos_ar: int = 1,
     save_step_dat_order_par: int = 1,
+    save_step_dat_motion_par: int = 1,
     save_step_ovito: int = 1,
 ):
     """Create an OutputDemux object with the requested output types."""
@@ -986,6 +1176,7 @@ def create_output_demux(
         "dat": DatOutput,
         "dat_pos_ar": DatOutput_position_aspectratio,
         "dat_order_par": DatOutput_order_parameters,
+        "dat_motion_par": DatOutput_motion_parameters,
         "ovito": OvitoOutput,
         "df": DfOutput,
     }
@@ -993,13 +1184,44 @@ def create_output_demux(
     for out in requested_outputs:
         if out in output_types:
             if out == "dat_pos_ar":
-                outputs.append(output_types[out](culture_name, output_dir, save_step_dat_pos_ar))
+                outputs.append(
+                    output_types[out](
+                        culture_name, 
+                        output_dir, 
+                        save_step_dat_pos_ar
+                    )
+                )
             elif out == "dat_order_par":
-                outputs.append(output_types[out](culture_name, output_dir, save_step_dat_order_par))
+                outputs.append(
+                    output_types[out](
+                        culture_name,
+                        output_dir,
+                        save_step_dat_order_par
+                    )
+                )
+            elif out == "dat_motion_par":
+                outputs.append(
+                    output_types[out](
+                        culture_name,
+                        output_dir,
+                        save_step_dat_motion_par,
+                    )
+                )
             elif out == "ovito":
-                outputs.append(output_types[out](culture_name, output_dir, save_step_ovito))
+                outputs.append(
+                    output_types[out](
+                        culture_name,
+                        output_dir,
+                        save_step_ovito
+                    )
+                )
             else:
-                outputs.append(output_types[out](culture_name, output_dir))
+                outputs.append(
+                    output_types[out](
+                        culture_name,
+                        output_dir
+                    )
+                )
         else:
             logging.warning(f"Invalid output {out} requested")
     return OutputDemux(culture_name, outputs)
