@@ -21,6 +21,114 @@ from tumorsphere.core.output import TumorsphereOutput
 from tumorsphere.core.spatial_hash_grid import SpatialHashGrid
 from tumorsphere.core.forces import Force
 
+class _UnionFind:
+    """
+    Manage disjoint groups of integer indices.
+
+    In the cluster calculation, each integer index represents a cell
+    and each disjoint group represents one connected component.
+
+    Notes
+    -----
+    - ``parent[index]`` points to the parent of ``index`` in the internal tree.
+    - A root is an index that points to itself.
+    - ``size[root]`` stores the number of elements in the group represented
+      by ``root``. Values of ``size`` are only meaningful for roots.
+    """
+
+    def __init__(self, number_of_elements: int):
+        """
+        Initialize one independent group for each element.
+
+        Initially, every element is its own root and therefore represents
+        a connected component of size one.
+        """
+        self.parent = np.arange(
+            number_of_elements,
+            dtype=int,
+        )
+
+        self.size = np.ones(
+            number_of_elements,
+            dtype=int,
+        )
+
+    def find(self, index: int) -> int:
+        """
+        Return the root of the group containing ``index``.
+
+        Path compression is applied so that all nodes visited during the
+        search point directly to the root. This makes future searches faster.
+        """
+        root = index
+
+        # Follow parent links until reaching the root.
+        while self.parent[root] != root:
+            root = self.parent[root]
+
+        # Make every node visited on the path point directly to the root.
+        while self.parent[index] != index:
+            next_index = self.parent[index]
+            self.parent[index] = root
+            index = next_index
+
+        return int(root)
+
+    def union(self, index_i: int, index_j: int) -> None:
+        """
+        Merge the groups containing ``index_i`` and ``index_j``.
+
+        The smaller group is attached below the larger group to keep the
+        internal trees shallow. If both groups have the same size, the
+        numerically smaller root is retained for deterministic behavior.
+        """
+        root_i = self.find(index_i)
+        root_j = self.find(index_j)
+
+        # The two elements already belong to the same connected component.
+        if root_i == root_j:
+            return
+
+        # After this possible swap, root_i represents the larger group.
+        should_swap = (
+            self.size[root_i] < self.size[root_j]
+            or (
+                self.size[root_i] == self.size[root_j]
+                and root_i > root_j
+            )
+        )
+
+        if should_swap:
+            root_i, root_j = root_j, root_i
+
+        # Attach the smaller tree below the root of the larger tree.
+        self.parent[root_j] = root_i
+
+        # Only the size stored at the surviving root remains relevant.
+        self.size[root_i] += self.size[root_j]
+
+    def groups(self) -> dict[int, list[int]]:
+        """
+        Return all connected components as lists of element indices.
+
+        Returns
+        -------
+        groups : dict[int, list[int]]
+            Dictionary whose keys are the roots and whose values contain
+            the indices belonging to each connected component.
+        """
+        groups = {}
+
+        for index in range(len(self.parent)):
+            root = self.find(index)
+
+            if root not in groups:
+                groups[root] = []
+
+            groups[root].append(index)
+
+        return groups
+
 
 class Culture:
     """
