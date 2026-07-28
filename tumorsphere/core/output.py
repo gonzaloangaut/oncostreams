@@ -100,6 +100,27 @@ class TumorsphereOutput(ABC):
         """
         pass
 
+    def should_record_clusters(
+        self,
+        tic: int,
+    ) -> bool:
+        """
+        Return whether cluster information is required at this timestep.
+        """
+        return False
+
+    def record_cluster_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        clusters,
+        side,
+    ):
+        """
+        Record cluster information for the current culture state.
+        """
+        pass
 
 class OutputDemux(TumorsphereOutput):
     """Class managing multiple output objects and delegating method calls."""
@@ -182,6 +203,41 @@ class OutputDemux(TumorsphereOutput):
             result.record_final_state(
                 tic, cells, cell_positions, active_cell_indexes
             )
+
+    def should_record_clusters(
+        self,
+        tic: int,
+    ) -> bool:
+        """
+        Return True if at least one output requires cluster data
+        at the current timestep.
+        """
+        return any(
+            result.should_record_clusters(tic)
+            for result in self.result_list
+        )
+
+    def record_cluster_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        clusters,
+        side,
+    ):
+        """
+        Delegate cluster recording only to outputs that require
+        cluster data at the current timestep.
+        """
+        for result in self.result_list:
+            if result.should_record_clusters(tic):
+                result.record_cluster_state(
+                    tic=tic,
+                    cells=cells,
+                    cell_positions=cell_positions,
+                    clusters=clusters,
+                    side=side,
+                )
 
 
 class SQLOutput(TumorsphereOutput):
@@ -861,6 +917,95 @@ class DatOutput_motion_parameters(TumorsphereOutput):
         """
         pass
 
+class DatOutput_cluster_parameters(TumorsphereOutput):
+    def __init__(
+        self,
+        culture_name,
+        output_dir=".",
+        save_step=100,
+    ):
+        self.culture_name = culture_name
+        self.output_dir = output_dir
+        self.save_step = save_step
+
+    def begin_culture(
+        self,
+        prob_stem,
+        prob_diff,
+        rng_seed,
+        simulation_start,
+        adjacency_threshold,
+        swap_probability,
+    ):
+        """We do not record the beginning of the simulation."""
+        pass
+
+    def record_stemness(self, cell_index, tic, stemness):
+        """We do not record the individual stemness changes."""
+        pass
+
+    def record_deactivation(self, cell_index, tic):
+        """We do not record the individual deactivations."""
+        pass
+
+    def record_culture_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        cell_phies,
+        active_cell_indexes,
+        side,
+        cell_area,
+    ):
+        """We do not record the culture state."""
+        pass
+
+    def record_cell(
+        self,
+        index,
+        parent,
+        pos_x,
+        pos_y,
+        pos_z,
+        creation_time,
+        is_stem,
+    ):
+        """We do not record the individual cell creations."""
+        pass
+
+    def record_final_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        active_cell_indexes,
+    ):
+        """The final state of the culture is already recorded for the type of
+        data we are saving.
+        """
+        pass
+
+    def should_record_clusters(
+        self,
+        tic: int,
+    ) -> bool:
+        return np.mod(
+            tic,
+            self.save_step,
+        ) == 0
+
+    def record_cluster_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        clusters,
+        side,
+    ):
+        """Here we will record cluster state"""
+        pass
+    
 class OvitoOutput(TumorsphereOutput):
     """Class for handling output to a file for visualization in Ovito."""
 
@@ -1168,6 +1313,7 @@ def create_output_demux(
     save_step_dat_pos_ar: int = 1,
     save_step_dat_order_par: int = 1,
     save_step_dat_motion_par: int = 1,
+    save_step_dat_cluster_par: int = 100,
     save_step_ovito: int = 1,
 ):
     """Create an OutputDemux object with the requested output types."""
@@ -1177,6 +1323,7 @@ def create_output_demux(
         "dat_pos_ar": DatOutput_position_aspectratio,
         "dat_order_par": DatOutput_order_parameters,
         "dat_motion_par": DatOutput_motion_parameters,
+        "dat_cluster_par": DatOutput_cluster_parameters,
         "ovito": OvitoOutput,
         "df": DfOutput,
     }
@@ -1205,6 +1352,14 @@ def create_output_demux(
                         culture_name,
                         output_dir,
                         save_step_dat_motion_par,
+                    )
+                )
+            elif out == "dat_cluster_par":
+                outputs.append(
+                    output_types[out](
+                        culture_name,
+                        output_dir,
+                        save_step_dat_cluster_par,
                     )
                 )
             elif out == "ovito":
