@@ -1506,6 +1506,7 @@ class Culture:
             tic=tic,
             cells=self.cells,
             cell_positions=self.cell_positions,
+            cell_phies=self.cell_phies,
             clusters=clusters,
             side=self.side,
         )
@@ -1590,7 +1591,7 @@ class Culture:
                 side=self.side,
                 cell_area=self.cell_area,
             )
-            
+
             # Save the clusters data
             self._record_clusters_if_needed(
                 tic=0,

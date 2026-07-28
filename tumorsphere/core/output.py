@@ -114,6 +114,7 @@ class TumorsphereOutput(ABC):
         tic,
         cells,
         cell_positions,
+        cell_phies,
         clusters,
         side,
     ):
@@ -222,6 +223,7 @@ class OutputDemux(TumorsphereOutput):
         tic,
         cells,
         cell_positions,
+        cell_phies,
         clusters,
         side,
     ):
@@ -235,6 +237,7 @@ class OutputDemux(TumorsphereOutput):
                     tic=tic,
                     cells=cells,
                     cell_positions=cell_positions,
+                    cell_phies=cell_phies,
                     clusters=clusters,
                     side=side,
                 )
@@ -1076,6 +1079,82 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             "mean_without_largest": mean_without_largest,
         }
 
+    def calculate_cluster_order_parameters(
+        self,
+        cluster,
+        cell_phies,
+    ):
+        """
+        Calculate the polar and nematic order parameters of one cluster.
+
+        Parameters
+        ----------
+        cluster : list[int]
+            Indices of the cells belonging to the cluster.
+        cell_phies : np.ndarray
+            Orientations of all cells in the culture.
+
+        Returns
+        -------
+        polar_order : float
+            Polar order parameter of the cluster.
+        nematic_order : float
+            Nematic order parameter of the cluster.
+        """
+        cluster_indices = np.asarray(
+            cluster,
+            dtype=int,
+        )
+
+        number_of_cells = int(
+            cluster_indices.size
+        )
+
+        if number_of_cells == 0:
+            return np.nan, np.nan
+
+        cluster_phies = cell_phies[
+            cluster_indices
+        ]
+
+        sum_cos = np.sum(
+            np.cos(cluster_phies)
+        )
+
+        sum_sin = np.sum(
+            np.sin(cluster_phies)
+        )
+
+        sum_cos_2 = np.sum(
+            np.cos(2.0 * cluster_phies)
+        )
+
+        sum_sin_2 = np.sum(
+            np.sin(2.0 * cluster_phies)
+        )
+
+        polar_order = (
+            np.sqrt(
+                sum_cos**2
+                + sum_sin**2
+            )
+            / number_of_cells
+        )
+
+        nematic_order = (
+            np.sqrt(
+                sum_cos_2**2
+                + sum_sin_2**2
+            )
+            / number_of_cells
+        )
+
+        return (
+            float(polar_order),
+            float(nematic_order),
+        )
+
+
     def should_record_clusters(
         self,
         tic: int,
@@ -1090,6 +1169,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
         tic,
         cells,
         cell_positions,
+        cell_phies,
         clusters,
         side,
     ):
@@ -1135,20 +1215,44 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
         # Save one row for every individual cluster.
         with open(raw_filename, "w") as datfile:
             datfile.write(
-                "phenotype,cluster_id,size\n"
+                "phenotype,cluster_id,size,"
+                "polar_order,nematic_order\n"
             )
-
             for phenotype, statistics in (
                 ("round", round_statistics),
                 ("elongated", elongated_statistics),
             ):
-                for cluster_id, cluster_size in enumerate(
-                    statistics["sizes"]
+                phenotype_clusters = clusters[
+                    phenotype
+                ]
+
+                for cluster_id, (
+                    cluster,
+                    cluster_size,
+                ) in enumerate(
+                    zip(
+                        phenotype_clusters,
+                        statistics["sizes"],
+                    )
                 ):
+                    if phenotype == "elongated":
+                        (
+                            polar_order,
+                            nematic_order,
+                        ) = self.calculate_cluster_order_parameters(
+                            cluster=cluster,
+                            cell_phies=cell_phies,
+                        )
+                    else:
+                        polar_order = np.nan
+                        nematic_order = np.nan
+
                     datfile.write(
                         f"{phenotype},"
                         f"{cluster_id},"
-                        f"{cluster_size}\n"
+                        f"{cluster_size},"
+                        f"{polar_order},"
+                        f"{nematic_order}\n"
                     )
 
         # Save one summary row for each phenotype.
