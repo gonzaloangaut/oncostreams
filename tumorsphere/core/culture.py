@@ -1090,6 +1090,191 @@ class Culture:
             succesful_shrinking = False
         return succesful_shrinking
 
+    def _get_significant_neighbors(
+        self,
+        cell_index: int,
+    ) -> np.ndarray:
+        """
+        Return the indices of cells that significantly interact with one cell.
+
+        The interaction criterion is exactly the same one used by the dynamics:
+
+        - For the TFG model, neighbors must satisfy the major-semi-axis
+        distance criterion and the absolute overlap threshold.
+        - Otherwise, the overlap must exceed a fixed fraction of the
+        maximum overlap.
+
+        Notes
+        -----
+        The dictionaries ``neighbors_relative_pos`` and ``neighbors_overlap``
+        are used as temporary symmetric caches. When a quantity is calculated
+        for a pair of cells, it is stored for both cells so that it does not
+        need to be recalculated when the other cell is processed.
+        """
+        cell = self.cells[cell_index]
+
+        # Find possible neighbors using the spatial hash grid
+        candidate_neighbors = [
+            neighbor_index
+            for neighbor_index in self.grid.find_neighbors(
+                position=self.cell_positions[cell_index],
+            )
+            if neighbor_index != cell_index
+        ]
+
+        # Identify neighbors whose relative positions have not yet
+        # been calculated during this timestep
+        to_calculate_relative_pos = [
+            neighbor_index
+            for neighbor_index in candidate_neighbors
+            if neighbor_index not in cell.neighbors_relative_pos
+        ]
+        # Calculate the relative position to them
+        if to_calculate_relative_pos:
+            neighbor_positions = self.cell_positions[
+                to_calculate_relative_pos
+            ]
+
+            relative_positions = self.calculate_relative_positions(
+                self.cell_positions[cell_index],
+                neighbor_positions,
+            )
+
+            # Store each result for both cells in the pair.
+            for neighbor_index, relative_position in zip(
+                to_calculate_relative_pos,
+                relative_positions,
+            ):
+                cell.neighbors_relative_pos[
+                    neighbor_index
+                ] = relative_position
+
+                self.cells[
+                    neighbor_index
+                ].neighbors_relative_pos[
+                    cell_index
+                ] = -relative_position
+
+        # In the TFG model, discard candidate neighbors that are farther
+        # apart than the sum of their major semi-axes
+        if self.trabajo_final and candidate_neighbors:
+            cell_semi_major_axis = np.sqrt(
+                (
+                    self.cell_area
+                    * cell.aspect_ratio
+                )
+                / np.pi
+            )
+
+            distances = np.array([
+                np.linalg.norm(
+                    cell.neighbors_relative_pos[neighbor_index]
+                )
+                for neighbor_index in candidate_neighbors
+            ])
+
+            neighbor_semi_major_axes = np.sqrt(
+                (
+                    self.cell_area
+                    * np.array([
+                        self.cells[
+                            neighbor_index
+                        ].aspect_ratio
+                        for neighbor_index in candidate_neighbors
+                    ])
+                )
+                / np.pi
+            )
+
+            distance_mask = (
+                distances
+                <= (
+                    cell_semi_major_axis
+                    + neighbor_semi_major_axes
+                )
+            )
+
+            candidate_neighbors = list(
+                np.asarray(
+                    candidate_neighbors,
+                    dtype=int,
+                )[distance_mask]
+            )
+
+        # Identify overlaps that have not yet been calculated
+        to_calculate_overlap = [
+            neighbor_index
+            for neighbor_index in candidate_neighbors
+            if neighbor_index not in cell.neighbors_overlap
+        ]
+        # Calculate them
+        if to_calculate_overlap:
+            relative_positions_overlap = [
+                cell.neighbors_relative_pos[neighbor_index]
+                for neighbor_index in to_calculate_overlap
+            ]
+
+            overlaps = self.calculate_overlaps(
+                cell_index=cell_index,
+                neighbor_indices=to_calculate_overlap,
+                relative_positions=relative_positions_overlap,
+            )
+
+            # Store each overlap for both cells in the pair
+            for neighbor_index, overlap in zip(
+                to_calculate_overlap,
+                overlaps,
+            ):
+                cell.neighbors_overlap[
+                    neighbor_index
+                ] = overlap
+
+                self.cells[
+                    neighbor_index
+                ].neighbors_overlap[
+                    cell_index
+                ] = overlap
+
+        # Get the indices and overlap calculated of the neighbors
+        neighbor_indices = np.asarray(
+            list(cell.neighbors_overlap.keys()),
+            dtype=int,
+        )
+        overlaps = np.asarray(
+            list(cell.neighbors_overlap.values()),
+            dtype=float,
+        )
+
+        # A cell with no significant candidates has no interacting neighbors
+        if neighbor_indices.size == 0:
+            return np.empty(
+                0,
+                dtype=int,
+            )
+
+        # Filter with the mask
+        if self.trabajo_final:
+            significant_mask = (
+                overlaps
+                > self.overlap_threshold_tfg
+            )
+
+        else:
+            max_overlaps = self.calculate_max_overlaps(
+                cell_index,
+                neighbor_indices,
+            )
+
+            significant_mask = (
+                overlaps
+                > (
+                    self.overlap_threshold_ratio
+                    * max_overlaps
+                )
+            )
+
+        return neighbor_indices[significant_mask]
+
     def interaction(self, cell_index: int, delta_t: float) -> Tuple[np.ndarray, float]:
         """The given cell interacts with others if they are close enough.
 
@@ -1114,107 +1299,11 @@ class Culture:
         """
         cell = self.cells[cell_index]
         
-        candidate_neighbors = list(
-            self.grid.find_neighbors(
-                position=self.cell_positions[cell_index],
+        significant_neighbors_indexes = (
+            self._get_significant_neighbors(
+                cell_index=cell_index,
             )
         )
-        # modifies the set in-place to remove the actual cell index
-        candidate_neighbors.remove(cell_index)
-
-        # Identify neighbors whose relative_pos has not been calculated
-        to_calculate_relative_pos = [
-            neighbor_index for neighbor_index in candidate_neighbors
-            if neighbor_index not in cell.neighbors_relative_pos
-        ]
-
-        # Calculate the relative position if it is not calculated
-        if to_calculate_relative_pos:
-            neighbor_positions = np.array([self.cell_positions[i] for i in to_calculate_relative_pos])
-            relative_positions = self.calculate_relative_positions(
-                self.cell_positions[cell_index],
-                neighbor_positions
-            )
-            # Save it in the dict
-            for i, neighbor_index in enumerate(to_calculate_relative_pos):
-                rel_pos = relative_positions[i]
-                cell.neighbors_relative_pos[neighbor_index] = rel_pos
-                self.cells[neighbor_index].neighbors_relative_pos[cell_index] = -rel_pos
-
-        # TFG criterion: only consider neighbors whose distance
-        # is smaller than the sum of the major semi-axes
-        if self.trabajo_final and candidate_neighbors:
-
-            cell_semi_major_axis = np.sqrt(
-                (self.cell_area * cell.aspect_ratio) / np.pi
-            )
-
-            distances = np.array([
-                np.linalg.norm(cell.neighbors_relative_pos[idx])
-                for idx in candidate_neighbors
-            ])
-
-            neighbor_semi_major_axes = np.sqrt(
-                self.cell_area
-                * np.array(
-                    [self.cells[idx].aspect_ratio for idx in candidate_neighbors]
-                )
-                / np.pi
-            )
-
-            distance_mask = (
-                distances <=
-                (cell_semi_major_axis + neighbor_semi_major_axes)
-            )
-
-            candidate_neighbors = list(
-                np.array(candidate_neighbors)[distance_mask]
-            )
-
-        # Now, we take those whose overlap has not been calculated
-        to_calculate_overlap = [
-            neighbor_index for neighbor_index in candidate_neighbors
-            if neighbor_index not in cell.neighbors_overlap
-        ]
-
-        # And obtain the relative_pos of these neighbors
-        relative_positions_overlap = [
-            cell.neighbors_relative_pos[neighbor_index] for neighbor_index in to_calculate_overlap
-        ]
-
-        # Calculate the overlap if it is not calculated
-        if to_calculate_overlap:
-            overlaps = self.calculate_overlaps(
-                cell_index=cell_index,
-                neighbor_indices=to_calculate_overlap,
-                relative_positions=relative_positions_overlap
-            )
-            # Save it in the dict
-            for neighbor_index, overlap in zip(to_calculate_overlap, overlaps):
-                cell.neighbors_overlap[neighbor_index] = overlap
-                self.cells[neighbor_index].neighbors_overlap[cell_index] = overlap
-
-        # Transform in array the neighbor indices and overlaps
-        neighbor_indices = np.array(list(cell.neighbors_overlap.keys()))
-        overlaps = np.array(list(cell.neighbors_overlap.values()))
-
-        # Filter the neighbors
-        if self.trabajo_final:
-            # TFG criterion
-            mask = overlaps > self.overlap_threshold_tfg
-
-        else:
-            # Calculate max overlap for each neighbor
-            max_overlaps = self.calculate_max_overlaps(
-                cell_index,
-                neighbor_indices
-            )
-            # Use the mask to filter
-            mask = overlaps > (
-                self.overlap_threshold_ratio * max_overlaps
-            )
-
-        significant_neighbors_indexes = neighbor_indices[mask]
 
         # Calculate interaction with final neighbors
         dif_position, dif_phi = self.force.calculate_interaction(
@@ -1228,7 +1317,7 @@ class Culture:
         )
 
         # Reset the neighbor dictionaries to empty
-        cell.neighbors_relative_pos.clear() 
+        cell.neighbors_relative_pos.clear()
         cell.neighbors_overlap.clear()
 
         # Return the change in the position and in the phi angle of the cell
