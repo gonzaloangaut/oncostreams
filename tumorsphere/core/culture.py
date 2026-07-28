@@ -1323,6 +1323,130 @@ class Culture:
         # Return the change in the position and in the phi angle of the cell
         return dif_position, dif_phi
 
+    def calculate_clusters(
+        self,
+    ) -> dict[str, list[list[int]]]:
+        """
+        Calculate the connected clusters of round and elongated cells.
+
+        Two cells belong to the same cluster when:
+
+        1. They interact significantly according to the same criterion
+        used by the dynamics.
+        2. They have the same phenotype: both are round or both are
+        elongated.
+
+        Connectivity is transitive. Therefore, if cell A interacts with B
+        and B interacts with C, all three cells belong to the same cluster,
+        even if A and C do not interact directly.
+
+        The complete cluster structure is recalculated independently for
+        every snapshot. No cluster labels or connections are preserved
+        between consecutive calls.
+
+        Returns
+        -------
+        clusters : dict[str, list[list[int]]]
+            Dictionary containing two entries:
+
+            - ``"round"``: clusters composed of round cells.
+            - ``"elongated"``: clusters composed of elongated cells.
+
+            Each cluster is represented by a list containing the indices
+            of its cells. Isolated cells appear as clusters of size one.
+        """
+        number_of_cells = len(self.cells)
+
+        if number_of_cells == 0:
+            return {
+                "round": [],
+                "elongated": [],
+            }
+
+        # Start from a completely new connectivity structure.
+        union_find = _UnionFind(number_of_cells)
+
+        # Process the interaction network of the current snapshot.
+        for cell_index in range(number_of_cells):
+            cell = self.cells[cell_index]
+
+            significant_neighbors = (
+                self._get_significant_neighbors(
+                    cell_index=cell_index,
+                )
+            )
+
+            # In the current model, a cell is round when its aspect ratio
+            # is numerically equal to one. All other cells are elongated.
+            cell_is_round = np.isclose(
+                cell.aspect_ratio,
+                1.0,
+            )
+
+            for neighbor_index in significant_neighbors:
+                neighbor_index = int(neighbor_index)
+                neighbor = self.cells[neighbor_index]
+
+                neighbor_is_round = np.isclose(
+                    neighbor.aspect_ratio,
+                    1.0,
+                )
+
+                same_phenotype = (
+                    cell_is_round
+                    == neighbor_is_round
+                )
+
+                # Only interacting cells of the same phenotype are joined.
+                if same_phenotype:
+                    union_find.union(
+                        cell_index,
+                        neighbor_index,
+                    )
+
+            # The temporary cached data of the processed cell are no
+            # longer needed.
+            #
+            # Cached values stored in cells that have not yet been
+            # processed remain available and can be reused when those
+            # cells are visited.
+            cell.neighbors_relative_pos.clear()
+            cell.neighbors_overlap.clear()
+
+        # Transform the internal Union-Find representation into explicit
+        # lists containing the indices of the cells in every cluster.
+        connected_components = union_find.groups()
+
+        round_clusters = []
+        elongated_clusters = []
+
+        for cluster_indices in connected_components.values():
+            # A component cannot contain both phenotypes because union()
+            # was only called between cells of the same phenotype.
+            representative_index = cluster_indices[0]
+
+            representative_is_round = np.isclose(
+                self.cells[
+                    representative_index
+                ].aspect_ratio,
+                1.0,
+            )
+
+            if representative_is_round:
+                round_clusters.append(
+                    list(cluster_indices)
+                )
+            else:
+                elongated_clusters.append(
+                    list(cluster_indices)
+                )
+
+        return {
+            "round": round_clusters,
+            "elongated": elongated_clusters,
+        }
+
+
     def move(
         self,
         dif_positions: np.ndarray,
