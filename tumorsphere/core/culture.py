@@ -1487,6 +1487,29 @@ class Culture:
                 self.grid.remove_cell_from_hash_table(cell_index, old_positions[cell_index])
                 self.grid.add_cell_to_hash_table(cell_index, self.cell_positions[cell_index])
 
+    def _record_clusters_if_needed(
+        self,
+        tic: int,
+    ) -> None:
+        """
+        Calculate and record clusters when required by the active outputs.
+
+        The clusters are calculated using the current cell positions,
+        phenotypes and interaction network.
+        """
+        if not self.output.should_record_clusters(tic):
+            return
+
+        clusters = self.calculate_clusters()
+
+        self.output.record_cluster_state(
+            tic=tic,
+            cells=self.cells,
+            cell_positions=self.cell_positions,
+            clusters=clusters,
+            side=self.side,
+        )
+
     # ---------------------------------------------------------
 
     def simulate(self, num_times: int, start_tic: int, checkpoint_path: str) -> None:
@@ -1557,7 +1580,6 @@ class Culture:
                         available_space=True,
                     )
 
-
             # Save the data (for dat, ovito, and/or SQLite)
             self.output.record_culture_state(
                 tic=0,
@@ -1567,6 +1589,11 @@ class Culture:
                 active_cell_indexes=self.active_cell_indexes,
                 side=self.side,
                 cell_area=self.cell_area,
+            )
+            
+            # Save the clusters data
+            self._record_clusters_if_needed(
+                tic=0,
             )
 
         # we simulate for num_times time steps
@@ -1630,6 +1657,12 @@ class Culture:
                 side=self.side,
                 cell_area=self.cell_area,
             )
+
+            # Calculate and save clusters only when requested
+            self._record_clusters_if_needed(
+                tic=i,
+            )
+
             if checkpoint_path and i % 500 == 0:
                 os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
                 with open(checkpoint_path, "wb") as f:

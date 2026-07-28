@@ -986,6 +986,96 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
         """
         pass
 
+    def calculate_size_statistics(
+        self,
+        cluster_list,
+    ):
+        """
+        Calculate size statistics for a collection of clusters.
+
+        The largest cluster is removed only once when calculating the
+        observables that exclude it.
+
+        Parameters
+        ----------
+        cluster_list : list[list[int]]
+            List of clusters. Each cluster contains the indices of its cells.
+
+        Returns
+        -------
+        statistics : dict
+            Dictionary containing the raw cluster sizes and their summary
+            statistics.
+        """
+        cluster_sizes = np.asarray(
+            [
+                len(cluster)
+                for cluster in cluster_list
+            ],
+            dtype=int,
+        )
+
+        number_of_clusters = int(
+            cluster_sizes.size
+        )
+
+        total_number_of_cells = int(
+            np.sum(cluster_sizes)
+        )
+
+        if number_of_clusters == 0:
+            return {
+                "sizes": cluster_sizes,
+                "total_number_of_cells": 0,
+                "number_of_clusters": 0,
+                "mean_cluster_size": np.nan,
+                "largest_cluster_size": np.nan,
+                "number_without_largest": 0,
+                "mean_without_largest": np.nan,
+            }
+
+        mean_cluster_size = float(
+            np.mean(cluster_sizes)
+        )
+
+        largest_cluster_size = int(
+            np.max(cluster_sizes)
+        )
+
+        # Remove exactly one largest cluster, even if several clusters
+        # share the maximum size.
+        largest_cluster_index = int(
+            np.argmax(cluster_sizes)
+        )
+
+        cluster_sizes_without_largest = np.delete(
+            cluster_sizes,
+            largest_cluster_index,
+        )
+
+        number_without_largest = int(
+            cluster_sizes_without_largest.size
+        )
+
+        if number_without_largest == 0:
+            mean_without_largest = np.nan
+        else:
+            mean_without_largest = float(
+                np.mean(
+                    cluster_sizes_without_largest
+                )
+            )
+
+        return {
+            "sizes": cluster_sizes,
+            "total_number_of_cells": total_number_of_cells,
+            "number_of_clusters": number_of_clusters,
+            "mean_cluster_size": mean_cluster_size,
+            "largest_cluster_size": largest_cluster_size,
+            "number_without_largest": number_without_largest,
+            "mean_without_largest": mean_without_largest,
+        }
+
     def should_record_clusters(
         self,
         tic: int,
@@ -1003,8 +1093,89 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
         clusters,
         side,
     ):
-        """Here we will record cluster state"""
-        pass
+        """
+        Record raw cluster sizes and their summary statistics.
+
+        Round and elongated clusters are treated independently.
+        """
+        round_statistics = self.calculate_size_statistics(
+            clusters["round"],
+        )
+
+        elongated_statistics = self.calculate_size_statistics(
+            clusters["elongated"],
+        )
+
+        output_folder = os.path.join(
+            self.output_dir,
+            "dat_cluster_parameters",
+        )
+
+        os.makedirs(
+            output_folder,
+            exist_ok=True,
+        )
+
+        raw_filename = os.path.join(
+            output_folder,
+            (
+                f"cluster_sizes_{self.culture_name}"
+                f"_step={tic:05}.dat"
+            ),
+        )
+
+        summary_filename = os.path.join(
+            output_folder,
+            (
+                f"cluster_summary_{self.culture_name}"
+                f"_step={tic:05}.dat"
+            ),
+        )
+
+        # Save one row for every individual cluster.
+        with open(raw_filename, "w") as datfile:
+            datfile.write(
+                "phenotype,cluster_id,size\n"
+            )
+
+            for phenotype, statistics in (
+                ("round", round_statistics),
+                ("elongated", elongated_statistics),
+            ):
+                for cluster_id, cluster_size in enumerate(
+                    statistics["sizes"]
+                ):
+                    datfile.write(
+                        f"{phenotype},"
+                        f"{cluster_id},"
+                        f"{cluster_size}\n"
+                    )
+
+        # Save one summary row for each phenotype.
+        with open(summary_filename, "w") as datfile:
+            datfile.write(
+                "phenotype,"
+                "total_number_of_cells,"
+                "number_of_clusters,"
+                "mean_cluster_size,"
+                "largest_cluster_size,"
+                "number_without_largest,"
+                "mean_without_largest\n"
+            )
+
+            for phenotype, statistics in (
+                ("round", round_statistics),
+                ("elongated", elongated_statistics),
+            ):
+                datfile.write(
+                    f"{phenotype},"
+                    f"{statistics['total_number_of_cells']},"
+                    f"{statistics['number_of_clusters']},"
+                    f"{statistics['mean_cluster_size']},"
+                    f"{statistics['largest_cluster_size']},"
+                    f"{statistics['number_without_largest']},"
+                    f"{statistics['mean_without_largest']}\n"
+                )
     
 class OvitoOutput(TumorsphereOutput):
     """Class for handling output to a file for visualization in Ovito."""
