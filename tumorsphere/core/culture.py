@@ -1516,9 +1516,11 @@ class Culture:
                 self.grid.remove_cell_from_hash_table(cell_index, old_positions[cell_index])
                 self.grid.add_cell_to_hash_table(cell_index, self.cell_positions[cell_index])
 
+
     def _record_clusters_if_needed(
         self,
         tic: int,
+        final_tic: int,
     ) -> None:
         """
         Calculate and record clusters when required by the active outputs.
@@ -1526,20 +1528,27 @@ class Culture:
         The clusters are calculated using the current cell positions,
         phenotypes and interaction network.
         """
-        if not self.output.should_record_clusters(tic):
+        if not self.output.should_record_clusters(
+            tic=tic,
+            final_tic=final_tic,
+        ):
             return
 
         clusters = self.calculate_clusters()
 
         self.output.record_cluster_state(
             tic=tic,
+            final_tic=final_tic,
             cells=self.cells,
             cell_positions=self.cell_positions,
             cell_phies=self.cell_phies,
-            cell_instantaneous_velocities=self.cell_instantaneous_velocities,
+            cell_instantaneous_velocities=(
+                self.cell_instantaneous_velocities
+            ),
             clusters=clusters,
             side=self.side,
         )
+
 
     def _record_deformation_events_if_needed(
         self,
@@ -1662,6 +1671,7 @@ class Culture:
             # Save the clusters data
             self._record_clusters_if_needed(
                 tic=0,
+                final_tic=num_times,
             )
 
         # we simulate for num_times time steps
@@ -1778,6 +1788,7 @@ class Culture:
             # Calculate and save clusters only when requested
             self._record_clusters_if_needed(
                 tic=i,
+                final_tic=num_times,
             )
 
             # Save the deformation events accumulated during the

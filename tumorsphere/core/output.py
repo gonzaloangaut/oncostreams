@@ -103,6 +103,7 @@ class TumorsphereOutput(ABC):
     def should_record_clusters(
         self,
         tic: int,
+        final_tic: int,
     ) -> bool:
         """
         Return whether cluster information is required at this timestep.
@@ -112,6 +113,7 @@ class TumorsphereOutput(ABC):
     def record_cluster_state(
         self,
         tic,
+        final_tic,
         cells,
         cell_positions,
         cell_phies,
@@ -231,19 +233,24 @@ class OutputDemux(TumorsphereOutput):
     def should_record_clusters(
         self,
         tic: int,
+        final_tic: int,
     ) -> bool:
         """
         Return True if at least one output requires cluster data
         at the current timestep.
         """
         return any(
-            result.should_record_clusters(tic)
+            result.should_record_clusters(
+                tic=tic,
+                final_tic=final_tic,
+            )
             for result in self.result_list
         )
 
     def record_cluster_state(
         self,
         tic,
+        final_tic,
         cells,
         cell_positions,
         cell_phies,
@@ -256,9 +263,10 @@ class OutputDemux(TumorsphereOutput):
         cluster data at the current timestep.
         """
         for result in self.result_list:
-            if result.should_record_clusters(tic):
+            if result.should_record_clusters(tic, final_tic):
                 result.record_cluster_state(
                     tic=tic,
+                    final_tic=final_tic,
                     cells=cells,
                     cell_positions=cell_positions,
                     cell_phies=cell_phies,
@@ -990,10 +998,16 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
         culture_name,
         output_dir=".",
         save_step=100,
+        raw_save_step=1000,
     ):
         self.culture_name = culture_name
         self.output_dir = output_dir
-        self.save_step = save_step
+
+        # Frequency of the compact cluster summary
+        self.summary_save_step = save_step
+
+        # Frequency of the file containing one row per cluster
+        self.raw_save_step = raw_save_step
 
     def begin_culture(
         self,
@@ -1612,18 +1626,63 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             ),
         }
 
+    def should_record_cluster_summary(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return whether the compact cluster summary must be saved.
+        """
+        return (
+            tic == final_tic
+            or np.mod(
+                tic,
+                self.summary_save_step,
+            ) == 0
+        )
+
+
+    def should_record_cluster_raw(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return whether the raw per-cluster information must be saved.
+        """
+        return (
+            tic == final_tic
+            or np.mod(
+                tic,
+                self.raw_save_step,
+            ) == 0
+        )
+
+
     def should_record_clusters(
         self,
         tic: int,
+        final_tic: int,
     ) -> bool:
-        return np.mod(
-            tic,
-            self.save_step,
-        ) == 0
+        """
+        Calculate clusters whenever either output requires them.
+        """
+        return (
+            self.should_record_cluster_summary(
+                tic=tic,
+                final_tic=final_tic,
+            )
+            or self.should_record_cluster_raw(
+                tic=tic,
+                final_tic=final_tic,
+            )
+        )
 
     def record_cluster_state(
         self,
         tic,
+        final_tic,
         cells,
         cell_positions,
         cell_phies,
@@ -1636,6 +1695,20 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
 
         Round and elongated clusters are treated independently.
         """
+        record_summary = (
+            self.should_record_cluster_summary(
+                tic=tic,
+                final_tic=final_tic,
+            )
+        )
+
+        record_raw = (
+            self.should_record_cluster_raw(
+                tic=tic,
+                final_tic=final_tic,
+            )
+        )
+
         round_statistics = self.calculate_size_statistics(
             clusters["round"],
         )
@@ -1695,175 +1768,177 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             ),
         )
 
-        # Save one row for every individual cluster.
-        with open(raw_filename, "w") as datfile:
-            datfile.write(
-                "phenotype,"
-                "cluster_id,"
-                "size,"
-                "polar_order,"
-                "nematic_order,"
-                "cluster_velocity_x,"
-                "cluster_velocity_y,"
-                "cluster_speed,"
-                "mean_cell_speed\n"
-            )
+        if record_raw:
+            # Save one row for every individual cluster.
+            with open(raw_filename, "w") as datfile:
+                datfile.write(
+                    "phenotype,"
+                    "cluster_id,"
+                    "size,"
+                    "polar_order,"
+                    "nematic_order,"
+                    "cluster_velocity_x,"
+                    "cluster_velocity_y,"
+                    "cluster_speed,"
+                    "mean_cell_speed\n"
+                )
 
-            for phenotype, statistics in (
-                ("round", round_statistics),
-                ("elongated", elongated_statistics),
-            ):
-                if phenotype == "elongated":
-                    polar_orders = elongated_order_statistics[
-                        "polar_orders"
-                    ]
-
-                    nematic_orders = elongated_order_statistics[
-                        "nematic_orders"
-                    ]
-
-                    velocity_statistics = (
-                        elongated_velocity_statistics
-                    )
-                else:
-                    number_of_clusters = int(
-                        statistics["number_of_clusters"]
-                    )
-
-                    polar_orders = np.full(
-                        number_of_clusters,
-                        np.nan,
-                        dtype=float,
-                    )
-
-                    nematic_orders = np.full(
-                        number_of_clusters,
-                        np.nan,
-                        dtype=float,
-                    )
-
-                    velocity_statistics = (
-                        round_velocity_statistics
-                    )
-
-                for cluster_id, (
-                    cluster_size,
-                    polar_order,
-                    nematic_order,
-                    cluster_velocity_x,
-                    cluster_velocity_y,
-                    cluster_speed,
-                    mean_cell_speed,
-                ) in enumerate(
-                    zip(
-                        statistics["sizes"],
-                        polar_orders,
-                        nematic_orders,
-                        velocity_statistics[
-                            "cluster_velocity_x"
-                        ],
-                        velocity_statistics[
-                            "cluster_velocity_y"
-                        ],
-                        velocity_statistics[
-                            "cluster_speeds"
-                        ],
-                        velocity_statistics[
-                            "mean_cell_speeds"
-                        ],
-                    )
+                for phenotype, statistics in (
+                    ("round", round_statistics),
+                    ("elongated", elongated_statistics),
                 ):
+                    if phenotype == "elongated":
+                        polar_orders = elongated_order_statistics[
+                            "polar_orders"
+                        ]
+
+                        nematic_orders = elongated_order_statistics[
+                            "nematic_orders"
+                        ]
+
+                        velocity_statistics = (
+                            elongated_velocity_statistics
+                        )
+                    else:
+                        number_of_clusters = int(
+                            statistics["number_of_clusters"]
+                        )
+
+                        polar_orders = np.full(
+                            number_of_clusters,
+                            np.nan,
+                            dtype=float,
+                        )
+
+                        nematic_orders = np.full(
+                            number_of_clusters,
+                            np.nan,
+                            dtype=float,
+                        )
+
+                        velocity_statistics = (
+                            round_velocity_statistics
+                        )
+
+                    for cluster_id, (
+                        cluster_size,
+                        polar_order,
+                        nematic_order,
+                        cluster_velocity_x,
+                        cluster_velocity_y,
+                        cluster_speed,
+                        mean_cell_speed,
+                    ) in enumerate(
+                        zip(
+                            statistics["sizes"],
+                            polar_orders,
+                            nematic_orders,
+                            velocity_statistics[
+                                "cluster_velocity_x"
+                            ],
+                            velocity_statistics[
+                                "cluster_velocity_y"
+                            ],
+                            velocity_statistics[
+                                "cluster_speeds"
+                            ],
+                            velocity_statistics[
+                                "mean_cell_speeds"
+                            ],
+                        )
+                    ):
+                        datfile.write(
+                            f"{phenotype},"
+                            f"{cluster_id},"
+                            f"{cluster_size},"
+                            f"{polar_order},"
+                            f"{nematic_order},"
+                            f"{cluster_velocity_x},"
+                            f"{cluster_velocity_y},"
+                            f"{cluster_speed},"
+                            f"{mean_cell_speed}\n"
+                        )
+
+        if record_summary:
+            # Save one summary row for each phenotype.
+            with open(summary_filename, "w") as datfile:
+                datfile.write(
+                    "phenotype,"
+                    "total_number_of_cells,"
+                    "number_of_clusters,"
+                    "mean_cluster_size,"
+                    "largest_cluster_size,"
+                    "number_without_largest,"
+                    "mean_without_largest,"
+                    "number_of_non_singleton_clusters,"
+                    "mean_polar_order_non_singleton,"
+                    "weighted_mean_polar_order_non_singleton,"
+                    "mean_nematic_order_non_singleton,"
+                    "weighted_mean_nematic_order_non_singleton,"
+                    "largest_cluster_polar_order,"
+                    "largest_cluster_nematic_order,"
+                    "mean_cluster_speed_non_singleton,"
+                    "weighted_mean_cluster_speed_non_singleton,"
+                    "largest_cluster_speed,"
+                    "mean_cell_speed_non_singleton,"
+                    "weighted_mean_cell_speed_non_singleton,"
+                    "largest_cluster_mean_cell_speed\n"
+                )
+
+                for phenotype, statistics in (
+                    ("round", round_statistics),
+                    ("elongated", elongated_statistics),
+                ):
+                    if phenotype == "elongated":
+                        order_statistics = (
+                            elongated_order_statistics
+                        )
+
+                        velocity_statistics = (
+                            elongated_velocity_statistics
+                        )
+                    else:
+                        # Orientational order is not defined for round cells.
+                        order_statistics = {
+                            "number_of_non_singleton_clusters": int(
+                                np.sum(
+                                    statistics["sizes"] > 1
+                                )
+                            ),
+                            "mean_polar_order_non_singleton": np.nan,
+                            "weighted_mean_polar_order_non_singleton": np.nan,
+                            "mean_nematic_order_non_singleton": np.nan,
+                            "weighted_mean_nematic_order_non_singleton": np.nan,
+                            "largest_cluster_polar_order": np.nan,
+                            "largest_cluster_nematic_order": np.nan,
+                        }
+
+                        velocity_statistics = (
+                            round_velocity_statistics
+                        )
+
                     datfile.write(
                         f"{phenotype},"
-                        f"{cluster_id},"
-                        f"{cluster_size},"
-                        f"{polar_order},"
-                        f"{nematic_order},"
-                        f"{cluster_velocity_x},"
-                        f"{cluster_velocity_y},"
-                        f"{cluster_speed},"
-                        f"{mean_cell_speed}\n"
+                        f"{statistics['total_number_of_cells']},"
+                        f"{statistics['number_of_clusters']},"
+                        f"{statistics['mean_cluster_size']},"
+                        f"{statistics['largest_cluster_size']},"
+                        f"{statistics['number_without_largest']},"
+                        f"{statistics['mean_without_largest']},"
+                        f"{order_statistics['number_of_non_singleton_clusters']},"
+                        f"{order_statistics['mean_polar_order_non_singleton']},"
+                        f"{order_statistics['weighted_mean_polar_order_non_singleton']},"
+                        f"{order_statistics['mean_nematic_order_non_singleton']},"
+                        f"{order_statistics['weighted_mean_nematic_order_non_singleton']},"
+                        f"{order_statistics['largest_cluster_polar_order']},"
+                        f"{order_statistics['largest_cluster_nematic_order']},"
+                        f"{velocity_statistics['mean_cluster_speed_non_singleton']},"
+                        f"{velocity_statistics['weighted_mean_cluster_speed_non_singleton']},"
+                        f"{velocity_statistics['largest_cluster_speed']},"
+                        f"{velocity_statistics['mean_cell_speed_non_singleton']},"
+                        f"{velocity_statistics['weighted_mean_cell_speed_non_singleton']},"
+                        f"{velocity_statistics['largest_cluster_mean_cell_speed']}\n"
                     )
-
-        # Save one summary row for each phenotype.
-        with open(summary_filename, "w") as datfile:
-            datfile.write(
-                "phenotype,"
-                "total_number_of_cells,"
-                "number_of_clusters,"
-                "mean_cluster_size,"
-                "largest_cluster_size,"
-                "number_without_largest,"
-                "mean_without_largest,"
-                "number_of_non_singleton_clusters,"
-                "mean_polar_order_non_singleton,"
-                "weighted_mean_polar_order_non_singleton,"
-                "mean_nematic_order_non_singleton,"
-                "weighted_mean_nematic_order_non_singleton,"
-                "largest_cluster_polar_order,"
-                "largest_cluster_nematic_order,"
-                "mean_cluster_speed_non_singleton,"
-                "weighted_mean_cluster_speed_non_singleton,"
-                "largest_cluster_speed,"
-                "mean_cell_speed_non_singleton,"
-                "weighted_mean_cell_speed_non_singleton,"
-                "largest_cluster_mean_cell_speed\n"
-            )
-
-            for phenotype, statistics in (
-                ("round", round_statistics),
-                ("elongated", elongated_statistics),
-            ):
-                if phenotype == "elongated":
-                    order_statistics = (
-                        elongated_order_statistics
-                    )
-
-                    velocity_statistics = (
-                        elongated_velocity_statistics
-                    )
-                else:
-                    # Orientational order is not defined for round cells.
-                    order_statistics = {
-                        "number_of_non_singleton_clusters": int(
-                            np.sum(
-                                statistics["sizes"] > 1
-                            )
-                        ),
-                        "mean_polar_order_non_singleton": np.nan,
-                        "weighted_mean_polar_order_non_singleton": np.nan,
-                        "mean_nematic_order_non_singleton": np.nan,
-                        "weighted_mean_nematic_order_non_singleton": np.nan,
-                        "largest_cluster_polar_order": np.nan,
-                        "largest_cluster_nematic_order": np.nan,
-                    }
-
-                    velocity_statistics = (
-                        round_velocity_statistics
-                    )
-
-                datfile.write(
-                    f"{phenotype},"
-                    f"{statistics['total_number_of_cells']},"
-                    f"{statistics['number_of_clusters']},"
-                    f"{statistics['mean_cluster_size']},"
-                    f"{statistics['largest_cluster_size']},"
-                    f"{statistics['number_without_largest']},"
-                    f"{statistics['mean_without_largest']},"
-                    f"{order_statistics['number_of_non_singleton_clusters']},"
-                    f"{order_statistics['mean_polar_order_non_singleton']},"
-                    f"{order_statistics['weighted_mean_polar_order_non_singleton']},"
-                    f"{order_statistics['mean_nematic_order_non_singleton']},"
-                    f"{order_statistics['weighted_mean_nematic_order_non_singleton']},"
-                    f"{order_statistics['largest_cluster_polar_order']},"
-                    f"{order_statistics['largest_cluster_nematic_order']},"
-                    f"{velocity_statistics['mean_cluster_speed_non_singleton']},"
-                    f"{velocity_statistics['weighted_mean_cluster_speed_non_singleton']},"
-                    f"{velocity_statistics['largest_cluster_speed']},"
-                    f"{velocity_statistics['mean_cell_speed_non_singleton']},"
-                    f"{velocity_statistics['weighted_mean_cell_speed_non_singleton']},"
-                    f"{velocity_statistics['largest_cluster_mean_cell_speed']}\n"
-                )
 
 class DatOutput_deformation_parameters(
     TumorsphereOutput
