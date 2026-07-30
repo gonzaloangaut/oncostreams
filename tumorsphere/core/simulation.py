@@ -233,6 +233,7 @@ class Simulation:
         dat_order_par: bool = False,
         dat_motion_par: bool = False,
         dat_cluster_par: bool = False,
+        dat_deformation_par: bool = False,
         ovito: bool = False,
         df: bool = False,
         output_dir: str = ".",
@@ -268,6 +269,8 @@ class Simulation:
             outputs.append("dat_motion_par")
         if dat_cluster_par:
             outputs.append("dat_cluster_par")
+        if dat_deformation_par:
+            outputs.append("dat_deformation_par")
 
         # We compute the name of the realization
         current_realization_name = realization_name(
@@ -317,9 +320,11 @@ class Simulation:
         dat_order_par: bool = False,
         dat_motion_par: bool = False,
         dat_cluster_par: bool = False,
+        dat_deformation_par: bool = False,
         save_step_dat_order_par: int = 1,
         save_step_dat_motion_par: int = 1,
         save_step_dat_cluster_par: int = 100,
+        save_step_dat_deformation_par: int = 100,
         ovito: bool = False,
         save_step_ovito: int = 1,
         df: bool = False,
@@ -374,6 +379,8 @@ class Simulation:
             outputs.append("dat_motion_par")
         if dat_cluster_par:
             outputs.append("dat_cluster_par")
+        if dat_deformation_par:
+            outputs.append("dat_deformation_par")
 
         with mp.Pool(number_of_processes) as p:
             p.map(
@@ -392,6 +399,7 @@ class Simulation:
                         save_step_dat_order_par,
                         save_step_dat_motion_par,
                         save_step_dat_cluster_par,
+                        save_step_dat_deformation_par,
                         save_step_ovito,
                         m,
                         output_dir,
@@ -491,6 +499,7 @@ def simulate_single_culture(
         save_step_dat_order_par,
         save_step_dat_motion_par,
         save_step_dat_cluster_par,
+        save_step_dat_deformation_par,
         save_step_ovito,
         m,
         output_dir,
@@ -530,7 +539,7 @@ def simulate_single_culture(
             sim.cultures[current_realization_name].rng.bit_generator.state = state
     else:
         # We create the output object
-        output = create_output_demux(current_realization_name, outputs, output_dir, save_step_dat_pos_ar, save_step_dat_order_par, save_step_dat_motion_par, save_step_dat_cluster_par, save_step_ovito)
+        output = create_output_demux(current_realization_name, outputs, output_dir, save_step_dat_pos_ar, save_step_dat_order_par, save_step_dat_motion_par, save_step_dat_cluster_par, save_step_dat_deformation_par, save_step_ovito)
 
         # We create the spatial hash grid object
         if sim.initial_density is not None:

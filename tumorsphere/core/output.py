@@ -123,6 +123,28 @@ class TumorsphereOutput(ABC):
         """
         pass
 
+    def should_record_deformation_events(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return whether deformation events are required at this timestep.
+        """
+        return False
+
+    def record_deformation_events(
+        self,
+        tic_start: int,
+        tic_end: int,
+        final_tic: int,
+        event_counts: dict,
+    ) -> None:
+        """
+        Record deformation events accumulated during one time interval.
+        """
+        pass
+
 class OutputDemux(TumorsphereOutput):
     """Class managing multiple output objects and delegating method calls."""
 
@@ -242,6 +264,45 @@ class OutputDemux(TumorsphereOutput):
                     side=side,
                 )
 
+    def should_record_deformation_events(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return True if at least one output requires deformation-event
+        data at the current timestep.
+        """
+        return any(
+            result.should_record_deformation_events(
+                tic=tic,
+                final_tic=final_tic,
+            )
+            for result in self.result_list
+        )
+
+    def record_deformation_events(
+        self,
+        tic_start: int,
+        tic_end: int,
+        final_tic: int,
+        event_counts: dict,
+    ) -> None:
+        """
+        Delegate deformation-event recording only to outputs that
+        require it at the end of the current interval.
+        """
+        for result in self.result_list:
+            if result.should_record_deformation_events(
+                tic=tic_end,
+                final_tic=final_tic,
+            ):
+                result.record_deformation_events(
+                    tic_start=tic_start,
+                    tic_end=tic_end,
+                    final_tic=final_tic,
+                    event_counts=event_counts,
+                )
 
 class SQLOutput(TumorsphereOutput):
     """Class for handling output to a SQLite database."""
@@ -1280,7 +1341,176 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                     f"{statistics['number_without_largest']},"
                     f"{statistics['mean_without_largest']}\n"
                 )
-    
+
+class DatOutput_deformation_parameters(
+    TumorsphereOutput
+):
+    def __init__(
+        self,
+        culture_name,
+        output_dir=".",
+        save_step=100,
+    ):
+        self.culture_name = culture_name
+        self.output_dir = output_dir
+        self.save_step = save_step
+
+    def begin_culture(
+        self,
+        prob_stem,
+        prob_diff,
+        rng_seed,
+        simulation_start,
+        adjacency_threshold,
+        swap_probability,
+    ):
+        """We do not record the beginning of the simulation."""
+        pass
+
+    def record_stemness(
+        self,
+        cell_index,
+        tic,
+        stemness,
+    ):
+        """We do not record individual stemness changes."""
+        pass
+
+    def record_deactivation(
+        self,
+        cell_index,
+        tic,
+    ):
+        """We do not record individual deactivations."""
+        pass
+
+    def record_culture_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        cell_phies,
+        active_cell_indexes,
+        side,
+        cell_area,
+    ):
+        """
+        We do not record instantaneous culture states.
+
+        Deformation events are accumulated inside Culture and are
+        recorded through record_deformation_events().
+        """
+        pass
+
+    def record_cell(
+        self,
+        index,
+        parent,
+        pos_x,
+        pos_y,
+        pos_z,
+        creation_time,
+        is_stem,
+    ):
+        """We do not record individual cell creations."""
+        pass
+
+    def record_final_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        active_cell_indexes,
+    ):
+        """
+        The final deformation interval is recorded separately through
+        record_deformation_events().
+        """
+        pass
+
+    def should_record_deformation_events(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return True at the selected recording frequency and at the
+        final timestep.
+        """
+        return (
+            tic > 0
+            and (
+                np.mod(
+                    tic,
+                    self.save_step,
+                ) == 0
+                or tic == final_tic
+            )
+        )
+
+    def record_deformation_events(
+        self,
+        tic_start: int,
+        tic_end: int,
+        final_tic: int,
+        event_counts: dict,
+    ) -> None:
+        """
+        Record all deformation events accumulated during one interval.
+        """
+        output_folder = os.path.join(
+            self.output_dir,
+            "dat_deformation_parameters",
+        )
+
+        os.makedirs(
+            output_folder,
+            exist_ok=True,
+        )
+
+        filename = os.path.join(
+            output_folder,
+            (
+                f"deformation_events_"
+                f"{self.culture_name}"
+                f"_step={tic_end:05}.dat"
+            ),
+        )
+
+        number_of_steps = (
+            tic_end
+            - tic_start
+            + 1
+        )
+
+        with open(
+            filename,
+            "w",
+        ) as datfile:
+            datfile.write(
+                "tic_start,"
+                "tic_end,"
+                "number_of_steps,"
+                "round_elongation_attempts,"
+                "round_elongation_successes,"
+                "elliptical_elongation_attempts,"
+                "elliptical_elongation_successes,"
+                "contraction_events,"
+                "contraction_to_round_events\n"
+            )
+
+            datfile.write(
+                f"{tic_start},"
+                f"{tic_end},"
+                f"{number_of_steps},"
+                f"{event_counts['round_elongation_attempts']},"
+                f"{event_counts['round_elongation_successes']},"
+                f"{event_counts['elliptical_elongation_attempts']},"
+                f"{event_counts['elliptical_elongation_successes']},"
+                f"{event_counts['contraction_events']},"
+                f"{event_counts['contraction_to_round_events']}\n"
+            )
+
 class OvitoOutput(TumorsphereOutput):
     """Class for handling output to a file for visualization in Ovito."""
 
@@ -1589,6 +1819,7 @@ def create_output_demux(
     save_step_dat_order_par: int = 1,
     save_step_dat_motion_par: int = 1,
     save_step_dat_cluster_par: int = 100,
+    save_step_dat_deformation_par: int = 100,
     save_step_ovito: int = 1,
 ):
     """Create an OutputDemux object with the requested output types."""
@@ -1599,6 +1830,7 @@ def create_output_demux(
         "dat_order_par": DatOutput_order_parameters,
         "dat_motion_par": DatOutput_motion_parameters,
         "dat_cluster_par": DatOutput_cluster_parameters,
+        "dat_deformation_par": DatOutput_deformation_parameters,
         "ovito": OvitoOutput,
         "df": DfOutput,
     }
@@ -1635,6 +1867,14 @@ def create_output_demux(
                         culture_name,
                         output_dir,
                         save_step_dat_cluster_par,
+                    )
+                )
+            elif out == "dat_deformation_par":
+                outputs.append(
+                    output_types[out](
+                        culture_name,
+                        output_dir,
+                        save_step_dat_deformation_par,
                     )
                 )
             elif out == "ovito":

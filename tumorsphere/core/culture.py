@@ -350,6 +350,12 @@ class Culture:
         self.output = output
         self.grid = grid
 
+        # Deformation events accumulated since the previous output
+        self.reset_deformation_event_counts()
+
+        # First timestep included in the current deformation interval
+        self.deformation_interval_start_tic = 1
+
         # we set the grid's culture to this one
         self.grid.culture = self
 
@@ -809,6 +815,23 @@ class Culture:
         Q[:, 1, 1] = -cos2
 
         self.nematic_tensors[cell_indices] = Q
+
+
+    def reset_deformation_event_counts(
+        self,
+    ) -> None:
+        """
+        Reset the deformation-event counters for a new recording interval.
+        """
+        self.deformation_event_counts = {
+            "round_elongation_attempts": 0,
+            "round_elongation_successes": 0,
+            "elliptical_elongation_attempts": 0,
+            "elliptical_elongation_successes": 0,
+            "contraction_events": 0,
+            "contraction_to_round_events": 0,
+        }
+
 
     def elongate_from_round(self, cell_index: int) -> bool:
         """If the cell is round, an angle is chosen randomly.
@@ -1511,6 +1534,38 @@ class Culture:
             side=self.side,
         )
 
+    def _record_deformation_events_if_needed(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> None:
+        """
+        Record the deformation events accumulated during the current
+        interval when required by the active outputs.
+
+        After recording, reset the counters and begin a new interval.
+        """
+        if not self.output.should_record_deformation_events(
+            tic=tic,
+            final_tic=final_tic,
+        ):
+            return
+
+        self.output.record_deformation_events(
+            tic_start=self.deformation_interval_start_tic,
+            tic_end=tic,
+            final_tic=final_tic,
+            event_counts=dict(
+                self.deformation_event_counts
+            ),
+        )
+
+        self.reset_deformation_event_counts()
+
+        self.deformation_interval_start_tic = (
+            tic + 1
+        )
+
     # ---------------------------------------------------------
 
     def simulate(self, num_times: int, start_tic: int, checkpoint_path: str) -> None:
@@ -1617,21 +1672,57 @@ class Culture:
                         self.active_cell_indexes
                     )
 
-                    # Create a list of the successful deformations
-                    deformation_success = []
                     for index in active_cell_indexes:
                         cell = self.cells[index]
-                        # if the cell is round
-                        if np.isclose(cell.aspect_ratio, 1):
-                            # We try to elongate the cell
-                            success = self.elongate_from_round(index)
+
+                        if np.isclose(
+                            cell.aspect_ratio,
+                            1.0,
+                        ):
+                            self.deformation_event_counts[
+                                "round_elongation_attempts"
+                            ] += 1
+
+                            success = self.elongate_from_round(
+                                index
+                            )
+
+                            if success:
+                                self.deformation_event_counts[
+                                    "round_elongation_successes"
+                                ] += 1
+
                         else:
-                            # We try to shrink the cell
-                            success = self.shrink_from_elliptical(index)
-                            # if it can´t shrink, we try to elongate it
-                            if not success and cell.aspect_ratio < self.aspect_ratio_max:
-                                success = self.elongate_from_elliptical(index)
-                        deformation_success.append(success)
+                            success = self.shrink_from_elliptical(
+                                index
+                            )
+
+                            if success:
+                                self.deformation_event_counts[
+                                    "contraction_events"
+                                ] += 1
+
+                                if np.isclose(
+                                    cell.aspect_ratio,
+                                    1.0,
+                                ):
+                                    self.deformation_event_counts[
+                                        "contraction_to_round_events"
+                                    ] += 1
+
+                            elif cell.aspect_ratio < self.aspect_ratio_max:
+                                self.deformation_event_counts[
+                                    "elliptical_elongation_attempts"
+                                ] += 1
+
+                                success = self.elongate_from_elliptical(
+                                    index
+                                )
+
+                                if success:
+                                    self.deformation_event_counts[
+                                        "elliptical_elongation_successes"
+                                    ] += 1
 
                 # We initialize the change in the position and angle of all cells
                 dif_positions = np.zeros((len(self.active_cell_indexes), 3))
@@ -1664,6 +1755,13 @@ class Culture:
                 tic=i,
             )
 
+            # Save the deformation events accumulated during the
+            # current recording interval.
+            self._record_deformation_events_if_needed(
+                tic=i,
+                final_tic=num_times,
+            )
+            
             if checkpoint_path and i % 500 == 0:
                 os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
                 with open(checkpoint_path, "wb") as f:
