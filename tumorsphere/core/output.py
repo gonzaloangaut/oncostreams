@@ -1216,6 +1216,170 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
         )
 
 
+    def calculate_cluster_order_statistics(
+        self,
+        cluster_list,
+        cell_phies,
+    ):
+        """
+        Calculate polar and nematic order statistics for elongated clusters.
+
+        Singleton clusters are retained in the raw arrays but excluded from
+        the mean order parameters because their polar and nematic orders are
+        trivially equal to one.
+
+        Parameters
+        ----------
+        cluster_list : list[list[int]]
+            Elongated clusters. Each cluster contains its cell indices.
+        cell_phies : np.ndarray
+            Orientations of all cells in the culture.
+
+        Returns
+        -------
+        statistics : dict
+            Raw order parameters and summary statistics.
+        """
+        cluster_sizes = np.asarray(
+            [
+                len(cluster)
+                for cluster in cluster_list
+            ],
+            dtype=int,
+        )
+
+        number_of_clusters = int(
+            cluster_sizes.size
+        )
+
+        polar_orders = np.full(
+            number_of_clusters,
+            np.nan,
+            dtype=float,
+        )
+
+        nematic_orders = np.full(
+            number_of_clusters,
+            np.nan,
+            dtype=float,
+        )
+
+        # Calculate the order parameters of every elongated cluster.
+        for cluster_index, cluster in enumerate(
+            cluster_list
+        ):
+            (
+                polar_orders[cluster_index],
+                nematic_orders[cluster_index],
+            ) = self.calculate_cluster_order_parameters(
+                cluster=cluster,
+                cell_phies=cell_phies,
+            )
+
+        # Clusters containing a single cell have P = S = 1
+        # trivially, so they are excluded from the means.
+        non_singleton_mask = (
+            cluster_sizes > 1
+        )
+
+        number_of_non_singleton_clusters = int(
+            np.sum(non_singleton_mask)
+        )
+
+        if number_of_non_singleton_clusters == 0:
+            mean_polar_order_non_singleton = np.nan
+            weighted_mean_polar_order_non_singleton = np.nan
+
+            mean_nematic_order_non_singleton = np.nan
+            weighted_mean_nematic_order_non_singleton = np.nan
+        else:
+            non_singleton_sizes = cluster_sizes[
+                non_singleton_mask
+            ]
+
+            non_singleton_polar_orders = polar_orders[
+                non_singleton_mask
+            ]
+
+            non_singleton_nematic_orders = nematic_orders[
+                non_singleton_mask
+            ]
+
+            mean_polar_order_non_singleton = float(
+                np.mean(
+                    non_singleton_polar_orders
+                )
+            )
+
+            weighted_mean_polar_order_non_singleton = float(
+                np.average(
+                    non_singleton_polar_orders,
+                    weights=non_singleton_sizes,
+                )
+            )
+
+            mean_nematic_order_non_singleton = float(
+                np.mean(
+                    non_singleton_nematic_orders
+                )
+            )
+
+            weighted_mean_nematic_order_non_singleton = float(
+                np.average(
+                    non_singleton_nematic_orders,
+                    weights=non_singleton_sizes,
+                )
+            )
+
+        if number_of_clusters == 0:
+            largest_cluster_polar_order = np.nan
+            largest_cluster_nematic_order = np.nan
+        else:
+            # if several clusters share the largest size, take the first one.
+            largest_cluster_index = int(
+                np.argmax(
+                    cluster_sizes
+                )
+            )
+
+            largest_cluster_polar_order = float(
+                polar_orders[
+                    largest_cluster_index
+                ]
+            )
+
+            largest_cluster_nematic_order = float(
+                nematic_orders[
+                    largest_cluster_index
+                ]
+            )
+
+        return {
+            "polar_orders": polar_orders,
+            "nematic_orders": nematic_orders,
+            "number_of_non_singleton_clusters": (
+                number_of_non_singleton_clusters
+            ),
+            "mean_polar_order_non_singleton": (
+                mean_polar_order_non_singleton
+            ),
+            "weighted_mean_polar_order_non_singleton": (
+                weighted_mean_polar_order_non_singleton
+            ),
+            "mean_nematic_order_non_singleton": (
+                mean_nematic_order_non_singleton
+            ),
+            "weighted_mean_nematic_order_non_singleton": (
+                weighted_mean_nematic_order_non_singleton
+            ),
+            "largest_cluster_polar_order": (
+                largest_cluster_polar_order
+            ),
+            "largest_cluster_nematic_order": (
+                largest_cluster_nematic_order
+            ),
+        }
+
     def should_record_clusters(
         self,
         tic: int,
@@ -1245,6 +1409,13 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
 
         elongated_statistics = self.calculate_size_statistics(
             clusters["elongated"],
+        )
+
+        elongated_order_statistics = (
+            self.calculate_cluster_order_statistics(
+                cluster_list=clusters["elongated"],
+                cell_phies=cell_phies,
+            )
         )
 
         output_folder = os.path.join(
@@ -1279,35 +1450,47 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                 "phenotype,cluster_id,size,"
                 "polar_order,nematic_order\n"
             )
+
             for phenotype, statistics in (
                 ("round", round_statistics),
                 ("elongated", elongated_statistics),
             ):
-                phenotype_clusters = clusters[
-                    phenotype
-                ]
+                if phenotype == "elongated":
+                    polar_orders = elongated_order_statistics[
+                        "polar_orders"
+                    ]
+
+                    nematic_orders = elongated_order_statistics[
+                        "nematic_orders"
+                    ]
+                else:
+                    number_of_clusters = int(
+                        statistics["number_of_clusters"]
+                    )
+
+                    polar_orders = np.full(
+                        number_of_clusters,
+                        np.nan,
+                        dtype=float,
+                    )
+
+                    nematic_orders = np.full(
+                        number_of_clusters,
+                        np.nan,
+                        dtype=float,
+                    )
 
                 for cluster_id, (
-                    cluster,
                     cluster_size,
+                    polar_order,
+                    nematic_order,
                 ) in enumerate(
                     zip(
-                        phenotype_clusters,
                         statistics["sizes"],
+                        polar_orders,
+                        nematic_orders,
                     )
                 ):
-                    if phenotype == "elongated":
-                        (
-                            polar_order,
-                            nematic_order,
-                        ) = self.calculate_cluster_order_parameters(
-                            cluster=cluster,
-                            cell_phies=cell_phies,
-                        )
-                    else:
-                        polar_order = np.nan
-                        nematic_order = np.nan
-
                     datfile.write(
                         f"{phenotype},"
                         f"{cluster_id},"
@@ -1325,13 +1508,41 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                 "mean_cluster_size,"
                 "largest_cluster_size,"
                 "number_without_largest,"
-                "mean_without_largest\n"
+                "mean_without_largest,"
+                "number_of_non_singleton_clusters,"
+                "mean_polar_order_non_singleton,"
+                "weighted_mean_polar_order_non_singleton,"
+                "mean_nematic_order_non_singleton,"
+                "weighted_mean_nematic_order_non_singleton,"
+                "largest_cluster_polar_order,"
+                "largest_cluster_nematic_order\n"
             )
 
             for phenotype, statistics in (
                 ("round", round_statistics),
                 ("elongated", elongated_statistics),
             ):
+                if phenotype == "elongated":
+                    order_statistics = (
+                        elongated_order_statistics
+                    )
+                else:
+                    # The number of non-singleton clusters is still meaningful
+                    # for round clusters, although orientational order is not.
+                    order_statistics = {
+                        "number_of_non_singleton_clusters": int(
+                            np.sum(
+                                statistics["sizes"] > 1
+                            )
+                        ),
+                        "mean_polar_order_non_singleton": np.nan,
+                        "weighted_mean_polar_order_non_singleton": np.nan,
+                        "mean_nematic_order_non_singleton": np.nan,
+                        "weighted_mean_nematic_order_non_singleton": np.nan,
+                        "largest_cluster_polar_order": np.nan,
+                        "largest_cluster_nematic_order": np.nan,
+                    }
+
                 datfile.write(
                     f"{phenotype},"
                     f"{statistics['total_number_of_cells']},"
@@ -1339,7 +1550,14 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                     f"{statistics['mean_cluster_size']},"
                     f"{statistics['largest_cluster_size']},"
                     f"{statistics['number_without_largest']},"
-                    f"{statistics['mean_without_largest']}\n"
+                    f"{statistics['mean_without_largest']},"
+                    f"{order_statistics['number_of_non_singleton_clusters']},"
+                    f"{order_statistics['mean_polar_order_non_singleton']},"
+                    f"{order_statistics['weighted_mean_polar_order_non_singleton']},"
+                    f"{order_statistics['mean_nematic_order_non_singleton']},"
+                    f"{order_statistics['weighted_mean_nematic_order_non_singleton']},"
+                    f"{order_statistics['largest_cluster_polar_order']},"
+                    f"{order_statistics['largest_cluster_nematic_order']}\n"
                 )
 
 class DatOutput_deformation_parameters(
