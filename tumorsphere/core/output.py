@@ -115,6 +115,7 @@ class TumorsphereOutput(ABC):
         cells,
         cell_positions,
         cell_phies,
+        cell_instantaneous_velocities,
         clusters,
         side,
     ):
@@ -246,6 +247,7 @@ class OutputDemux(TumorsphereOutput):
         cells,
         cell_positions,
         cell_phies,
+        cell_instantaneous_velocities,
         clusters,
         side,
     ):
@@ -260,6 +262,7 @@ class OutputDemux(TumorsphereOutput):
                     cells=cells,
                     cell_positions=cell_positions,
                     cell_phies=cell_phies,
+                    cell_instantaneous_velocities=cell_instantaneous_velocities,
                     clusters=clusters,
                     side=side,
                 )
@@ -1380,6 +1383,235 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             ),
         }
 
+    def calculate_cluster_velocity_statistics(
+        self,
+        cluster_list,
+        cell_instantaneous_velocities,
+    ):
+        """
+        Calculate instantaneous velocity statistics for a collection of clusters.
+
+        For each cluster, two different quantities are calculated:
+
+        1. Cluster velocity:
+        The vectorial mean of the velocities of its cells.
+
+        2. Mean cell speed:
+        The mean of the velocity magnitudes of its cells.
+
+        Singleton clusters are retained in the raw arrays but excluded from
+        the summary means.
+
+        Parameters
+        ----------
+        cluster_list : list[list[int]]
+            Clusters represented by their cell indices.
+        cell_instantaneous_velocities : np.ndarray
+            Instantaneous resultant velocity of every cell.
+
+        Returns
+        -------
+        statistics : dict
+            Raw cluster velocities and summary statistics.
+        """
+        cluster_sizes = np.asarray(
+            [
+                len(cluster)
+                for cluster in cluster_list
+            ],
+            dtype=int,
+        )
+
+        number_of_clusters = int(
+            cluster_sizes.size
+        )
+
+        cluster_velocity_x = np.full(
+            number_of_clusters,
+            np.nan,
+            dtype=float,
+        )
+
+        cluster_velocity_y = np.full(
+            number_of_clusters,
+            np.nan,
+            dtype=float,
+        )
+
+        cluster_speeds = np.full(
+            number_of_clusters,
+            np.nan,
+            dtype=float,
+        )
+
+        mean_cell_speeds = np.full(
+            number_of_clusters,
+            np.nan,
+            dtype=float,
+        )
+
+        for cluster_index, cluster in enumerate(
+            cluster_list
+        ):
+            cluster_indices = np.asarray(
+                cluster,
+                dtype=int,
+            )
+
+            if cluster_indices.size == 0:
+                continue
+
+            # Take the veloicities
+            cell_velocities_xy = (
+                cell_instantaneous_velocities[
+                    cluster_indices,
+                    :2,
+                ]
+            )
+
+            # Vectorial mean: translational velocity of the cluster
+            cluster_velocity = np.mean(
+                cell_velocities_xy,
+                axis=0,
+            )
+
+            cluster_velocity_x[cluster_index] = float(
+                cluster_velocity[0]
+            )
+
+            cluster_velocity_y[cluster_index] = float(
+                cluster_velocity[1]
+            )
+
+            cluster_speeds[cluster_index] = float(
+                np.linalg.norm(
+                    cluster_velocity
+                )
+            )
+
+            # Scalar mean: mean amount of cell movement inside the cluster
+            cell_speeds = np.linalg.norm(
+                cell_velocities_xy,
+                axis=1,
+            )
+
+            mean_cell_speeds[cluster_index] = float(
+                np.mean(
+                    cell_speeds
+                )
+            )
+
+        non_singleton_mask = (
+            cluster_sizes > 1
+        )
+
+        number_of_non_singleton_clusters = int(
+            np.sum(
+                non_singleton_mask
+            )
+        )
+
+        if number_of_non_singleton_clusters == 0:
+            mean_cluster_speed_non_singleton = np.nan
+            weighted_mean_cluster_speed_non_singleton = np.nan
+
+            mean_cell_speed_non_singleton = np.nan
+            weighted_mean_cell_speed_non_singleton = np.nan
+        else:
+            non_singleton_sizes = cluster_sizes[
+                non_singleton_mask
+            ]
+
+            non_singleton_cluster_speeds = cluster_speeds[
+                non_singleton_mask
+            ]
+
+            non_singleton_mean_cell_speeds = mean_cell_speeds[
+                non_singleton_mask
+            ]
+
+            # Every cluster contributes with the same weight
+            mean_cluster_speed_non_singleton = float(
+                np.mean(
+                    non_singleton_cluster_speeds
+                )
+            )
+
+            # Large clusters contribute proportionally to their size
+            weighted_mean_cluster_speed_non_singleton = float(
+                np.average(
+                    non_singleton_cluster_speeds,
+                    weights=non_singleton_sizes,
+                )
+            )
+
+            # Mean of the cluster-level mean cell speeds
+            mean_cell_speed_non_singleton = float(
+                np.mean(
+                    non_singleton_mean_cell_speeds
+                )
+            )
+
+            # Equivalent to averaging the cell speeds over all cells
+            # belonging to non-singleton clusters
+            weighted_mean_cell_speed_non_singleton = float(
+                np.average(
+                    non_singleton_mean_cell_speeds,
+                    weights=non_singleton_sizes,
+                )
+            )
+
+        if number_of_clusters == 0:
+            largest_cluster_speed = np.nan
+            largest_cluster_mean_cell_speed = np.nan
+        else:
+            # if several clusters have the maximum size, take the first
+            largest_cluster_index = int(
+                np.argmax(
+                    cluster_sizes
+                )
+            )
+
+            largest_cluster_speed = float(
+                cluster_speeds[
+                    largest_cluster_index
+                ]
+            )
+
+            largest_cluster_mean_cell_speed = float(
+                mean_cell_speeds[
+                    largest_cluster_index
+                ]
+            )
+
+        return {
+            "cluster_velocity_x": cluster_velocity_x,
+            "cluster_velocity_y": cluster_velocity_y,
+            "cluster_speeds": cluster_speeds,
+            "mean_cell_speeds": mean_cell_speeds,
+            "number_of_non_singleton_clusters": (
+                number_of_non_singleton_clusters
+            ),
+            "mean_cluster_speed_non_singleton": (
+                mean_cluster_speed_non_singleton
+            ),
+            "weighted_mean_cluster_speed_non_singleton": (
+                weighted_mean_cluster_speed_non_singleton
+            ),
+            "mean_cell_speed_non_singleton": (
+                mean_cell_speed_non_singleton
+            ),
+            "weighted_mean_cell_speed_non_singleton": (
+                weighted_mean_cell_speed_non_singleton
+            ),
+            "largest_cluster_speed": (
+                largest_cluster_speed
+            ),
+            "largest_cluster_mean_cell_speed": (
+                largest_cluster_mean_cell_speed
+            ),
+        }
+
     def should_record_clusters(
         self,
         tic: int,
@@ -1395,6 +1627,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
         cells,
         cell_positions,
         cell_phies,
+        cell_instantaneous_velocities,
         clusters,
         side,
     ):
@@ -1415,6 +1648,24 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             self.calculate_cluster_order_statistics(
                 cluster_list=clusters["elongated"],
                 cell_phies=cell_phies,
+            )
+        )
+
+        round_velocity_statistics = (
+            self.calculate_cluster_velocity_statistics(
+                cluster_list=clusters["round"],
+                cell_instantaneous_velocities=(
+                    cell_instantaneous_velocities
+                ),
+            )
+        )
+
+        elongated_velocity_statistics = (
+            self.calculate_cluster_velocity_statistics(
+                cluster_list=clusters["elongated"],
+                cell_instantaneous_velocities=(
+                    cell_instantaneous_velocities
+                ),
             )
         )
 
@@ -1447,8 +1698,15 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
         # Save one row for every individual cluster.
         with open(raw_filename, "w") as datfile:
             datfile.write(
-                "phenotype,cluster_id,size,"
-                "polar_order,nematic_order\n"
+                "phenotype,"
+                "cluster_id,"
+                "size,"
+                "polar_order,"
+                "nematic_order,"
+                "cluster_velocity_x,"
+                "cluster_velocity_y,"
+                "cluster_speed,"
+                "mean_cell_speed\n"
             )
 
             for phenotype, statistics in (
@@ -1463,6 +1721,10 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                     nematic_orders = elongated_order_statistics[
                         "nematic_orders"
                     ]
+
+                    velocity_statistics = (
+                        elongated_velocity_statistics
+                    )
                 else:
                     number_of_clusters = int(
                         statistics["number_of_clusters"]
@@ -1480,15 +1742,35 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                         dtype=float,
                     )
 
+                    velocity_statistics = (
+                        round_velocity_statistics
+                    )
+
                 for cluster_id, (
                     cluster_size,
                     polar_order,
                     nematic_order,
+                    cluster_velocity_x,
+                    cluster_velocity_y,
+                    cluster_speed,
+                    mean_cell_speed,
                 ) in enumerate(
                     zip(
                         statistics["sizes"],
                         polar_orders,
                         nematic_orders,
+                        velocity_statistics[
+                            "cluster_velocity_x"
+                        ],
+                        velocity_statistics[
+                            "cluster_velocity_y"
+                        ],
+                        velocity_statistics[
+                            "cluster_speeds"
+                        ],
+                        velocity_statistics[
+                            "mean_cell_speeds"
+                        ],
                     )
                 ):
                     datfile.write(
@@ -1496,7 +1778,11 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                         f"{cluster_id},"
                         f"{cluster_size},"
                         f"{polar_order},"
-                        f"{nematic_order}\n"
+                        f"{nematic_order},"
+                        f"{cluster_velocity_x},"
+                        f"{cluster_velocity_y},"
+                        f"{cluster_speed},"
+                        f"{mean_cell_speed}\n"
                     )
 
         # Save one summary row for each phenotype.
@@ -1515,7 +1801,13 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                 "mean_nematic_order_non_singleton,"
                 "weighted_mean_nematic_order_non_singleton,"
                 "largest_cluster_polar_order,"
-                "largest_cluster_nematic_order\n"
+                "largest_cluster_nematic_order,"
+                "mean_cluster_speed_non_singleton,"
+                "weighted_mean_cluster_speed_non_singleton,"
+                "largest_cluster_speed,"
+                "mean_cell_speed_non_singleton,"
+                "weighted_mean_cell_speed_non_singleton,"
+                "largest_cluster_mean_cell_speed\n"
             )
 
             for phenotype, statistics in (
@@ -1526,9 +1818,12 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                     order_statistics = (
                         elongated_order_statistics
                     )
+
+                    velocity_statistics = (
+                        elongated_velocity_statistics
+                    )
                 else:
-                    # The number of non-singleton clusters is still meaningful
-                    # for round clusters, although orientational order is not.
+                    # Orientational order is not defined for round cells.
                     order_statistics = {
                         "number_of_non_singleton_clusters": int(
                             np.sum(
@@ -1542,6 +1837,10 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                         "largest_cluster_polar_order": np.nan,
                         "largest_cluster_nematic_order": np.nan,
                     }
+
+                    velocity_statistics = (
+                        round_velocity_statistics
+                    )
 
                 datfile.write(
                     f"{phenotype},"
@@ -1557,7 +1856,13 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                     f"{order_statistics['mean_nematic_order_non_singleton']},"
                     f"{order_statistics['weighted_mean_nematic_order_non_singleton']},"
                     f"{order_statistics['largest_cluster_polar_order']},"
-                    f"{order_statistics['largest_cluster_nematic_order']}\n"
+                    f"{order_statistics['largest_cluster_nematic_order']},"
+                    f"{velocity_statistics['mean_cluster_speed_non_singleton']},"
+                    f"{velocity_statistics['weighted_mean_cluster_speed_non_singleton']},"
+                    f"{velocity_statistics['largest_cluster_speed']},"
+                    f"{velocity_statistics['mean_cell_speed_non_singleton']},"
+                    f"{velocity_statistics['weighted_mean_cell_speed_non_singleton']},"
+                    f"{velocity_statistics['largest_cluster_mean_cell_speed']}\n"
                 )
 
 class DatOutput_deformation_parameters(

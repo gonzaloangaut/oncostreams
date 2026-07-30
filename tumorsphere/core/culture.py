@@ -333,6 +333,12 @@ class Culture:
         # initialize the positions matrix
         self.cell_positions = np.empty((0, 3), float)
 
+        # Instantaneous velocity resulting from the cell dynamics
+        self.cell_instantaneous_velocities = np.empty(
+            (0, 3),
+            dtype=float,
+        )
+
         # the phies matrix
         self.cell_phies = np.array([])
 
@@ -1530,6 +1536,7 @@ class Culture:
             cells=self.cells,
             cell_positions=self.cell_positions,
             cell_phies=self.cell_phies,
+            cell_instantaneous_velocities=self.cell_instantaneous_velocities,
             clusters=clusters,
             side=self.side,
         )
@@ -1636,6 +1643,11 @@ class Culture:
                         available_space=True,
                     )
 
+            self.cell_instantaneous_velocities = np.zeros_like(
+                self.cell_positions,
+                dtype=float,
+            )
+
             # Save the data (for dat, ovito, and/or SQLite)
             self.output.record_culture_state(
                 tic=0,
@@ -1725,8 +1737,15 @@ class Culture:
                                     ] += 1
 
                 # We initialize the change in the position and angle of all cells
-                dif_positions = np.zeros((len(self.active_cell_indexes), 3))
-                dif_phies = np.zeros(len(self.active_cell_indexes))
+                dif_positions = np.zeros(
+                    (len(self.cells), 3),
+                    dtype=float,
+                )
+
+                dif_phies = np.zeros(
+                    len(self.cells),
+                    dtype=float,
+                )
                 # Calculate the interaction for every cell
                 for index in self.active_cell_indexes:
                     dif_position, dif_phi = self.interaction(
@@ -1736,6 +1755,12 @@ class Culture:
                     dif_positions[index] = dif_position
                     # add the change in angle to the matrix
                     dif_phies[index] = dif_phi
+
+                # Instantaneous resultant velocities
+                self.cell_instantaneous_velocities = (
+                    dif_positions
+                    / self.delta_t
+                )
                 # Move all cells
                 self.move(dif_positions=dif_positions, dif_phies=dif_phies)
 
