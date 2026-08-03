@@ -1652,16 +1652,43 @@ class Culture:
                 n_elongated = int(self.initial_number_of_cells * self.initial_fraction_elongated)
                 # Choose random indices for the elongated cells
                 elongated_indices = self.rng.choice(
-                    self.initial_number_of_cells, size=n_elongated, replace=False
+                    self.initial_number_of_cells,
+                    size=n_elongated,
+                    replace=False,
                 )
-                # We define the cell if it is elongated or not
-                for i in range(self.initial_number_of_cells):
-                    if i in elongated_indices:
-                        phi = self.rng.uniform(low=0, high=2*np.pi)
-                        aspect_ratio = self.aspect_ratio_max
+
+                elongated_mask = np.zeros(
+                    self.initial_number_of_cells,
+                    dtype=bool,
+                )
+
+                elongated_mask[
+                    elongated_indices
+                ] = True
+
+                for i in range(
+                    self.initial_number_of_cells
+                ):
+                    if elongated_mask[i]:
+                        phi = self.rng.uniform(
+                            low=0,
+                            high=2 * np.pi,
+                        )
+                        aspect_ratio = (
+                            self.aspect_ratio_max
+                        )
                     else:
-                        phi = 0 if self.initial_aspect_ratio == 1 else self.rng.uniform(low=0, high=2*np.pi)
-                        aspect_ratio = self.initial_aspect_ratio
+                        phi = (
+                            0
+                            if self.initial_aspect_ratio == 1
+                            else self.rng.uniform(
+                                low=0,
+                                high=2 * np.pi,
+                            )
+                        )
+                        aspect_ratio = (
+                            self.initial_aspect_ratio
+                        )
 
                     Cell(
                         position=np.array([
