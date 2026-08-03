@@ -476,13 +476,14 @@ class Anisotropic_Grosmann(Force):
         cell_index,
         area,
         delta_t,
+        mP,
+        mS,
+        mR,
     ):
         """
         If there is noise in the force, calculate it.
         """
         cell = cells[cell_index]
-        # Get the mobilities of the cell
-        mP, mS, mR = self.calculate_mobilities(cell, area)
 
         # We add the noise in the position:
         # First in the parallel direction
@@ -656,7 +657,7 @@ class Anisotropic_Grosmann(Force):
 
         # we calculate the noise if we are in that case
         if (self.noise_eta is not None) or (self.d_phi is not None):
-            translational_noise, rotational_noise = self.calculate_noise(cells, phies, cell_index, area, delta_t)
+            translational_noise, rotational_noise = self.calculate_noise(cells, phies, cell_index, area, delta_t, mP, mS, mR)
             dif_position += translational_noise
             dif_phi += rotational_noise
         
