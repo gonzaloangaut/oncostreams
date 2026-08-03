@@ -3164,9 +3164,11 @@ def create_output_demux(
     save_step_dat_pos_ar: int = 1,
     save_step_dat_order_par: int = 1,
     save_step_dat_motion_par: int = 1,
-    save_step_dat_cluster_par: int = 100,
+    save_step_dat_cluster_summary: int = 100,
+    save_step_dat_cluster_raw: int = 1000,
     save_step_dat_deformation_par: int = 100,
-    save_step_dat_local_order_par: int = 1000,
+    save_step_dat_local_order_summary: int = 100,
+    save_step_dat_local_order_raw: int = 1000,
     save_step_ovito: int = 1,
 ):
     """Create an OutputDemux object with the requested output types."""
@@ -3212,9 +3214,10 @@ def create_output_demux(
             elif out == "dat_cluster_par":
                 outputs.append(
                     output_types[out](
-                        culture_name,
-                        output_dir,
-                        save_step_dat_cluster_par,
+                        culture_name=culture_name,
+                        output_dir=output_dir,
+                        save_step=save_step_dat_cluster_summary,
+                        raw_save_step=save_step_dat_cluster_raw,
                     )
                 )
             elif out == "dat_deformation_par":
@@ -3230,7 +3233,8 @@ def create_output_demux(
                     output_types[out](
                         culture_name=culture_name,
                         output_dir=output_dir,
-                        raw_save_step=save_step_dat_local_order_par,
+                        save_step=save_step_dat_local_order_summary,
+                        raw_save_step=save_step_dat_local_order_raw,
                     )
                 )
             elif out == "ovito":
