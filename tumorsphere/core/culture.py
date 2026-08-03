@@ -1549,6 +1549,32 @@ class Culture:
             side=self.side,
         )
 
+    def _record_local_order_if_needed(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> None:
+        """
+        Calculate and record local order parameters when required
+        by the active outputs.
+
+        The local observables are calculated using the current cell
+        positions, phenotypes and orientations.
+        """
+        if not self.output.should_record_local_order(
+            tic=tic,
+            final_tic=final_tic,
+        ):
+            return
+
+        self.output.record_local_order_state(
+            tic=tic,
+            final_tic=final_tic,
+            cells=self.cells,
+            cell_positions=self.cell_positions,
+            cell_phies=self.cell_phies,
+            side=self.side,
+        )
 
     def _record_deformation_events_if_needed(
         self,
@@ -1668,6 +1694,11 @@ class Culture:
                 cell_area=self.cell_area,
             )
 
+            # Calculate and save local order parameters
+            self._record_local_order_if_needed(
+                tic=0,
+                final_tic=num_times,
+            )
             # Save the clusters data
             self._record_clusters_if_needed(
                 tic=0,
@@ -1783,6 +1814,12 @@ class Culture:
                 active_cell_indexes=self.active_cell_indexes,
                 side=self.side,
                 cell_area=self.cell_area,
+            )
+
+            # Calculate and save local order parameters only when requested
+            self._record_local_order_if_needed(
+                tic=i,
+                final_tic=num_times,
             )
 
             # Calculate and save clusters only when requested

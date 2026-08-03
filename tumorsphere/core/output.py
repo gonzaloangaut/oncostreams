@@ -126,6 +126,32 @@ class TumorsphereOutput(ABC):
         """
         pass
 
+    def should_record_local_order(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return whether local order parameters are required
+        at the current timestep.
+        """
+        return False
+
+
+    def record_local_order_state(
+        self,
+        tic,
+        final_tic,
+        cells,
+        cell_positions,
+        cell_phies,
+        side,
+    ):
+        """
+        Record local order parameters for the current culture state.
+        """
+        pass
+
     def should_record_deformation_events(
         self,
         tic: int,
@@ -272,6 +298,51 @@ class OutputDemux(TumorsphereOutput):
                     cell_phies=cell_phies,
                     cell_instantaneous_velocities=cell_instantaneous_velocities,
                     clusters=clusters,
+                    side=side,
+                )
+
+    def should_record_local_order(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return True if at least one output requires local order
+        parameters at the current timestep.
+        """
+        return any(
+            result.should_record_local_order(
+                tic=tic,
+                final_tic=final_tic,
+            )
+            for result in self.result_list
+        )
+
+
+    def record_local_order_state(
+        self,
+        tic,
+        final_tic,
+        cells,
+        cell_positions,
+        cell_phies,
+        side,
+    ):
+        """
+        Delegate local-order recording only to outputs that require
+        it at the current timestep.
+        """
+        for result in self.result_list:
+            if result.should_record_local_order(
+                tic=tic,
+                final_tic=final_tic,
+            ):
+                result.record_local_order_state(
+                    tic=tic,
+                    final_tic=final_tic,
+                    cells=cells,
+                    cell_positions=cell_positions,
+                    cell_phies=cell_phies,
                     side=side,
                 )
 
@@ -991,6 +1062,683 @@ class DatOutput_motion_parameters(TumorsphereOutput):
         data we are saving.
         """
         pass
+
+class DatOutput_local_order_parameters(
+    TumorsphereOutput
+):
+    def __init__(
+        self,
+        culture_name,
+        output_dir=".",
+        save_step=100,
+        raw_save_step=1000,
+        local_box_size=10.0,
+    ):
+        self.culture_name = culture_name
+        self.output_dir = output_dir
+
+        # Frequency of the compact local-order summary
+        self.summary_save_step = save_step
+
+        # Frequency of the file containing one row per occupied box
+        self.raw_save_step = raw_save_step
+
+        # Target side length of the boxes used to calculate
+        # the local observables
+        self.local_box_size = local_box_size
+
+    def begin_culture(
+        self,
+        prob_stem,
+        prob_diff,
+        rng_seed,
+        simulation_start,
+        adjacency_threshold,
+        swap_probability,
+    ):
+        """We do not record the beginning of the simulation."""
+        pass
+
+    def record_stemness(
+        self,
+        cell_index,
+        tic,
+        stemness,
+    ):
+        """We do not record individual stemness changes."""
+        pass
+
+    def record_deactivation(
+        self,
+        cell_index,
+        tic,
+    ):
+        """We do not record individual cell deactivations."""
+        pass
+
+    def record_culture_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        cell_phies,
+        active_cell_indexes,
+        side,
+        cell_area,
+    ):
+        """
+        Local order parameters will be recorded through this method
+        after connecting this output to the simulation.
+        """
+        pass
+
+    def record_cell(
+        self,
+        index,
+        parent,
+        pos_x,
+        pos_y,
+        pos_z,
+        creation_time,
+        is_stem,
+    ):
+        """We do not record individual cell creations."""
+        pass
+
+    def record_final_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        active_cell_indexes,
+    ):
+        """
+        The final local state will be handled when this output is
+        connected to the simulation.
+        """
+        pass
+
+    def should_record_local_order_summary(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return whether the compact local-order summary must be saved.
+        """
+        return (
+            tic == final_tic
+            or np.mod(
+                tic,
+                self.summary_save_step,
+            ) == 0
+        )
+
+
+    def should_record_local_order_raw(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return whether the complete local grid must be saved.
+        """
+        return (
+            tic == final_tic
+            or np.mod(
+                tic,
+                self.raw_save_step,
+            ) == 0
+        )
+
+
+    def should_record_local_order(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Calculate the local grid whenever either output requires it.
+        """
+        return (
+            self.should_record_local_order_summary(
+                tic=tic,
+                final_tic=final_tic,
+            )
+            or self.should_record_local_order_raw(
+                tic=tic,
+                final_tic=final_tic,
+            )
+        )
+
+    def calculate_local_order_grid(
+        self,
+        cells,
+        cell_positions,
+        cell_phies,
+        side,
+    ):
+        """
+        Calculate composition and orientational order parameters
+        inside square boxes of approximately local_box_size.
+
+        Only occupied boxes are returned.
+        """
+        positions = np.asarray(
+            cell_positions,
+            dtype=float,
+        )
+
+        phies = np.asarray(
+            cell_phies,
+            dtype=float,
+        )
+
+        # Choose an integer number of boxes along each direction
+        # The actual box size is adjusted slightly so that the complete
+        # periodic system is covered without leaving a remainder
+        number_of_bins = max(
+            1,
+            int(
+                np.round(
+                    side / self.local_box_size
+                )
+            ),
+        )
+
+        actual_box_size = (
+            side / number_of_bins
+        )
+
+        # Apply periodic boundary conditions before assigning cells
+        # to the local boxes
+        positions_xy = np.mod(
+            positions[:, :2],
+            side,
+        )
+
+        # Two-dimensional box coordinates of every cell
+        grid_indices = np.floor(
+            positions_xy / actual_box_size
+        ).astype(int)
+
+        grid_indices = np.mod(
+            grid_indices,
+            number_of_bins,
+        )
+
+        # Convert the pair (grid_x, grid_y) into one integer index
+        flat_grid_indices = (
+            grid_indices[:, 1] * number_of_bins
+            + grid_indices[:, 0]
+        )
+
+        # Identify elongated cells
+        elongated_mask = np.asarray(
+            [
+                not np.isclose(
+                    cell.aspect_ratio,
+                    1.0,
+                )
+                for cell in cells
+            ],
+            dtype=bool,
+        )
+
+        # Store the indices of the cells belonging to every occupied box
+        # Empty boxes are not included
+        cells_by_box = {}
+
+        for cell_index, box_index in enumerate(
+            flat_grid_indices
+        ):
+            cells_by_box.setdefault(
+                int(box_index),
+                [],
+            ).append(
+                cell_index
+            )
+
+        local_data = []
+
+        # Calculate the local observables independently in each
+        # occupied box
+        for box_index, box_cell_indices in sorted(
+            cells_by_box.items()
+        ):
+            box_cell_indices = np.asarray(
+                box_cell_indices,
+                dtype=int,
+            )
+
+            box_elongated_mask = elongated_mask[
+                box_cell_indices
+            ]
+
+            elongated_cell_indices = box_cell_indices[
+                box_elongated_mask
+            ]
+
+            occupancy = int(
+                box_cell_indices.size
+            )
+
+            number_elongated = int(
+                elongated_cell_indices.size
+            )
+
+            number_round = (
+                occupancy
+                - number_elongated
+            )
+
+            fraction_elongated = (
+                number_elongated
+                / occupancy
+            )
+
+            # Orientational order is defined only when the box
+            # contains at least one elongated cell
+            if number_elongated > 0:
+                elongated_phies = phies[
+                    elongated_cell_indices
+                ]
+
+                # Polar order
+                sum_cos = np.sum(
+                    np.cos(
+                        elongated_phies
+                    )
+                )
+
+                sum_sin = np.sum(
+                    np.sin(
+                        elongated_phies
+                    )
+                )
+
+                # Nematic order
+                sum_cos_2 = np.sum(
+                    np.cos(
+                        2.0 * elongated_phies
+                    )
+                )
+
+                sum_sin_2 = np.sum(
+                    np.sin(
+                        2.0 * elongated_phies
+                    )
+                )
+
+                polar_magnitude = np.sqrt(
+                    sum_cos**2
+                    + sum_sin**2
+                )
+
+                nematic_magnitude = np.sqrt(
+                    sum_cos_2**2
+                    + sum_sin_2**2
+                )
+
+                # Order normalized by the number of elongated cells.
+                polar_order = (
+                    polar_magnitude
+                    / number_elongated
+                )
+
+                nematic_order = (
+                    nematic_magnitude
+                    / number_elongated
+                )
+
+                # Order normalized by the total number of cells.
+                polar_order_hat = (
+                    polar_magnitude
+                    / occupancy
+                )
+
+                nematic_order_hat = (
+                    nematic_magnitude
+                    / occupancy
+                )
+
+            else:
+                # Polar and nematic order are not defined when there
+                # are no elongated cells in the box.
+                polar_order = np.nan
+                nematic_order = np.nan
+
+                # The total-normalized observables are zero because
+                # the box contains only round cells.
+                polar_order_hat = 0.0
+                nematic_order_hat = 0.0
+
+            # Recover the two-dimensional coordinates of the box.
+            grid_x = (
+                box_index
+                % number_of_bins
+            )
+
+            grid_y = (
+                box_index
+                // number_of_bins
+            )
+
+            local_data.append(
+                {
+                    "grid_x": grid_x,
+                    "grid_y": grid_y,
+                    "center_x": (
+                        grid_x + 0.5
+                    ) * actual_box_size,
+                    "center_y": (
+                        grid_y + 0.5
+                    ) * actual_box_size,
+                    "occupancy": occupancy,
+                    "number_round": number_round,
+                    "number_elongated": number_elongated,
+                    "fraction_elongated": fraction_elongated,
+                    "polar_order": polar_order,
+                    "nematic_order": nematic_order,
+                    "polar_order_hat": polar_order_hat,
+                    "nematic_order_hat": nematic_order_hat,
+                }
+            )
+
+        # One row is returned for every occupied box
+        data = pd.DataFrame(
+            local_data
+        )
+
+        # This information is needed to reconstruct the complete grid,
+        # including the boxes that were empty and therefore not stored
+        metadata = {
+            "side": float(side),
+            "number_of_bins": number_of_bins,
+            "target_box_size": self.local_box_size,
+            "actual_box_size": actual_box_size,
+        }
+
+        return data, metadata
+
+    def calculate_local_order_summary(
+        self,
+        data,
+        metadata,
+    ):
+        """
+        Calculate compact statistics from the local-order grid.
+
+        The regular means are calculated over boxes containing at
+        least one elongated cell. The min_2 means exclude boxes with
+        a single elongated cell.
+        """
+        # Boxes where the orientational order parameters are defined
+        boxes_with_elongated = data[
+            data["number_elongated"] > 0
+        ]
+
+        # Boxes containing at least two elongated cells
+        boxes_with_at_least_2 = data[
+            data["number_elongated"] > 1
+        ]
+
+        total_number_of_cells = int(
+            data["occupancy"].sum()
+        )
+
+        number_elongated = int(
+            data["number_elongated"].sum()
+        )
+
+        fraction_elongated = (
+            number_elongated
+            / total_number_of_cells
+        )
+
+        number_occupied_boxes = len(
+            data
+        )
+
+        number_boxes_with_elongated = len(
+            boxes_with_elongated
+        )
+
+        number_boxes_with_at_least_2 = len(
+            boxes_with_at_least_2
+        )
+
+        # Means over all boxes containing at least one elongated cell
+        if number_boxes_with_elongated > 0:
+            mean_polar_order = (
+                boxes_with_elongated[
+                    "polar_order"
+                ].mean()
+            )
+
+            mean_nematic_order = (
+                boxes_with_elongated[
+                    "nematic_order"
+                ].mean()
+            )
+
+            # Weight every local OP by the number of elongated cells
+            # contained in its box
+            weighted_mean_polar_order = np.average(
+                boxes_with_elongated[
+                    "polar_order"
+                ],
+                weights=boxes_with_elongated[
+                    "number_elongated"
+                ],
+            )
+
+            weighted_mean_nematic_order = np.average(
+                boxes_with_elongated[
+                    "nematic_order"
+                ],
+                weights=boxes_with_elongated[
+                    "number_elongated"
+                ],
+            )
+
+        else:
+            mean_polar_order = np.nan
+            mean_nematic_order = np.nan
+            weighted_mean_polar_order = np.nan
+            weighted_mean_nematic_order = np.nan
+
+        # Collective local order after excluding boxes with only
+        # one elongated cell
+        if number_boxes_with_at_least_2 > 0:
+            mean_polar_order_min_2 = (
+                boxes_with_at_least_2[
+                    "polar_order"
+                ].mean()
+            )
+
+            mean_nematic_order_min_2 = (
+                boxes_with_at_least_2[
+                    "nematic_order"
+                ].mean()
+            )
+
+        else:
+            mean_polar_order_min_2 = np.nan
+            mean_nematic_order_min_2 = np.nan
+
+        # The hatted observables are defined in every occupied box
+        # Boxes containing only round cells contribute zero
+        mean_polar_order_hat = data[
+            "polar_order_hat"
+        ].mean()
+
+        mean_nematic_order_hat = data[
+            "nematic_order_hat"
+        ].mean()
+
+        return {
+            "number_of_bins": metadata[
+                "number_of_bins"
+            ],
+            "actual_box_size": metadata[
+                "actual_box_size"
+            ],
+            "total_number_of_cells": total_number_of_cells,
+            "number_elongated": number_elongated,
+            "fraction_elongated": fraction_elongated,
+            "number_occupied_boxes": number_occupied_boxes,
+            "number_boxes_with_elongated": (
+                number_boxes_with_elongated
+            ),
+            "number_boxes_with_at_least_2_elongated": (
+                number_boxes_with_at_least_2
+            ),
+            "mean_polar_order": mean_polar_order,
+            "mean_nematic_order": mean_nematic_order,
+            "mean_polar_order_min_2": (
+                mean_polar_order_min_2
+            ),
+            "mean_nematic_order_min_2": (
+                mean_nematic_order_min_2
+            ),
+            "weighted_mean_polar_order": (
+                weighted_mean_polar_order
+            ),
+            "weighted_mean_nematic_order": (
+                weighted_mean_nematic_order
+            ),
+            "mean_polar_order_hat": mean_polar_order_hat,
+            "mean_nematic_order_hat": mean_nematic_order_hat,
+        }
+
+    def record_local_order_state(
+        self,
+        tic,
+        final_tic,
+        cells,
+        cell_positions,
+        cell_phies,
+        side,
+    ):
+        """
+        Record the compact local-order summary and, less frequently,
+        the complete grid of occupied boxes.
+        """
+        record_summary = (
+            self.should_record_local_order_summary(
+                tic=tic,
+                final_tic=final_tic,
+            )
+        )
+
+        record_raw = (
+            self.should_record_local_order_raw(
+                tic=tic,
+                final_tic=final_tic,
+            )
+        )
+
+        # Calculate the grid only once, even when both files must
+        # be recorded at the current timestep.
+        data, metadata = (
+            self.calculate_local_order_grid(
+                cells=cells,
+                cell_positions=cell_positions,
+                cell_phies=cell_phies,
+                side=side,
+            )
+        )
+
+        output_folder = os.path.join(
+            self.output_dir,
+            "dat_local_order_parameters",
+        )
+
+        os.makedirs(
+            output_folder,
+            exist_ok=True,
+        )
+
+        raw_filename = os.path.join(
+            output_folder,
+            (
+                f"local_order_grid_{self.culture_name}"
+                f"_step={tic:05}.dat"
+            ),
+        )
+
+        summary_filename = os.path.join(
+            output_folder,
+            (
+                f"local_order_summary_{self.culture_name}"
+                f"_step={tic:05}.dat"
+            ),
+        )
+
+        if record_raw:
+            # Save one row for every occupied local box
+            with open(raw_filename, "w") as datfile:
+                datfile.write(
+                    f"# side={metadata['side']},"
+                    f"number_of_bins={metadata['number_of_bins']},"
+                    f"target_box_size={metadata['target_box_size']},"
+                    f"actual_box_size={metadata['actual_box_size']}\n"
+                )
+
+                data.to_csv(
+                    datfile,
+                    index=False,
+                )
+
+        if record_summary:
+            summary = (
+                self.calculate_local_order_summary(
+                    data=data,
+                    metadata=metadata,
+                )
+            )
+
+            # Save one row containing the spatially averaged
+            # local-order observables
+            with open(summary_filename, "w") as datfile:
+                datfile.write(
+                    "number_of_bins,"
+                    "actual_box_size,"
+                    "total_number_of_cells,"
+                    "number_elongated,"
+                    "fraction_elongated,"
+                    "number_occupied_boxes,"
+                    "number_boxes_with_elongated,"
+                    "number_boxes_with_at_least_2_elongated,"
+                    "mean_polar_order,"
+                    "mean_nematic_order,"
+                    "mean_polar_order_min_2,"
+                    "mean_nematic_order_min_2,"
+                    "weighted_mean_polar_order,"
+                    "weighted_mean_nematic_order,"
+                    "mean_polar_order_hat,"
+                    "mean_nematic_order_hat\n"
+                )
+
+                datfile.write(
+                    f"{summary['number_of_bins']},"
+                    f"{summary['actual_box_size']},"
+                    f"{summary['total_number_of_cells']},"
+                    f"{summary['number_elongated']},"
+                    f"{summary['fraction_elongated']},"
+                    f"{summary['number_occupied_boxes']},"
+                    f"{summary['number_boxes_with_elongated']},"
+                    f"{summary['number_boxes_with_at_least_2_elongated']},"
+                    f"{summary['mean_polar_order']},"
+                    f"{summary['mean_nematic_order']},"
+                    f"{summary['mean_polar_order_min_2']},"
+                    f"{summary['mean_nematic_order_min_2']},"
+                    f"{summary['weighted_mean_polar_order']},"
+                    f"{summary['weighted_mean_nematic_order']},"
+                    f"{summary['mean_polar_order_hat']},"
+                    f"{summary['mean_nematic_order_hat']}\n"
+                )
 
 class DatOutput_cluster_parameters(TumorsphereOutput):
     def __init__(
@@ -2418,6 +3166,7 @@ def create_output_demux(
     save_step_dat_motion_par: int = 1,
     save_step_dat_cluster_par: int = 100,
     save_step_dat_deformation_par: int = 100,
+    save_step_dat_local_order_par: int = 1000,
     save_step_ovito: int = 1,
 ):
     """Create an OutputDemux object with the requested output types."""
@@ -2429,6 +3178,7 @@ def create_output_demux(
         "dat_motion_par": DatOutput_motion_parameters,
         "dat_cluster_par": DatOutput_cluster_parameters,
         "dat_deformation_par": DatOutput_deformation_parameters,
+        "dat_local_order_par": DatOutput_local_order_parameters,
         "ovito": OvitoOutput,
         "df": DfOutput,
     }
@@ -2473,6 +3223,14 @@ def create_output_demux(
                         culture_name,
                         output_dir,
                         save_step_dat_deformation_par,
+                    )
+                )
+            elif out == "dat_local_order_par":
+                outputs.append(
+                    output_types[out](
+                        culture_name=culture_name,
+                        output_dir=output_dir,
+                        raw_save_step=save_step_dat_local_order_par,
                     )
                 )
             elif out == "ovito":
