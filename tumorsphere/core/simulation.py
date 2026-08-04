@@ -490,6 +490,244 @@ class Simulation:
 
         return positions
 
+    def select_triangular_lattice_positions(
+        self,
+        lattice_positions: np.ndarray,
+        geometry: dict,
+        target_density: Optional[float] = None,
+        number_of_removed_cells: Optional[int] = None,
+        rng: Optional[np.random.Generator] = None,
+    ) -> dict:
+        """
+        Select the occupied sites of a triangular lattice after introducing
+        random vacancies.
+
+        The final configuration can be specified either through a target
+        packing fraction or through the number of sites to remove. Exactly
+        one of these two arguments must be provided.
+
+        Parameters
+        ----------
+        lattice_positions : np.ndarray
+            Positions of all sites in the complete lattice. Its shape must
+            be (reference_number_of_cells, 3).
+
+        geometry : dict
+            Geometry returned by
+            calculate_triangular_lattice_geometry().
+
+        target_density : float, optional
+            Requested packing fraction after removing lattice sites.
+
+        number_of_removed_cells : int, optional
+            Number of sites to remove from the complete lattice.
+
+        rng : numpy.random.Generator, optional
+            Random number generator used to select the vacancies. If None,
+            the Simulation random number generator is used.
+
+        Returns
+        -------
+        selection : dict
+            Dictionary containing the occupied positions, occupied and
+            vacant indices, final number of cells and actual density.
+        """
+        # Make sure that only the density or the number of cells to removed
+        # was provided
+        target_density_was_provided = (
+            target_density is not None
+        )
+
+        number_removed_was_provided = (
+            number_of_removed_cells is not None
+        )
+
+        if (
+            target_density_was_provided
+            == number_removed_was_provided
+        ):
+            raise ValueError(
+                "Provide exactly one of target_density or "
+                "number_of_removed_cells."
+            )
+
+        if rng is None:
+            rng = self.rng
+
+        # Take the data from the lattice geometry
+        reference_number_of_cells = int(
+            geometry["reference_number_of_cells"]
+        )
+
+        side = float(
+            geometry["side"]
+        )
+
+        full_density = float(
+            geometry["full_density"]
+        )
+
+        expected_shape = (
+            reference_number_of_cells,
+            3,
+        )
+
+        if lattice_positions.shape != expected_shape:
+            raise ValueError(
+                "lattice_positions must have shape "
+                f"{expected_shape}, but received "
+                f"{lattice_positions.shape}."
+            )
+
+        cell_area = (
+            np.pi
+            * self.cell_radius**2
+        )
+
+        # Analyzed the case in which the target density was provided
+        if target_density_was_provided:
+            target_density = float(
+                target_density
+            )
+
+            if target_density <= 0:
+                raise ValueError(
+                    "target_density must be positive."
+                )
+
+            if (
+                target_density > full_density
+                and not np.isclose(
+                    target_density,
+                    full_density,
+                )
+            ):
+                raise ValueError(
+                    "The requested density is larger than the "
+                    "density of the complete lattice. "
+                    f"Requested density: {target_density:.6f}. "
+                    f"Maximum available density: "
+                    f"{full_density:.6f}."
+                )
+
+            number_of_cells = int(
+                np.rint(
+                    (
+                        target_density
+                        * side**2
+                    )
+                    / cell_area
+                )
+            )
+
+            # Protect against small floating-point differences when the
+            # requested density is equal to the complete-lattice density.
+            number_of_cells = min(
+                number_of_cells,
+                reference_number_of_cells,
+            )
+
+            if number_of_cells <= 0:
+                raise ValueError(
+                    "The requested density produces no occupied sites."
+                )
+
+            number_of_removed_cells = (
+                reference_number_of_cells
+                - number_of_cells
+            )
+
+        # Analyzed the case in which the number of removed cells was provided
+        else:
+            if not isinstance(
+                number_of_removed_cells,
+                (int, np.integer),
+            ):
+                raise TypeError(
+                    "number_of_removed_cells must be an integer."
+                )
+
+            number_of_removed_cells = int(
+                number_of_removed_cells
+            )
+
+            if not (
+                0
+                <= number_of_removed_cells
+                < reference_number_of_cells
+            ):
+                raise ValueError(
+                    "number_of_removed_cells must satisfy "
+                    "0 <= number_of_removed_cells "
+                    "< reference_number_of_cells."
+                )
+
+            number_of_cells = (
+                reference_number_of_cells
+                - number_of_removed_cells
+            )
+
+        # For each case, take all the indices
+        all_indices = np.arange(
+            reference_number_of_cells,
+            dtype=int,
+        )
+
+        # Take the indices to be vacant
+        if number_of_removed_cells == 0:
+            vacant_indices = np.empty(
+                0,
+                dtype=int,
+            )
+
+        else:
+            vacant_indices = rng.choice(
+                reference_number_of_cells,
+                size=number_of_removed_cells,
+                replace=False,
+            )
+
+            vacant_indices = np.sort(
+                vacant_indices
+            )
+
+        # Applied a mask to the geometry to have vacants
+        occupied_mask = np.ones(
+            reference_number_of_cells,
+            dtype=bool,
+        )
+
+        occupied_mask[
+            vacant_indices
+        ] = False
+
+        occupied_indices = all_indices[
+            occupied_mask
+        ]
+
+        occupied_positions = lattice_positions[
+            occupied_indices
+        ].copy()
+
+        actual_density = (
+            number_of_cells
+            * cell_area
+            / side**2
+        )
+
+        return {
+            "positions": occupied_positions,
+            "occupied_indices": occupied_indices,
+            "vacant_indices": vacant_indices,
+            "number_of_cells": number_of_cells,
+            "number_of_removed_cells": (
+                number_of_removed_cells
+            ),
+            "target_density": target_density,
+            "actual_density": actual_density,
+            "full_density": full_density,
+        }
+
     def simulate_single_culture(
         self,
         sql: bool = True,
