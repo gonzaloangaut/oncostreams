@@ -366,6 +366,130 @@ class Simulation:
             "full_density": full_density,
         }
 
+    def generate_triangular_lattice_positions(
+        self,
+        geometry: dict,
+    ) -> np.ndarray:
+        """
+        Generate all positions of the approximately triangular lattice.
+
+        Rows alternate between two horizontal offsets. The positions are
+        centered inside the square periodic box.
+
+        Parameters
+        ----------
+        geometry : dict
+            Geometry returned by
+            calculate_triangular_lattice_geometry().
+
+        Returns
+        -------
+        positions : np.ndarray
+            Array with shape (reference_number_of_cells, 3).
+        """
+        number_of_columns = int(
+            geometry["number_of_columns"]
+        )
+
+        number_of_rows = int(
+            geometry["number_of_rows"]
+        )
+
+        reference_number_of_cells = int(
+            geometry["reference_number_of_cells"]
+        )
+
+        side = float(
+            geometry["side"]
+        )
+
+        spacing_x = float(
+            geometry["spacing_x"]
+        )
+
+        spacing_y = float(
+            geometry["spacing_y"]
+        )
+
+        expected_number_of_cells = (
+            number_of_columns
+            * number_of_rows
+        )
+
+        if (
+            reference_number_of_cells
+            != expected_number_of_cells
+        ):
+            raise ValueError(
+                "reference_number_of_cells must be equal to "
+                "number_of_columns * number_of_rows."
+            )
+
+        # Row-major ordering:
+        # row 0: columns 0, 1, ..., n_x - 1
+        # row 1: columns 0, 1, ..., n_x - 1
+        # ...
+        row_indices = np.repeat(
+            np.arange(
+                number_of_rows,
+                dtype=int,
+            ),
+            number_of_columns,
+        )
+
+        column_indices = np.tile(
+            np.arange(
+                number_of_columns,
+                dtype=int,
+            ),
+            number_of_rows,
+        )
+
+        # Odd rows are shifted by half a horizontal spacing
+        horizontal_offsets = (
+            0.5
+            * (
+                row_indices
+                % 2
+            )
+        )
+
+        x_positions = (
+            (
+                column_indices
+                + 0.5
+                + horizontal_offsets
+            )
+            * spacing_x
+        )
+
+        # The modulo is needed because the final point of an odd row
+        # can coincide with the right periodic boundary
+        x_positions = np.mod(
+            x_positions,
+            side,
+        )
+
+        y_positions = (
+            row_indices
+            + 0.5
+        ) * spacing_y
+
+        z_positions = np.zeros(
+            reference_number_of_cells,
+            dtype=float,
+        )
+
+        positions = np.column_stack(
+            (
+                x_positions,
+                y_positions,
+                z_positions,
+            )
+        )
+
+        return positions
+
     def simulate_single_culture(
         self,
         sql: bool = True,
