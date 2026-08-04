@@ -225,6 +225,147 @@ class Simulation:
             bounds = np.sqrt(number_of_cells * cell_area / density)
             return bounds
 
+    def calculate_triangular_lattice_geometry(
+        self,
+        requested_number_of_cells: int,
+    ) -> dict:
+        """
+        Calculate the geometry of an approximately triangular lattice
+        contained in a square periodic box.
+
+        The requested number of cells is interpreted as an approximate
+        reference size. The actual number of lattice sites is
+
+            reference_number_of_cells
+                = number_of_columns * number_of_rows.
+
+        The number of rows is chosen as the closest even integer to the
+        triangular-lattice estimate. The number of columns is then chosen
+        so that the natural rectangular lattice is approximately square.
+
+        The square side is the maximum between the natural lattice width
+        and height. Therefore, the lattice is never compressed and no
+        geometrical overlaps are introduced.
+
+        Parameters
+        ----------
+        requested_number_of_cells : int
+            Approximate number of sites requested by the user.
+
+        Returns
+        -------
+        geometry : dict
+            Dictionary containing the lattice dimensions, square side,
+            spacings and full-lattice packing fraction.
+        """
+        if requested_number_of_cells <= 0:
+            raise ValueError(
+                "requested_number_of_cells must be positive."
+            )
+
+        # Estimate the number of rows from
+        # N ≈ (sqrt(3) / 2) * n_y**2
+        estimated_number_of_rows = np.sqrt(
+            (
+                2
+                * requested_number_of_cells
+            )
+            / np.sqrt(3)
+        )
+
+        # Choose the closest even number of rows
+        number_of_rows = max(
+            2,
+            2
+            * int(
+                np.round(
+                    estimated_number_of_rows / 2
+                )
+            ),
+        )
+
+        # Choose the number of columns so that
+        # n_x / n_y ≈ sqrt(3) / 2
+        number_of_columns = max(
+            1,
+            int(
+                np.round(
+                    (
+                        np.sqrt(3)
+                        / 2
+                    )
+                    * number_of_rows
+                )
+            ),
+        )
+
+        # Now we calculate the reference number of cells
+        reference_number_of_cells = (
+            number_of_columns
+            * number_of_rows
+        )
+
+        # Natural dimensions of a compact triangular lattice
+        natural_width = (
+            2
+            * self.cell_radius
+            * number_of_columns
+        )
+
+        natural_height = (
+            np.sqrt(3)
+            * self.cell_radius
+            * number_of_rows
+        )
+
+        # Use the longest natural dimension as the square side
+        side = max(
+            natural_width,
+            natural_height,
+        )
+
+        spacing_x = (
+            side
+            / number_of_columns
+        )
+
+        spacing_y = (
+            side
+            / number_of_rows
+        )
+
+        cell_area = (
+            np.pi
+            * self.cell_radius**2
+        )
+
+        full_density = (
+            reference_number_of_cells
+            * cell_area
+            / side**2
+        )
+
+        return {
+            "requested_number_of_cells": (
+                requested_number_of_cells
+            ),
+            "number_of_columns": (
+                number_of_columns
+            ),
+            "number_of_rows": (
+                number_of_rows
+            ),
+            "reference_number_of_cells": (
+                reference_number_of_cells
+            ),
+            "natural_width": natural_width,
+            "natural_height": natural_height,
+            "side": side,
+            "spacing_x": spacing_x,
+            "spacing_y": spacing_y,
+            "full_density": full_density,
+        }
+
     def simulate_single_culture(
         self,
         sql: bool = True,
