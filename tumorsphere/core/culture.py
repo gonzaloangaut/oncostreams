@@ -8,8 +8,13 @@ Classes:
 
 # import os
 from datetime import datetime
-from typing import Set, Dict, List, Tuple
-
+from typing import (
+    Set,
+    Dict,
+    List,
+    Tuple,
+    Optional,
+)
 
 import pandas as pd
 import numpy as np
@@ -166,6 +171,8 @@ class Culture:
         cell_speed_max: float = 1,
         delta_aspect_ratio: float = 0.1,
         trabajo_final: bool = False,
+        initialization_mode: str = "random",
+        initial_positions: Optional[np.ndarray] = None,
     ):
         """
         Initialize a new culture of cells.
@@ -229,7 +236,10 @@ class Culture:
             delta_aspect_ratio = aspect_ratio_max - 1
         trabajo_final : bool
             Flag to determine wether to use or not mechanism of the TFG.
-
+        initialization_mode: str
+            String to determine the initial conditions to use.
+        initial_positions: Optional[np.ndarray] = None
+            Initial positions for the case of triangular lattice.
 
         Attributes
         ----------
@@ -369,6 +379,18 @@ class Culture:
         self.side = self.grid.bounds
         # and calculation of the cells_area given the radius
         self.cell_area = np.pi*self.cell_radius**2
+
+        # Initial-condition protocol
+        self.initialization_mode = initialization_mode
+
+        if initial_positions is None:
+            self.initial_positions = None
+
+        else:
+            self.initial_positions = np.asarray(
+                initial_positions,
+                dtype=float,
+            ).copy()
 
     # ----------------database related behavior----------------
 
@@ -1648,56 +1670,95 @@ class Culture:
 
             # We add all the cells in the case of movement
             if self.movement:
-                # Calculate the number of elongated cells
-                n_elongated = int(self.initial_number_of_cells * self.initial_fraction_elongated)
-                # Choose random indices for the elongated cells
-                elongated_indices = self.rng.choice(
-                    self.initial_number_of_cells,
-                    size=n_elongated,
-                    replace=False,
+                # Calculate the number of initially elongated cells
+                number_of_elongated_cells = int(
+                    self.initial_number_of_cells
+                    * self.initial_fraction_elongated
                 )
 
+                # Store the elongated indices in a boolean mask
                 elongated_mask = np.zeros(
                     self.initial_number_of_cells,
                     dtype=bool,
                 )
 
-                elongated_mask[
-                    elongated_indices
-                ] = True
+                # Take the elongated cells
+                if number_of_elongated_cells > 0:
+                    elongated_indices = self.rng.choice(
+                        self.initial_number_of_cells,
+                        size=number_of_elongated_cells,
+                        replace=False,
+                    )
 
-                for i in range(
+                    elongated_mask[
+                        elongated_indices
+                    ] = True
+
+                # Define the parameters if the cell is round or elongated
+                for cell_index in range(
                     self.initial_number_of_cells
                 ):
-                    if elongated_mask[i]:
+                    if elongated_mask[cell_index]:
                         phi = self.rng.uniform(
                             low=0,
                             high=2 * np.pi,
                         )
+
                         aspect_ratio = (
                             self.aspect_ratio_max
                         )
+
                     else:
                         phi = (
                             0
-                            if self.initial_aspect_ratio == 1
+                            if np.isclose(
+                                self.initial_aspect_ratio,
+                                1.0,
+                            )
                             else self.rng.uniform(
                                 low=0,
                                 high=2 * np.pi,
                             )
                         )
+
                         aspect_ratio = (
                             self.initial_aspect_ratio
                         )
 
+                    # Take the positions of the cells depending on the
+                    # initialization mode
+                    if (
+                        self.initialization_mode
+                        == "random"
+                    ):
+                        position = np.array(
+                            [
+                                self.rng.uniform(
+                                    low=0,
+                                    high=self.side,
+                                ),
+                                self.rng.uniform(
+                                    low=0,
+                                    high=self.side,
+                                ),
+                                0,
+                            ],
+                            dtype=float,
+                        )
+
+                    else:
+                        position = (
+                            self.initial_positions[
+                                cell_index
+                            ].copy()
+                        )
+
                     Cell(
-                        position=np.array([
-                            self.rng.uniform(low=0, high=self.side),
-                            self.rng.uniform(low=0, high=self.side),
-                            0,
-                        ]),
+                        position=position,
                         culture=self,
-                        is_stem=self.first_cell_is_stem,
+                        is_stem=(
+                            self.first_cell_is_stem
+                        ),
                         phi=phi,
                         aspect_ratio=aspect_ratio,
                         parent_index=0,

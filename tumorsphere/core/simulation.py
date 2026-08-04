@@ -116,6 +116,8 @@ class Simulation:
         the simulation.
     trabajo_final : bool
         Flag to determine wether to use or not mechanism of the TFG.
+    initialization_mode: str
+        String to determine the initial conditions to use.
 
     Attributes
     ----------
@@ -167,6 +169,7 @@ class Simulation:
         cell_speed_max : float = 1,
         delta_aspect_ratio: float = 0.1,
         trabajo_final: bool = False,
+        initialization_mode: str = "random",
     ):
         # main simulation attributes
         self.forces = forces
@@ -196,6 +199,20 @@ class Simulation:
 
         # TFG 
         self.trabajo_final = trabajo_final
+
+        # Initialization mode
+        valid_initialization_modes = {
+            "random",
+            "triangular_vacancies",
+        }
+
+        if initialization_mode not in valid_initialization_modes:
+            raise ValueError(
+                "initialization_mode must be either "
+                "'random' or 'triangular_vacancies'."
+            )
+
+        self.initialization_mode = initialization_mode
 
         # dictionary storing the culture objects
         self.cultures = {}
@@ -948,6 +965,10 @@ def realization_name(
     bounds: Optional[float],
     repro: bool,
     moving: bool,
+    initialization_mode: str = "random",
+    reference_number_of_cells: Optional[int] = None,
+    actual_number_of_cells: Optional[int] = None,
+    actual_density: Optional[float] = None,
 ) -> str:
     """Return the name of the realization."""
     not_supported = not (repro or moving)
@@ -957,22 +978,74 @@ def realization_name(
             "Simulations that do not involve either reproduction or movement "
             "are not implemented."
         )
-
     name = "culture"
-    if repro:
-        name += f"_pd={pd}_ps={ps}"
-    if moving:
-        name += f"_initial_number_of_cells={nc}"
-        if not np.isclose(f_e, 0.0):
-            name += f"_initial_fraction_elongated={f_e}"
-        if rho is not None:
-            name += f"_density={rho}"
-        else:
-            name += f"_culture_bounds={bounds}"
-        name += f"_force={force_name}"
-    name += f"_rng_seed={seed}"
-    return name
 
+    if repro:
+        name += (
+            f"_pd={pd}"
+            f"_ps={ps}"
+        )
+
+    if moving:
+        if initialization_mode == "random":
+            name += (
+                f"_initial_nc={nc}"
+            )
+
+            if rho is not None:
+                name += (
+                    f"_density={rho:g}"
+                )
+            else:
+                name += (
+                    f"_bounds={bounds:g}"
+                )
+
+        elif (
+            initialization_mode
+            == "triangular_vacancies"
+        ):
+            name += (
+                f"_target_nc={nc}"
+            )
+
+            name += (
+                f"_reference_nc="
+                f"{reference_number_of_cells}"
+            )
+
+            name += (
+                f"_initial_nc="
+                f"{actual_number_of_cells}"
+            )
+
+            name += (
+                f"_target_density={rho:g}"
+            )
+
+            name += (
+                f"_density="
+                f"{actual_density:.6f}"
+            )
+
+        if not np.isclose(
+            f_e,
+            0.0,
+        ):
+            name += (
+                f"_initial_fraction_elongated="
+                f"{f_e:g}"
+            )
+
+        name += (
+            f"_force={force_name}"
+        )
+
+    name += (
+        f"_rng_seed={seed}"
+    )
+
+    return name
 
 def simulate_single_culture(
     args: Tuple[int, int, int, Simulation, List[str], str]
@@ -1026,18 +1099,162 @@ def simulate_single_culture(
         grid_torus,
     ) = args
 
-    # We compute the name of the realization
+    # Requested simulation parameters
+    requested_number_of_cells = int(
+        sim.initial_number_of_cells[f]
+    )
+
+    requested_density = (
+        float(sim.initial_density[g])
+        if sim.initial_density is not None
+        else None
+    )
+
+    # Default values for the random initialization
+    initial_positions = None
+
+    reference_number_of_cells = (
+        requested_number_of_cells
+    )
+
+    actual_number_of_cells = (
+        requested_number_of_cells
+    )
+
+    actual_density = requested_density
+
+    effective_stabilization_time = (
+        sim.stabilization_time
+    )
+
+    if (
+        sim.initialization_mode
+        == "triangular_vacancies"
+    ):
+        if requested_density is None:
+            raise ValueError(
+                "The triangular_vacancies initialization "
+                "requires initial_density."
+            )
+
+        if not np.isclose(
+            sim.initial_aspect_ratio,
+            1.0,
+        ):
+            raise ValueError(
+                "The triangular_vacancies initialization "
+                "requires initial_aspect_ratio = 1."
+            )
+
+        if not grid_torus:
+            raise ValueError(
+                "The triangular_vacancies initialization "
+                "requires periodic boundary conditions."
+            )
+        geometry = (
+            sim.calculate_triangular_lattice_geometry(
+                requested_number_of_cells=(
+                    requested_number_of_cells
+                ),
+            )
+        )
+
+        lattice_positions = (
+            sim.generate_triangular_lattice_positions(
+                geometry=geometry,
+            )
+        )
+
+        # Use an independent and reproducible RNG for the
+        # vacancy configuration of each parameter combination
+        vacancy_seed_sequence = np.random.SeedSequence(
+            [
+                int(seed),
+                int(k),
+                int(i),
+                int(f),
+                int(t),
+                int(g),
+                int(m),
+                1,
+            ]
+        )
+
+        vacancy_rng = np.random.default_rng(
+            vacancy_seed_sequence
+        )
+
+        selection = (
+            sim.select_triangular_lattice_positions(
+                lattice_positions=lattice_positions,
+                geometry=geometry,
+                target_density=requested_density,
+                rng=vacancy_rng,
+            )
+        )
+
+        culture_bounds = float(
+            geometry["side"]
+        )
+
+        initial_positions = selection[
+            "positions"
+        ]
+
+        reference_number_of_cells = int(
+            geometry[
+                "reference_number_of_cells"
+            ]
+        )
+
+        actual_number_of_cells = int(
+            selection["number_of_cells"]
+        )
+
+        actual_density = float(
+            selection["actual_density"]
+        )
+
+        # Deformation is enabled from the first dynamic step.
+        effective_stabilization_time = 0
+
+    else:
+        if requested_density is not None:
+            culture_bounds = (
+                sim.calculate_culture_bounds_from_density(
+                    number_of_cells=(
+                        requested_number_of_cells
+                    ),
+                    density=requested_density,
+                )
+            )
+        else:
+            culture_bounds = sim.culture_bounds
+
+
+    # We compute the name of the realization after preparing
+    # the initial condition.
     current_realization_name = realization_name(
         sim.prob_diff[k],
         sim.prob_stem[i],
-        sim.initial_number_of_cells[f],
+        requested_number_of_cells,
         sim.initial_fraction_elongated[t],
-        sim.initial_density[g] if sim.initial_density is not None else None,
+        requested_density,
         seed,
         sim.forces[m].name(),
         culture_bounds,
         sim.reproduction,
         sim.movement,
+        initialization_mode=(
+            sim.initialization_mode
+        ),
+        reference_number_of_cells=(
+            reference_number_of_cells
+        ),
+        actual_number_of_cells=(
+            actual_number_of_cells
+        ),
+        actual_density=actual_density,
     )
 
     checkpoint_path_save = os.path.join(output_dir, "checkpoints", current_realization_name + ".pkl")
@@ -1081,14 +1298,6 @@ def simulate_single_culture(
             ),
             save_step_ovito=save_step_ovito,
         )
-        # We create the spatial hash grid object
-        if sim.initial_density is not None:
-            culture_bounds = sim.calculate_culture_bounds_from_density(
-                sim.initial_number_of_cells[f],
-                sim.initial_density[g],
-            )
-        else:
-            culture_bounds = sim.culture_bounds
 
         spatial_hash_grid = SpatialHashGrid(
             culture=None,
@@ -1101,7 +1310,7 @@ def simulate_single_culture(
         sim.cultures[current_realization_name] = Culture(
             output=output,
             force=sim.forces[m],
-            initial_number_of_cells=sim.initial_number_of_cells[f],
+            initial_number_of_cells=actual_number_of_cells,
             initial_fraction_elongated=sim.initial_fraction_elongated[t],
             grid=spatial_hash_grid,
             adjacency_threshold=sim.adjacency_threshold,
@@ -1116,7 +1325,7 @@ def simulate_single_culture(
             reproduction=sim.reproduction,
             movement=sim.movement,
             deformation=sim.deformation,
-            stabilization_time=sim.stabilization_time,
+            stabilization_time=effective_stabilization_time,
             overlap_threshold_ratio=sim.overlap_threshold_ratio,
             overlap_threshold_tfg=sim.overlap_threshold_tfg,
             delta_t=sim.delta_t,
@@ -1125,6 +1334,8 @@ def simulate_single_culture(
             cell_speed_max=sim.cell_speed_max,
             delta_aspect_ratio=sim.delta_aspect_ratio,
             trabajo_final=sim.trabajo_final,
+            initialization_mode=sim.initialization_mode,
+            initial_positions=initial_positions,
         )
         start_tic=0
     sim.cultures[current_realization_name].simulate(
