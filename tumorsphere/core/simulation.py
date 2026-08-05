@@ -1033,7 +1033,7 @@ def realization_name(
             0.0,
         ):
             name += (
-                f"_initial_fraction_elongated="
+                f"_initial_f_e="
                 f"{f_e:g}"
             )
 
@@ -1165,17 +1165,21 @@ def simulate_single_culture(
             )
         )
 
-        # Use an independent and reproducible RNG for the
-        # vacancy configuration of each parameter combination
+        # Encode the requested density as an integer for SeedSequence
+        density_seed = int(
+            np.rint(
+                requested_density
+                * 1_000_000_000
+            )
+        )
+
+        # Use the same vacancy configuration for equal realizations,
+        # sizes and densities across other parameter combinations
         vacancy_seed_sequence = np.random.SeedSequence(
             [
                 int(seed),
-                int(k),
-                int(i),
-                int(f),
-                int(t),
-                int(g),
-                int(m),
+                int(requested_number_of_cells),
+                density_seed,
                 1,
             ]
         )
