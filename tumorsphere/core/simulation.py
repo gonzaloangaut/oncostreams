@@ -74,6 +74,15 @@ class Simulation:
         The initial density of the cells in the culture. None by default. If
         specified, it overrides the `culture_bounds` parameter to adjust the
         for the requested density.
+    requested_number_of_cells : list of int, optional
+        Approximate number of sites used to construct the complete
+        triangular lattice.
+    requested_density : list of float, optional
+        Requested density after introducing vacancies. Mutually exclusive
+        with requested_number_of_removed_cells.
+    requested_number_of_removed_cells : list of int, optional
+        Number of sites removed from the complete triangular lattice.
+        Mutually exclusive with requested_density.
     reproduction : bool
         Whether the cells reproduces or not
     movement : bool

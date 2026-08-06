@@ -881,11 +881,7 @@ class Culture:
         cell = self.cells[cell_index]
 
         # Number of attempts
-        n_attempts = (
-            1
-            if self.trabajo_final
-            else self.cell_max_def_attempts
-        )
+        n_attempts = self.cell_max_def_attempts
 
         # we save the old attributes
         old_position = np.array(self.cell_positions[cell_index])
