@@ -157,6 +157,9 @@ class Simulation:
         initial_number_of_cells: Optional[List[int]] = [400],
         initial_fraction_elongated: Optional[List[float]] = [0.0],
         initial_density: Optional[List[float]] = None,
+        requested_number_of_cells: Optional[List[int]] = None,
+        requested_density: Optional[List[float]] = None,
+        requested_number_of_removed_cells: Optional[List[int]] = None,
         reproduction: bool = False,
         movement: bool = True,
         deformation: bool = True,
@@ -175,10 +178,22 @@ class Simulation:
         self.forces = forces
         self.initial_number_of_cells = initial_number_of_cells
         self.initial_fraction_elongated = initial_fraction_elongated
+        self.initial_density = initial_density
+
+        self.requested_number_of_cells = (
+            requested_number_of_cells
+        )
+
+        self.requested_density = (
+            requested_density
+        )
+
+        self.requested_number_of_removed_cells = (
+            requested_number_of_removed_cells
+        )
         self.reproduction = reproduction
         self.movement = movement
         self.deformation = deformation
-        self.initial_density = initial_density
         self.first_cell_is_stem = first_cell_is_stem
         self.prob_stem = prob_stem
         self.prob_diff = prob_diff
@@ -213,6 +228,51 @@ class Simulation:
             )
 
         self.initialization_mode = initialization_mode
+
+        if initialization_mode == "random":
+            if requested_number_of_cells is not None:
+                raise ValueError(
+                    "requested_number_of_cells is only available "
+                    "for triangular_vacancies initialization."
+                )
+
+            if requested_density is not None:
+                raise ValueError(
+                    "requested_density is only available "
+                    "for triangular_vacancies initialization."
+                )
+
+            if requested_number_of_removed_cells is not None:
+                raise ValueError(
+                    "requested_number_of_removed_cells is only available "
+                    "for triangular_vacancies initialization."
+                )
+
+        else:
+            if requested_number_of_cells is None:
+                raise ValueError(
+                    "The triangular_vacancies initialization requires "
+                    "requested_number_of_cells."
+                )
+
+            density_was_provided = (
+                requested_density is not None
+            )
+
+            removed_cells_were_provided = (
+                requested_number_of_removed_cells
+                is not None
+            )
+
+            if (
+                density_was_provided
+                == removed_cells_were_provided
+            ):
+                raise ValueError(
+                    "For triangular_vacancies, provide exactly one "
+                    "of requested_density or "
+                    "requested_number_of_removed_cells."
+                )
 
         # dictionary storing the culture objects
         self.cultures = {}
@@ -911,6 +971,31 @@ class Simulation:
         if dat_local_order_par:
             outputs.append("dat_local_order_par")
 
+        # Choose the parameters depending on the initialization mode
+        if self.initialization_mode == "random":
+            number_of_cells_values = (
+                self.initial_number_of_cells
+            )
+
+            density_values = (
+                self.initial_density
+            )
+
+            removed_cells_values = None
+
+        else:
+            number_of_cells_values = (
+                self.requested_number_of_cells
+            )
+
+            density_values = (
+                self.requested_density
+            )
+
+            removed_cells_values = (
+                self.requested_number_of_removed_cells
+            )
+
         with mp.Pool(number_of_processes) as p:
             p.map(
                 simulate_single_culture,
@@ -921,6 +1006,7 @@ class Simulation:
                         f,
                         t,
                         g,
+                        r,
                         seeds[j],
                         self,
                         outputs,
@@ -941,11 +1027,16 @@ class Simulation:
                     )
                     for k in range(len(self.prob_diff))
                     for i in range(len(self.prob_stem))
-                    for f in range(len(self.initial_number_of_cells))
+                    for f in range(len(number_of_cells_values))
                     for t in range(len(self.initial_fraction_elongated))
                     for g in (
-                        range(len(self.initial_density))
-                        if self.initial_density is not None
+                        range(len(density_values))
+                        if density_values is not None
+                        else [None]
+                    )
+                    for r in (
+                        range(len(removed_cells_values))
+                        if removed_cells_values is not None
                         else [None]
                     )
                     for j in range(self.num_of_realizations)
@@ -969,6 +1060,7 @@ def realization_name(
     reference_number_of_cells: Optional[int] = None,
     actual_number_of_cells: Optional[int] = None,
     actual_density: Optional[float] = None,
+    requested_number_of_removed_cells: Optional[int] = None,
 ) -> str:
     """Return the name of the realization."""
     not_supported = not (repro or moving)
@@ -1006,7 +1098,7 @@ def realization_name(
             == "triangular_vacancies"
         ):
             name += (
-                f"_target_nc={nc}"
+                f"_requested_nc={nc}"
             )
 
             name += (
@@ -1019,9 +1111,16 @@ def realization_name(
                 f"{actual_number_of_cells}"
             )
 
-            name += (
-                f"_target_density={rho:g}"
-            )
+            if rho is not None:
+                name += (
+                    f"_requested_density={rho:g}"
+                )
+
+            else:
+                name += (
+                    f"_removed_nc="
+                    f"{requested_number_of_removed_cells}"
+                )
 
             name += (
                 f"_density="
@@ -1080,6 +1179,7 @@ def simulate_single_culture(
         f,
         t,
         g,
+        r,
         seed,
         sim,
         outputs,
@@ -1099,29 +1199,54 @@ def simulate_single_culture(
         grid_torus,
     ) = args
 
-    # Requested simulation parameters
-    requested_number_of_cells = int(
-        sim.initial_number_of_cells[f]
-    )
+    # Requested simulation parameters depending on the initialization mode
+    if sim.initialization_mode == "random":
+        number_of_cells = int(
+            sim.initial_number_of_cells[f]
+        )
 
-    requested_density = (
-        float(sim.initial_density[g])
-        if sim.initial_density is not None
-        else None
-    )
+        density = (
+            float(sim.initial_density[g])
+            if sim.initial_density is not None
+            else None
+        )
 
+        number_of_removed_cells = None
+
+    else:
+        number_of_cells = int(
+            sim.requested_number_of_cells[f]
+        )
+
+        density = (
+            float(sim.requested_density[g])
+            if sim.requested_density is not None
+            else None
+        )
+
+        number_of_removed_cells = (
+            int(
+                sim.requested_number_of_removed_cells[r]
+            )
+            if (
+                sim.requested_number_of_removed_cells
+                is not None
+            )
+            else None
+        )
+        
     # Default values for the random initialization
-    initial_positions = None
-
     reference_number_of_cells = (
-        requested_number_of_cells
+        number_of_cells
     )
 
     actual_number_of_cells = (
-        requested_number_of_cells
+        number_of_cells
     )
 
-    actual_density = requested_density
+    actual_density = density
+
+    initial_positions = None
 
     effective_stabilization_time = (
         sim.stabilization_time
@@ -1131,12 +1256,6 @@ def simulate_single_culture(
         sim.initialization_mode
         == "triangular_vacancies"
     ):
-        if requested_density is None:
-            raise ValueError(
-                "The triangular_vacancies initialization "
-                "requires initial_density."
-            )
-
         if not np.isclose(
             sim.initial_aspect_ratio,
             1.0,
@@ -1154,7 +1273,7 @@ def simulate_single_culture(
         geometry = (
             sim.calculate_triangular_lattice_geometry(
                 requested_number_of_cells=(
-                    requested_number_of_cells
+                    number_of_cells
                 ),
             )
         )
@@ -1165,21 +1284,32 @@ def simulate_single_culture(
             )
         )
 
-        # Encode the requested density as an integer for SeedSequence
-        density_seed = int(
-            np.rint(
-                requested_density
-                * 1_000_000_000
+        # Encode the vacancy-control parameter for SeedSequence
+        if density is not None:
+            vacancy_control_type = 0
+
+            vacancy_control_value = int(
+                np.rint(
+                    density
+                    * 1_000_000_000
+                )
             )
-        )
+
+        else:
+            vacancy_control_type = 1
+
+            vacancy_control_value = int(
+                number_of_removed_cells
+            )
 
         # Use the same vacancy configuration for equal realizations,
         # sizes and densities across other parameter combinations
         vacancy_seed_sequence = np.random.SeedSequence(
             [
                 int(seed),
-                int(requested_number_of_cells),
-                density_seed,
+                int(number_of_cells),
+                vacancy_control_type,
+                vacancy_control_value,
                 1,
             ]
         )
@@ -1192,7 +1322,10 @@ def simulate_single_culture(
             sim.select_triangular_lattice_positions(
                 lattice_positions=lattice_positions,
                 geometry=geometry,
-                target_density=requested_density,
+                target_density=density,
+                number_of_removed_cells=(
+                    number_of_removed_cells
+                ),
                 rng=vacancy_rng,
             )
         )
@@ -1223,13 +1356,13 @@ def simulate_single_culture(
         effective_stabilization_time = 0
 
     else:
-        if requested_density is not None:
+        if density is not None:
             culture_bounds = (
                 sim.calculate_culture_bounds_from_density(
                     number_of_cells=(
-                        requested_number_of_cells
+                        number_of_cells
                     ),
-                    density=requested_density,
+                    density=density,
                 )
             )
         else:
@@ -1241,9 +1374,9 @@ def simulate_single_culture(
     current_realization_name = realization_name(
         sim.prob_diff[k],
         sim.prob_stem[i],
-        requested_number_of_cells,
+        number_of_cells,
         sim.initial_fraction_elongated[t],
-        requested_density,
+        density,
         seed,
         sim.forces[m].name(),
         culture_bounds,
@@ -1259,6 +1392,9 @@ def simulate_single_culture(
             actual_number_of_cells
         ),
         actual_density=actual_density,
+        requested_number_of_removed_cells=(
+            number_of_removed_cells
+        ),
     )
 
     checkpoint_path_save = os.path.join(output_dir, "checkpoints", current_realization_name + ".pkl")
