@@ -1919,7 +1919,7 @@ class Culture:
                 final_tic=num_times,
             )
             
-            if checkpoint_path and i % 500 == 0:
+            if checkpoint_path and i % 100 == 0:
                 os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
                 with open(checkpoint_path, "wb") as f:
                     #pickle.dump((self, i), f)
