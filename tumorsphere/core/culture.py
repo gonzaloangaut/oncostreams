@@ -173,6 +173,9 @@ class Culture:
         trabajo_final: bool = False,
         initialization_mode: str = "random",
         initial_positions: Optional[np.ndarray] = None,
+        deformation_warmup_steps: int = 5_000,
+        deformation_probe_steps: int = 1_000,
+        elongation_sleep_steps: int = 5_000,
     ):
         """
         Initialize a new culture of cells.
@@ -240,6 +243,16 @@ class Culture:
             String to determine the initial conditions to use.
         initial_positions: Optional[np.ndarray] = None
             Initial positions for the case of triangular lattice.
+        deformation_warmup_steps : int
+            Number of initial simulation steps during which elongation
+            attempts are always enabled.
+        deformation_probe_steps : int
+            Number of consecutive active steps without any successful
+            deformation required to temporarily disable elongation attempts.
+        elongation_sleep_steps : int
+            Number of steps during which elongation attempts are disabled.
+            Contractions remain active and immediately reactivate elongation
+            from the following timestep if one occurs.
 
         Attributes
         ----------
@@ -325,7 +338,24 @@ class Culture:
         self.cell_speed_max = cell_speed_max
         self.stabilization_time = stabilization_time
 
-        # TFG 
+        # Adaptive elongation timing
+        self.deformation_warmup_steps = (
+            deformation_warmup_steps
+        )
+
+        self.deformation_probe_steps = (
+            deformation_probe_steps
+        )
+
+        self.elongation_sleep_steps = (
+            elongation_sleep_steps
+        )
+
+        # Adaptive elongation state
+        self.steps_without_deformation = 0
+        self.elongation_sleep_remaining = 0
+
+        # TFG
         self.trabajo_final = trabajo_final
 
         # delta aspect ratio
@@ -1802,9 +1832,18 @@ class Culture:
                     self.reproduce(cell_index=index, tic=i)
 
             if self.movement:
-                # Wait for the system to stabilize before deformation
-                if i>self.stabilization_time and self.deformation:
-                    # we get a permuted copy of the cells list
+                # We wait for the system to stabilize if neccessary
+                if i > self.stabilization_time and self.deformation:
+                    # Boolean to see if the elongation is sleeping
+                    elongation_is_sleeping = (
+                        i > self.deformation_warmup_steps
+                        and self.elongation_sleep_remaining > 0
+                    )
+
+                    # Boolean to determine if any deformation occurred
+                    deformation_occurred = False
+
+                    # Run for every cell
                     active_cell_indexes = self.rng.permutation(
                         self.active_cell_indexes
                     )
@@ -1816,29 +1855,42 @@ class Culture:
                             cell.aspect_ratio,
                             1.0,
                         ):
-                            self.deformation_event_counts[
-                                "round_elongation_attempts"
-                            ] += 1
 
-                            success = self.elongate_from_round(
-                                index
-                            )
-
-                            if success:
+                            # Round cells only try to elongate while elongation is active
+                            if not elongation_is_sleeping:
+                                # Add to the count of deformation events
                                 self.deformation_event_counts[
-                                    "round_elongation_successes"
+                                    "round_elongation_attempts"
                                 ] += 1
 
+                                # Try to elongate it
+                                success = self.elongate_from_round(
+                                    index
+                                )
+
+                                if success:
+                                    # Deformation succesful
+                                    deformation_occurred = True
+
+                                    self.deformation_event_counts[
+                                        "round_elongation_successes"
+                                    ] += 1
+
                         else:
+                            # Contractions are always allowed, including during sleep
                             success = self.shrink_from_elliptical(
                                 index
                             )
 
                             if success:
+                                # Deformation succesful
+                                deformation_occurred = True
+
                                 self.deformation_event_counts[
                                     "contraction_events"
                                 ] += 1
 
+                                # Check if the final state is a round cell
                                 if np.isclose(
                                     cell.aspect_ratio,
                                     1.0,
@@ -1847,7 +1899,13 @@ class Culture:
                                         "contraction_to_round_events"
                                     ] += 1
 
-                            elif cell.aspect_ratio < self.aspect_ratio_max:
+                            # If the cell cant shrink, it tries to elongate
+                            elif (
+                                not elongation_is_sleeping
+                                and cell.aspect_ratio
+                                < self.aspect_ratio_max
+                            ):
+
                                 self.deformation_event_counts[
                                     "elliptical_elongation_attempts"
                                 ] += 1
@@ -1857,9 +1915,43 @@ class Culture:
                                 )
 
                                 if success:
+                                    # Deformation succesful
+                                    deformation_occurred = True
+
                                     self.deformation_event_counts[
                                         "elliptical_elongation_successes"
                                     ] += 1
+
+                    # Adaptive elongation starts only after the initial warmup
+                    if i > self.deformation_warmup_steps:
+
+                        if elongation_is_sleeping:
+                            # A contraction changes the geometry, so elongation
+                            # is reactivated from the next timestep
+                            if deformation_occurred:
+                                self.elongation_sleep_remaining = 0
+                                self.steps_without_deformation = 0
+
+                            else:
+                                self.elongation_sleep_remaining -= 1
+
+                        else:
+                            # In the non sleeping phase, we see if there is
+                            # a deformation
+                            if deformation_occurred:
+                                self.steps_without_deformation = 0
+                            else:
+                                self.steps_without_deformation += 1
+                            # Deactivation of deformation
+                            if (
+                                self.steps_without_deformation
+                                >= self.deformation_probe_steps
+                            ):
+                                self.elongation_sleep_remaining = (
+                                    self.elongation_sleep_steps
+                                )
+
+                                self.steps_without_deformation = 0
 
                 # We initialize the change in the position and angle of all cells
                 dif_positions = np.zeros(

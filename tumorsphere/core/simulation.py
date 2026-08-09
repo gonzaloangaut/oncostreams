@@ -127,6 +127,16 @@ class Simulation:
         Flag to determine wether to use or not mechanism of the TFG.
     initialization_mode: str
         String to determine the initial conditions to use.
+    deformation_warmup_steps : int
+        Number of initial simulation steps during which elongation
+        attempts are always enabled.
+    deformation_probe_steps : int
+        Number of consecutive active steps without any successful
+        deformation required to temporarily disable elongation attempts.
+    elongation_sleep_steps : int
+        Number of steps during which elongation attempts are disabled.
+        Contractions remain active and immediately reactivate elongation
+        from the following timestep if one occurs.
 
     Attributes
     ----------
@@ -182,6 +192,9 @@ class Simulation:
         delta_aspect_ratio: float = 0.1,
         trabajo_final: bool = False,
         initialization_mode: str = "random",
+        deformation_warmup_steps: int = 5_000,
+        deformation_probe_steps: int = 1_000,
+        elongation_sleep_steps: int = 5_000,
     ):
         # main simulation attributes
         self.forces = forces
@@ -224,6 +237,18 @@ class Simulation:
         # TFG 
         self.trabajo_final = trabajo_final
 
+        # Adaptive elongation timing
+        self.deformation_warmup_steps = (
+            deformation_warmup_steps
+        )
+
+        self.deformation_probe_steps = (
+            deformation_probe_steps
+        )
+
+        self.elongation_sleep_steps = (
+            elongation_sleep_steps
+        )
         # Initialization mode
         valid_initialization_modes = {
             "random",
@@ -1485,6 +1510,15 @@ def simulate_single_culture(
             trabajo_final=sim.trabajo_final,
             initialization_mode=sim.initialization_mode,
             initial_positions=initial_positions,
+            deformation_warmup_steps=(
+                sim.deformation_warmup_steps
+            ),
+            deformation_probe_steps=(
+                sim.deformation_probe_steps
+            ),
+            elongation_sleep_steps=(
+                sim.elongation_sleep_steps
+            ),
         )
         start_tic=0
     sim.cultures[current_realization_name].simulate(
