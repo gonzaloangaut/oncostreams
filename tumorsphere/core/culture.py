@@ -176,6 +176,7 @@ class Culture:
         deformation_warmup_steps: int = 5_000,
         deformation_probe_steps: int = 1_000,
         elongation_sleep_steps: int = 5_000,
+        contraction_overlap_safety_ratio: Optional[float] = 0.8,
     ):
         """
         Initialize a new culture of cells.
@@ -253,6 +254,9 @@ class Culture:
             Number of steps during which elongation attempts are disabled.
             Contractions remain active and immediately reactivate elongation
             from the following timestep if one occurs.
+        contraction_overlap_safety_ratio : float or None
+            Maximum normalized overlap allowed after an instantaneous
+            contraction. Set to None to disable the safety check.
 
         Attributes
         ----------
@@ -332,6 +336,7 @@ class Culture:
         self.deformation = deformation
         self.overlap_threshold_ratio = overlap_threshold_ratio
         self.overlap_threshold_tfg = overlap_threshold_tfg
+        self.contraction_overlap_safety_ratio = contraction_overlap_safety_ratio
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
@@ -1134,6 +1139,57 @@ class Culture:
 
         return succesful_elongation
 
+    def _calculate_max_normalized_overlap(
+        self,
+        cell_index: int,
+    ) -> float:
+        """Return the largest normalized overlap around one cell.
+
+        The cell must already have the proposed shape when this method is
+        called.
+        """
+        # Find possible neighbors using the spatial hash grid
+        candidate_neighbors = [
+            neighbor_index
+            for neighbor_index in self.grid.find_neighbors(
+                position=self.cell_positions[cell_index],
+            )
+            if neighbor_index != cell_index
+        ]
+
+        if not candidate_neighbors:
+            return 0.0
+
+        # Calculate relative positions for all neighbors
+        relative_positions = self.calculate_relative_positions(
+            self.cell_positions[cell_index],
+            self.cell_positions[candidate_neighbors],
+        )
+
+        # Calculate overlaps and max overlaps
+        overlaps = self.calculate_overlaps(
+            cell_index=cell_index,
+            neighbor_indices=candidate_neighbors,
+            relative_positions=relative_positions,
+        )
+
+        # Calculate max overlaps
+        max_overlaps = self.calculate_max_overlaps(
+            cell_index=cell_index,
+            neighbor_indices=candidate_neighbors,
+        )
+
+        # Calculate normalized overlaps, avoiding division by zero
+        normalized_overlaps = np.divide(
+            overlaps,
+            max_overlaps,
+            out=np.zeros_like(overlaps),
+            where=max_overlaps > 0,
+        )
+
+        # Return the maximum normalized overlap
+        return float(np.max(normalized_overlaps))
+
     def shrink_from_elliptical(self, cell_index: int) -> bool:
         """If the cell is not round and its `shrink` attribute is True, it attempts to 
         shrink.
@@ -1149,23 +1205,51 @@ class Culture:
             True if the deformation was successful, False otherwise.
         """
         cell = self.cells[cell_index]
-        if cell.shrink == True:
-            # turn the cell back to round
-            old_aspect_ratio = cell.aspect_ratio
-            new_aspect_ratio = max(
-                old_aspect_ratio - self.delta_aspect_ratio,
-                1
+
+        if not cell.shrink:
+            return False
+
+        # Calculate the new aspect ratio after shrinking
+        old_aspect_ratio = cell.aspect_ratio
+        new_aspect_ratio = max(
+            old_aspect_ratio - self.delta_aspect_ratio,
+            1,
+        )
+
+        # Temporarily apply the proposed shape
+        cell.set_aspect_ratio(new_aspect_ratio)
+
+        # Check if the safety check is enabled
+        safety_check_is_enabled = (
+            self.trabajo_final
+            and self.contraction_overlap_safety_ratio is not None
+        )
+
+        # If the safety check is enabled, calculate the maximum normalized overlap
+        if safety_check_is_enabled:
+            max_normalized_overlap = (
+                self._calculate_max_normalized_overlap(
+                    cell_index=cell_index,
+                )
             )
-            cell.set_aspect_ratio(new_aspect_ratio)
-            if np.isclose(new_aspect_ratio, 1):
-                self.cell_phies[cell_index] = 0
-                self.update_nematic_tensors([cell_index])
-            # and the shrink turns back to False 
-            cell.shrink = False
-            succesful_shrinking = True
-        else:
-            succesful_shrinking = False
-        return succesful_shrinking
+
+            if (
+                max_normalized_overlap
+                > self.contraction_overlap_safety_ratio
+            ):
+                # Reject the contraction and restore the elongated shape.
+                cell.set_aspect_ratio(old_aspect_ratio)
+                cell.shrink = False
+                return False
+
+        # If the safety check is not enabled or the contraction is safe, shrink
+        if np.isclose(new_aspect_ratio, 1):
+            self.cell_phies[cell_index] = 0
+            self.update_nematic_tensors([cell_index])
+
+        # Finalize the contraction and reset the shrink attribute
+        cell.shrink = False
+        return True
 
     def _get_significant_neighbors(
         self,
