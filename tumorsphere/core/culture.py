@@ -893,6 +893,7 @@ class Culture:
             "elliptical_elongation_successes": 0,
             "contraction_events": 0,
             "contraction_to_round_events": 0,
+            "contraction_overlap_rejections": 0,
         }
 
 
@@ -1237,7 +1238,18 @@ class Culture:
                 max_normalized_overlap
                 > self.contraction_overlap_safety_ratio
             ):
-                # Reject the contraction and restore the elongated shape.
+                # Record a contraction rejected by the overlap safety check
+                self.deformation_event_counts[
+                    "contraction_overlap_rejections"
+                ] = (
+                    self.deformation_event_counts.get(
+                        "contraction_overlap_rejections",
+                        0,
+                    )
+                    + 1
+                )
+
+                # Reject the contraction and restore the elongated shape
                 cell.set_aspect_ratio(old_aspect_ratio)
                 cell.shrink = False
                 return False

@@ -2842,7 +2842,8 @@ class DatOutput_deformation_parameters(
                 "elliptical_elongation_attempts,"
                 "elliptical_elongation_successes,"
                 "contraction_events,"
-                "contraction_to_round_events\n"
+                "contraction_to_round_events,"
+                "contraction_overlap_rejections\n"
             )
 
             datfile.write(
@@ -2854,7 +2855,8 @@ class DatOutput_deformation_parameters(
                 f"{event_counts['elliptical_elongation_attempts']},"
                 f"{event_counts['elliptical_elongation_successes']},"
                 f"{event_counts['contraction_events']},"
-                f"{event_counts['contraction_to_round_events']}\n"
+                f"{event_counts['contraction_to_round_events']},"
+                f"{event_counts.get('contraction_overlap_rejections', 0)}\n"
             )
 
 class OvitoOutput(TumorsphereOutput):
