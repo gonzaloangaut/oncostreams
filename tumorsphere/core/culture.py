@@ -176,7 +176,7 @@ class Culture:
         deformation_warmup_steps: int = 5_000,
         deformation_probe_steps: int = 1_000,
         elongation_sleep_steps: int = 5_000,
-        contraction_overlap_safety_ratio: Optional[float] = 0.8,
+        contraction_overlap_safety_ratio: Optional[float] = None,
     ):
         """
         Initialize a new culture of cells.

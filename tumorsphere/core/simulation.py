@@ -185,6 +185,7 @@ class Simulation:
         stabilization_time: int = 120,
         overlap_threshold_ratio: float = 0.35,
         overlap_threshold_tfg: float = 0.61,
+        contraction_overlap_safety_ratio: Optional[float] = None,
         delta_t: float = 0.05,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
@@ -228,6 +229,7 @@ class Simulation:
         self.stabilization_time = stabilization_time
         self.overlap_threshold_ratio = overlap_threshold_ratio
         self.overlap_threshold_tfg = overlap_threshold_tfg
+        self.contraction_overlap_safety_ratio = contraction_overlap_safety_ratio
         self.delta_t = delta_t
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
@@ -1502,6 +1504,7 @@ def simulate_single_culture(
             stabilization_time=effective_stabilization_time,
             overlap_threshold_ratio=sim.overlap_threshold_ratio,
             overlap_threshold_tfg=sim.overlap_threshold_tfg,
+            contraction_overlap_safety_ratio=sim.contraction_overlap_safety_ratio,
             delta_t=sim.delta_t,
             initial_aspect_ratio=sim.initial_aspect_ratio,
             aspect_ratio_max=sim.aspect_ratio_max,
