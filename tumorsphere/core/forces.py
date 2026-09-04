@@ -390,12 +390,21 @@ class Anisotropic_Grosmann(Force):
         noise_eta: float = None,
         d_phi: float = None,
         shrinking: bool = False,
+        lambda_core: float = 0.0,
     ):
         self.kRep = kRep
         self.bExp = bExp
         self.noise_eta = noise_eta
         self.d_phi = d_phi
         self.shrinking = shrinking
+        if (
+            not np.isfinite(lambda_core)
+            or not 0 <= lambda_core <= 1
+        ):
+            raise ValueError(
+                "lambda_core must be between 0 and 1."
+            )
+        self.lambda_core = float(lambda_core)
 
     def name(self):
         """
@@ -407,6 +416,8 @@ class Anisotropic_Grosmann(Force):
         name = f"Anisotropic_Grosmann_k={self.kRep:.2f}_gamma={self.bExp}"
         if (self.noise_eta is not None) or (self.d_phi is not None):
             name += f"_With_Noise"
+        if self.lambda_core > 0:
+            name +=f"_lambda_core={self.lambda_core:g}"
         if self.noise_eta is not None:
             name += f"_eta={self.noise_eta:.3f}"
         if self.d_phi is not None:
@@ -414,6 +425,39 @@ class Anisotropic_Grosmann(Force):
         if self.shrinking is True:
             name += f"_With_Shrinking"
         return name
+
+    def calculate_core_amplification(
+        self,
+        xi_power: float,
+    ) -> float:
+        """
+        Return the short-range amplification of the original interaction.
+
+        Parameters
+        ----------
+        xi_power : float
+            Normalized overlap raised to the interaction exponent,
+            xi**gamma.
+        """
+        if self.lambda_core == 0.0:
+            return 1.0
+
+        # Avoid division by zero if xi**gamma reaches one exactly
+        # or exceeds it slightly because of numerical roundoff.
+        xi_power_safe = np.clip(
+            xi_power,
+            0.0,
+            np.nextafter(1.0, 0.0),
+        )
+
+        # Return the amplification factor, 
+        # which is 1 + lambda_core * xi**gamma / (1 - xi**gamma)
+        return (
+            1.0
+            + self.lambda_core
+            * xi_power_safe
+            / (1.0 - xi_power_safe)
+        )
 
     def calculate_mobilities(
         self,
@@ -604,15 +648,31 @@ class Anisotropic_Grosmann(Force):
             # and now we can calculate xi
             xi = overlap/(4 * area**2 / (np.pi * np.sqrt(beta)))
 
-            # the kernel is: (k_rep = k, b_exp=gamma (from the paper))
+            # Compute the power of xi for the core amplification calculation
+            xi_power = xi**self.bExp
+
+            # Calculate the core amplification factor
+            core_amplification = (
+                self.calculate_core_amplification(
+                    xi_power=xi_power,
+                )
+            )
+
+            # Calculate the kernel with core amplification
             kernel = (
                 2
                 * self.kRep
                 * self.bExp
-                * xi**self.bExp
-                * ((cell.squared_diagonal + neighbor.squared_diagonal) / beta)
+                * xi_power
+                * (
+                    (
+                        cell.squared_diagonal
+                        + neighbor.squared_diagonal
+                    )
+                    / beta
+                )
+                * core_amplification
             )
-
             # finally we can calculate the force:
             force_2 = kernel * np.matmul(np.identity(3) - matrix_M, relative_pos)
 
