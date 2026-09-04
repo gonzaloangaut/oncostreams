@@ -404,6 +404,10 @@ class Culture:
         # Deformation events accumulated since the previous output
         self.reset_deformation_event_counts()
 
+        # Maximum normalized overlap evaluated during the current output interval
+        self.max_normalized_overlap_interval = 0.0
+        self.overlap_interval_start_tic = 1
+
         # First timestep included in the current deformation interval
         self.deformation_interval_start_tic = 1
 
@@ -1314,6 +1318,7 @@ class Culture:
     def _get_significant_neighbors(
         self,
         cell_index: int,
+        update_overlap_diagnostic: bool = False,
     ) -> np.ndarray:
         """
         Return the indices of cells that significantly interact with one cell.
@@ -1466,35 +1471,45 @@ class Culture:
             dtype=float,
         )
 
-        # A cell with no significant candidates has no interacting neighbors
+        # A cell with no candidate overlaps has no interacting neighbors
         if neighbor_indices.size == 0:
             return np.empty(
                 0,
                 dtype=int,
             )
 
+        # Calculate the maximum possible overlap for every candidate pair
+        max_overlaps = self.calculate_max_overlaps(
+            cell_index=cell_index,
+            neighbor_indices=neighbor_indices,
+        )
+
+        # Update the overlap diagnostic only during force evaluation
+        if update_overlap_diagnostic:
+            normalized_overlaps = np.divide(
+                overlaps,
+                max_overlaps,
+                out=np.zeros_like(overlaps),
+                where=max_overlaps > 0,
+            )
+
+            self.max_normalized_overlap_interval = max(
+                self.max_normalized_overlap_interval,
+                float(np.max(normalized_overlaps)),
+            )
+
         # Filter with the mask
         if self.trabajo_final:
-            significant_mask = (
-                overlaps
-                > self.overlap_threshold_tfg
+            significant_neighbors_mask = (
+                overlaps > self.overlap_threshold_tfg
             )
-
         else:
-            max_overlaps = self.calculate_max_overlaps(
-                cell_index,
-                neighbor_indices,
-            )
-
-            significant_mask = (
+            significant_neighbors_mask = (
                 overlaps
-                > (
-                    self.overlap_threshold_ratio
-                    * max_overlaps
-                )
+                > self.overlap_threshold_ratio * max_overlaps
             )
 
-        return neighbor_indices[significant_mask]
+        return neighbor_indices[significant_neighbors_mask]
 
     def interaction(self, cell_index: int, delta_t: float) -> Tuple[np.ndarray, float]:
         """The given cell interacts with others if they are close enough.
@@ -1523,9 +1538,9 @@ class Culture:
         significant_neighbors_indexes = (
             self._get_significant_neighbors(
                 cell_index=cell_index,
+                update_overlap_diagnostic=True,
             )
         )
-
         # Calculate interaction with final neighbors
         dif_position, dif_phi = self.force.calculate_interaction(
             self.cells,
@@ -1594,6 +1609,7 @@ class Culture:
             significant_neighbors = (
                 self._get_significant_neighbors(
                     cell_index=cell_index,
+                    update_overlap_diagnostic=False,
                 )
             )
 
@@ -1797,6 +1813,38 @@ class Culture:
         self.reset_deformation_event_counts()
 
         self.deformation_interval_start_tic = (
+            tic + 1
+        )
+
+    def _record_overlap_parameters_if_needed(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> None:
+        """
+        Record the maximum normalized overlap evaluated during the
+        current interval when required by the active outputs.
+
+        After recording, reset the maximum and begin a new interval.
+        """
+        if not self.output.should_record_overlap_parameters(
+            tic=tic,
+            final_tic=final_tic,
+        ):
+            return
+
+        self.output.record_overlap_parameters(
+            tic_start=self.overlap_interval_start_tic,
+            tic_end=tic,
+            final_tic=final_tic,
+            max_normalized_overlap=(
+                self.max_normalized_overlap_interval
+            ),
+        )
+
+        self.max_normalized_overlap_interval = 0.0
+
+        self.overlap_interval_start_tic = (
             tic + 1
         )
 
@@ -2151,6 +2199,13 @@ class Culture:
             # Save the deformation events accumulated during the
             # current recording interval.
             self._record_deformation_events_if_needed(
+                tic=i,
+                final_tic=num_times,
+            )
+
+            # Save the maximum normalized overlap evaluated during
+            # the current recording interval.
+            self._record_overlap_parameters_if_needed(
                 tic=i,
                 final_tic=num_times,
             )

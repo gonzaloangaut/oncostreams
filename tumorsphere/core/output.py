@@ -174,6 +174,28 @@ class TumorsphereOutput(ABC):
         """
         pass
 
+    def should_record_overlap_parameters(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return whether overlap diagnostics are required at this timestep.
+        """
+        return False
+
+    def record_overlap_parameters(
+        self,
+        tic_start: int,
+        tic_end: int,
+        final_tic: int,
+        max_normalized_overlap: float,
+    ) -> None:
+        """
+        Record overlap diagnostics accumulated during one time interval.
+        """
+        pass
+
 class OutputDemux(TumorsphereOutput):
     """Class managing multiple output objects and delegating method calls."""
 
@@ -384,6 +406,45 @@ class OutputDemux(TumorsphereOutput):
                     tic_end=tic_end,
                     final_tic=final_tic,
                     event_counts=event_counts,
+                )
+
+    def should_record_overlap_parameters(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return True if at least one output requires overlap diagnostics
+        at the current timestep.
+        """
+        return any(
+            result.should_record_overlap_parameters(
+                tic=tic,
+                final_tic=final_tic,
+            )
+            for result in self.result_list
+        )
+
+    def record_overlap_parameters(
+        self,
+        tic_start: int,
+        tic_end: int,
+        final_tic: int,
+        max_normalized_overlap: float,
+    ) -> None:
+        """
+        Delegate overlap recording only to outputs that require it.
+        """
+        for result in self.result_list:
+            if result.should_record_overlap_parameters(
+                tic=tic_end,
+                final_tic=final_tic,
+            ):
+                result.record_overlap_parameters(
+                    tic_start=tic_start,
+                    tic_end=tic_end,
+                    final_tic=final_tic,
+                    max_normalized_overlap=max_normalized_overlap,
                 )
 
 class SQLOutput(TumorsphereOutput):
@@ -2863,6 +2924,151 @@ class DatOutput_deformation_parameters(
                 f"{event_counts.get('max_contraction_accepted_overlap', 0.0)}\n"
             )
 
+class DatOutput_overlap_parameters(
+    TumorsphereOutput
+):
+    def __init__(
+        self,
+        culture_name,
+        output_dir=".",
+        save_step=100,
+    ):
+        self.culture_name = culture_name
+        self.output_dir = output_dir
+        self.save_step = save_step
+
+    def begin_culture(
+        self,
+        prob_stem,
+        prob_diff,
+        rng_seed,
+        simulation_start,
+        adjacency_threshold,
+        swap_probability,
+    ):
+        pass
+
+    def record_stemness(
+        self,
+        cell_index,
+        tic,
+        stemness,
+    ):
+        pass
+
+    def record_deactivation(
+        self,
+        cell_index,
+        tic,
+    ):
+        pass
+
+    def record_culture_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        cell_phies,
+        active_cell_indexes,
+        side,
+        cell_area,
+    ):
+        pass
+
+    def record_cell(
+        self,
+        index,
+        parent,
+        pos_x,
+        pos_y,
+        pos_z,
+        creation_time,
+        is_stem,
+    ):
+        pass
+
+    def record_final_state(
+        self,
+        tic,
+        cells,
+        cell_positions,
+        active_cell_indexes,
+    ):
+        pass
+
+    def should_record_overlap_parameters(
+        self,
+        tic: int,
+        final_tic: int,
+    ) -> bool:
+        """
+        Return True at the selected recording frequency and at the
+        final timestep.
+        """
+        return (
+            tic > 0
+            and (
+                np.mod(
+                    tic,
+                    self.save_step,
+                ) == 0
+                or tic == final_tic
+            )
+        )
+
+    def record_overlap_parameters(
+        self,
+        tic_start: int,
+        tic_end: int,
+        final_tic: int,
+        max_normalized_overlap: float,
+    ) -> None:
+        """
+        Record the maximum normalized overlap evaluated during one interval.
+        """
+        output_folder = os.path.join(
+            self.output_dir,
+            "dat_overlap_parameters",
+        )
+
+        os.makedirs(
+            output_folder,
+            exist_ok=True,
+        )
+
+        filename = os.path.join(
+            output_folder,
+            (
+                f"overlap_parameters_"
+                f"{self.culture_name}"
+                f"_step={tic_end:05}.dat"
+            ),
+        )
+
+        number_of_steps = (
+            tic_end
+            - tic_start
+            + 1
+        )
+
+        with open(
+            filename,
+            "w",
+        ) as datfile:
+            datfile.write(
+                "tic_start,"
+                "tic_end,"
+                "number_of_steps,"
+                "max_normalized_overlap\n"
+            )
+
+            datfile.write(
+                f"{tic_start},"
+                f"{tic_end},"
+                f"{number_of_steps},"
+                f"{max_normalized_overlap}\n"
+            )
+
 class OvitoOutput(TumorsphereOutput):
     """Class for handling output to a file for visualization in Ovito."""
 
@@ -3173,6 +3379,7 @@ def create_output_demux(
     save_step_dat_cluster_summary: int = 100,
     save_step_dat_cluster_raw: int = 1000,
     save_step_dat_deformation_par: int = 100,
+    save_step_dat_overlap_par: int = 100,
     save_step_dat_local_order_summary: int = 100,
     save_step_dat_local_order_raw: int = 1000,
     save_step_ovito: int = 1,
@@ -3186,6 +3393,7 @@ def create_output_demux(
         "dat_motion_par": DatOutput_motion_parameters,
         "dat_cluster_par": DatOutput_cluster_parameters,
         "dat_deformation_par": DatOutput_deformation_parameters,
+        "dat_overlap_par": DatOutput_overlap_parameters,
         "dat_local_order_par": DatOutput_local_order_parameters,
         "ovito": OvitoOutput,
         "df": DfOutput,
@@ -3232,6 +3440,14 @@ def create_output_demux(
                         culture_name,
                         output_dir,
                         save_step_dat_deformation_par,
+                    )
+                )
+            elif out == "dat_overlap_par":
+                outputs.append(
+                    output_types[out](
+                        culture_name,
+                        output_dir,
+                        save_step_dat_overlap_par,
                     )
                 )
             elif out == "dat_local_order_par":

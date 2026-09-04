@@ -850,6 +850,7 @@ class Simulation:
         dat_motion_par: bool = False,
         dat_cluster_par: bool = False,
         dat_deformation_par: bool = False,
+        dat_overlap_par: bool = False,
         dat_local_order_par: bool = False,
         ovito: bool = False,
         df: bool = False,
@@ -888,6 +889,8 @@ class Simulation:
             outputs.append("dat_cluster_par")
         if dat_deformation_par:
             outputs.append("dat_deformation_par")
+        if dat_overlap_par:
+            outputs.append("dat_overlap_par")
         if dat_local_order_par:
             outputs.append("dat_local_order_par")
 
@@ -940,12 +943,14 @@ class Simulation:
         dat_motion_par: bool = False,
         dat_cluster_par: bool = False,
         dat_deformation_par: bool = False,
+        dat_overlap_par: bool = False,
         dat_local_order_par: bool = False,
         save_step_dat_order_par: int = 100,
         save_step_dat_motion_par: int = 100,    
         save_step_dat_cluster_summary: int = 100,
         save_step_dat_cluster_raw: int = 1000,
         save_step_dat_deformation_par: int = 100,
+        save_step_dat_overlap_par: int = 100,
         save_step_dat_local_order_summary: int = 100,
         save_step_dat_local_order_raw: int = 1000,
         ovito: bool = False,
@@ -1004,6 +1009,8 @@ class Simulation:
             outputs.append("dat_cluster_par")
         if dat_deformation_par:
             outputs.append("dat_deformation_par")
+        if dat_overlap_par:
+            outputs.append("dat_overlap_par")
         if dat_local_order_par:
             outputs.append("dat_local_order_par")
 
@@ -1052,6 +1059,7 @@ class Simulation:
                         save_step_dat_cluster_summary,
                         save_step_dat_cluster_raw,
                         save_step_dat_deformation_par,
+                        save_step_dat_overlap_par,
                         save_step_dat_local_order_summary,
                         save_step_dat_local_order_raw,
                         save_step_ovito,
@@ -1225,6 +1233,7 @@ def simulate_single_culture(
         save_step_dat_cluster_summary,
         save_step_dat_cluster_raw,
         save_step_dat_deformation_par,
+        save_step_dat_overlap_par,
         save_step_dat_local_order_summary,
         save_step_dat_local_order_raw,
         save_step_ovito,
@@ -1465,6 +1474,9 @@ def simulate_single_culture(
             ),
             save_step_dat_deformation_par=(
                 save_step_dat_deformation_par
+            ),
+            save_step_dat_overlap_par=(
+                save_step_dat_overlap_par
             ),
             save_step_dat_local_order_summary=(
                 save_step_dat_local_order_summary
