@@ -894,8 +894,23 @@ class Culture:
             "contraction_events": 0,
             "contraction_to_round_events": 0,
             "contraction_overlap_rejections": 0,
+            "max_contraction_proposed_overlap": 0.0,
+            "max_contraction_accepted_overlap": 0.0,
         }
 
+    def _update_deformation_interval_max(
+        self,
+        key: str,
+        value: float,
+    ) -> None:
+        """Update one maximum accumulated during the output interval."""
+        self.deformation_event_counts[key] = max(
+            self.deformation_event_counts.get(
+                key,
+                0.0,
+            ),
+            float(value),
+        )
 
     def elongate_from_round(self, cell_index: int) -> bool:
         """If the cell is round, an angle is chosen randomly.
@@ -1191,75 +1206,108 @@ class Culture:
         # Return the maximum normalized overlap
         return float(np.max(normalized_overlaps))
 
-    def shrink_from_elliptical(self, cell_index: int) -> bool:
-        """If the cell is not round and its `shrink` attribute is True, it attempts to 
-        shrink.
+    def shrink_from_elliptical(
+        self,
+        cell_index: int,
+    ) -> bool:
+        """
+        Attempt to contract an elliptical cell.
+
+        The overlap introduced by the proposed contraction is always
+        measured. If a contraction overlap safety ratio is provided,
+        contractions that exceed it are rejected.
 
         Parameters
         ----------
         cell_index : int
-            The index of the cell.
+            Index of the cell.
 
         Returns
-        ----------
-        succesful_shrinking : bool
-            True if the deformation was successful, False otherwise.
+        -------
+        successful_shrinking : bool
+            True if the contraction was accepted, False otherwise.
         """
         cell = self.cells[cell_index]
 
+        # The force did not request a contraction
         if not cell.shrink:
             return False
 
-        # Calculate the new aspect ratio after shrinking
+        # Calculate the aspect ratio after the proposed contraction
         old_aspect_ratio = cell.aspect_ratio
+
         new_aspect_ratio = max(
-            old_aspect_ratio - self.delta_aspect_ratio,
-            1,
+            old_aspect_ratio
+            - self.delta_aspect_ratio,
+            1.0,
         )
 
         # Temporarily apply the proposed shape
-        cell.set_aspect_ratio(new_aspect_ratio)
-
-        # Check if the safety check is enabled
-        safety_check_is_enabled = (
-            self.trabajo_final
-            and self.contraction_overlap_safety_ratio is not None
+        cell.set_aspect_ratio(
+            new_aspect_ratio,
         )
 
-        # If the safety check is enabled, calculate the maximum normalized overlap
-        if safety_check_is_enabled:
-            max_normalized_overlap = (
-                self._calculate_max_normalized_overlap(
-                    cell_index=cell_index,
+        # Measure the maximum normalized overlap produced by the
+        # proposed contraction
+        proposed_max_normalized_overlap = (
+            self._calculate_max_normalized_overlap(
+                cell_index=cell_index,
+            )
+        )
+
+        # Update the maximum overlap proposed
+        self._update_deformation_interval_max(
+            key="max_contraction_proposed_overlap",
+            value=proposed_max_normalized_overlap,
+        )
+
+        # Reject the proposed contraction if the safety criterion
+        # is enabled and its threshold is exceeded
+        safety_check_is_enabled = (
+            self.contraction_overlap_safety_ratio
+            is not None
+        )
+        if (
+            safety_check_is_enabled
+            and proposed_max_normalized_overlap
+            > self.contraction_overlap_safety_ratio
+        ):
+            self.deformation_event_counts[
+                "contraction_overlap_rejections"
+            ] = (
+                self.deformation_event_counts.get(
+                    "contraction_overlap_rejections",
+                    0,
                 )
+                + 1
             )
 
-            if (
-                max_normalized_overlap
-                > self.contraction_overlap_safety_ratio
-            ):
-                # Record a contraction rejected by the overlap safety check
-                self.deformation_event_counts[
-                    "contraction_overlap_rejections"
-                ] = (
-                    self.deformation_event_counts.get(
-                        "contraction_overlap_rejections",
-                        0,
-                    )
-                    + 1
-                )
+            # Restore the previous shape
+            cell.set_aspect_ratio(
+                old_aspect_ratio,
+            )
 
-                # Reject the contraction and restore the elongated shape
-                cell.set_aspect_ratio(old_aspect_ratio)
-                cell.shrink = False
-                return False
+            cell.shrink = False
+            return False
 
-        # If the safety check is not enabled or the contraction is safe, shrink
-        if np.isclose(new_aspect_ratio, 1):
-            self.cell_phies[cell_index] = 0
-            self.update_nematic_tensors([cell_index])
+        # The proposed contraction was accepted
+        self._update_deformation_interval_max(
+            key="max_contraction_accepted_overlap",
+            value=proposed_max_normalized_overlap,
+        )
 
-        # Finalize the contraction and reset the shrink attribute
+        # A completely round cell has no meaningful orientation
+        if np.isclose(
+            new_aspect_ratio,
+            1.0,
+        ):
+            self.cell_phies[cell_index] = 0.0
+
+            self.update_nematic_tensors(
+                [cell_index],
+            )
+
+        # Finalize the accepted contraction
         cell.shrink = False
         return True
 
