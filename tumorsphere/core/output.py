@@ -989,7 +989,7 @@ class DatOutput_motion_parameters(TumorsphereOutput):
                 current_wrapped_positions.copy()
             )
 
-            return 0.0, 0.0, 0.0, 0.0
+            return 0.0, 0.0, 0.0, 0.0, 0.0
 
         # Wrapped displacement between consecutive simulation steps
         delta_positions = (
@@ -1024,6 +1024,10 @@ class DatOutput_motion_parameters(TumorsphereOutput):
             95,
         )
 
+        max_step_displacement = np.max(
+            step_displacements
+        )
+
         # MSD with respect to the initial state
         displacement_from_initial = (
             self.unwrapped_positions
@@ -1046,6 +1050,7 @@ class DatOutput_motion_parameters(TumorsphereOutput):
             mean_step_displacement,
             mean_squared_step_displacement,
             p95_step_displacement,
+            max_step_displacement,
             msd_t0,
         )
 
@@ -1064,6 +1069,7 @@ class DatOutput_motion_parameters(TumorsphereOutput):
             mean_step_displacement,
             mean_squared_step_displacement,
             p95_step_displacement,
+            max_step_displacement,
             msd_t0,
         ) = self.calculate_motion_parameters(
             cell_positions,
@@ -1088,6 +1094,7 @@ class DatOutput_motion_parameters(TumorsphereOutput):
                 "mean_step_displacement,"
                 "mean_squared_step_displacement,"
                 "p95_step_displacement,"
+                "max_step_displacement,"
                 "msd_t0\n"
             )
 
@@ -1095,6 +1102,7 @@ class DatOutput_motion_parameters(TumorsphereOutput):
                 f"{mean_step_displacement},"
                 f"{mean_squared_step_displacement},"
                 f"{p95_step_displacement},"
+                f"{max_step_displacement},"
                 f"{msd_t0}\n"
             )
 
