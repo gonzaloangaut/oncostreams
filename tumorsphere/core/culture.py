@@ -166,6 +166,7 @@ class Culture:
         overlap_threshold_ratio: float = 0.35,
         overlap_threshold_tfg: float = 0.61,
         delta_t: float = 0.05,
+        deformation_attempt_period: Optional[float] = None,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
         cell_speed_max: float = 1,
@@ -338,6 +339,47 @@ class Culture:
         self.overlap_threshold_tfg = overlap_threshold_tfg
         self.contraction_overlap_safety_ratio = contraction_overlap_safety_ratio
         self.delta_t = delta_t
+        # Preserve the legacy behavior when None is provided: 
+        # perform one deformation sweep per integration step.
+        if (
+            deformation_attempt_period is None
+        ):
+            deformation_attempt_period = self.delta_t
+
+        # Convert the physical deformation period into integration steps
+        interval_in_steps = (
+            deformation_attempt_period
+            / self.delta_t
+        )
+
+        rounded_interval = int(
+            round(interval_in_steps)
+        )
+
+        # The physical period must be representable by an integer
+        # number of integration steps
+        if (
+            rounded_interval < 1
+            or not np.isclose(
+                interval_in_steps,
+                rounded_interval,
+            )
+        ):
+            raise ValueError(
+                "deformation_attempt_period must be an integer "
+                "multiple of delta_t."
+            )
+
+        self.deformation_attempt_period = float(
+            deformation_attempt_period
+        )
+
+        self.deformation_attempt_interval_steps = (
+            rounded_interval
+        )
+
+        # Number of deformation sweeps performed
+        self.deformation_attempt_count = 0
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
         self.cell_speed_max = cell_speed_max
@@ -883,6 +925,23 @@ class Culture:
 
         self.nematic_tensors[cell_indices] = Q
 
+    def _is_deformation_attempt_step(
+        self,
+        tic: int,
+    ) -> bool:
+        """
+        Return whether a deformation sweep is scheduled at this step.
+        """
+        steps_since_stabilization = (
+            tic - self.stabilization_time
+        )
+
+        return (
+            steps_since_stabilization > 0
+            and steps_since_stabilization
+            % self.deformation_attempt_interval_steps
+            == 0
+        )
 
     def reset_deformation_event_counts(
         self,
@@ -2025,10 +2084,17 @@ class Culture:
 
             if self.movement:
                 # We wait for the system to stabilize if neccessary
-                if i > self.stabilization_time and self.deformation:
+                if (
+                    i > self.stabilization_time
+                    and self.deformation
+                    and self._is_deformation_attempt_step(i)
+                ):
+                    self.deformation_attempt_count += 1
                     # Boolean to see if the elongation is sleeping
                     elongation_is_sleeping = (
-                        i > self.deformation_warmup_steps
+                        self.deformation_attempt_count > (
+                            self.deformation_warmup_steps
+                        )
                         and self.elongation_sleep_remaining > 0
                     )
 
@@ -2115,7 +2181,9 @@ class Culture:
                                     ] += 1
 
                     # Adaptive elongation starts only after the initial warmup
-                    if i > self.deformation_warmup_steps:
+                    if self.deformation_attempt_count > (
+                        self.deformation_warmup_steps
+                    ):                        
 
                         if elongation_is_sleeping:
                             # A contraction changes the geometry, so elongation

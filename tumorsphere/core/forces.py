@@ -586,10 +586,16 @@ class Anisotropic_Grosmann(Force):
             dif_velocity_project = np.dot(dif_velocity, cell.velocity()) / speed
         else:
             dif_velocity_project = 0
-        # if the sum of the speed + the projection is negative (or zero), we turn into
-        # true the possibility of shrinking
-        if cell.aspect_ratio != 1 and speed + dif_velocity_project<=0 and cell.shrink == False:
-            cell.shrink = True
+        # Store the contraction condition corresponding to the current force.
+        # This prevents a request from remaining active until a later
+        # deformation sweep after the mechanical condition has disappeared.
+        cell.shrink = (
+            not np.isclose(
+                cell.aspect_ratio,
+                1.0,
+            )
+            and speed + dif_velocity_project <= 0
+        )
 
     def calculate_interaction(
         self,

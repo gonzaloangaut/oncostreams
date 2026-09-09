@@ -187,6 +187,7 @@ class Simulation:
         overlap_threshold_tfg: float = 0.61,
         contraction_overlap_safety_ratio: Optional[float] = None,
         delta_t: float = 0.05,
+        deformation_attempt_period: Optional[float] = None,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
         cell_speed_max : float = 1,
@@ -231,6 +232,7 @@ class Simulation:
         self.overlap_threshold_tfg = overlap_threshold_tfg
         self.contraction_overlap_safety_ratio = contraction_overlap_safety_ratio
         self.delta_t = delta_t
+        self.deformation_attempt_period = deformation_attempt_period
         self.initial_aspect_ratio = initial_aspect_ratio
         self.aspect_ratio_max = aspect_ratio_max
         self.cell_speed_max = cell_speed_max
@@ -1518,6 +1520,7 @@ def simulate_single_culture(
             overlap_threshold_tfg=sim.overlap_threshold_tfg,
             contraction_overlap_safety_ratio=sim.contraction_overlap_safety_ratio,
             delta_t=sim.delta_t,
+            deformation_attempt_period=sim.deformation_attempt_period,
             initial_aspect_ratio=sim.initial_aspect_ratio,
             aspect_ratio_max=sim.aspect_ratio_max,
             cell_speed_max=sim.cell_speed_max,
