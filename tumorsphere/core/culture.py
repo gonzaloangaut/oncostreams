@@ -740,16 +740,15 @@ class Culture:
 
         return relative_positions
 
-    def calculate_overlaps(
+    def calculate_overlap_components(
         self,
         cell_index: int,
-        neighbor_indices: np.ndarray,        # shape (N,)
-        relative_positions: np.ndarray       # shape (N, 3)
-    ) -> np.ndarray:                         # returns shape (N,)
+        neighbor_indices: np.ndarray,
+        relative_positions: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Calculates the overlap between a single cell and multiple neighbors using
-        overlap calculated in the TF in a vectorized way.
-
+        Calculate absolute, normalized, and maximum pairwise overlaps.
+        
         Parameters
         ----------
         cell_index : int
@@ -762,7 +761,11 @@ class Culture:
         Returns
         -------
         overlaps : np.ndarray
-            Array of overlaps with each neighbor.
+            Absolute overlaps at the supplied relative positions.
+        normalized_overlaps : np.ndarray
+            Overlaps normalized by their pairwise maximum values.
+        max_overlaps : np.ndarray
+            Maximum overlaps for the given shapes and orientations.
         """
         cell = self.cells[cell_index]
         neighbor_indices = np.array(neighbor_indices, dtype=int)
@@ -807,10 +810,31 @@ class Culture:
 
         quad = np.matmul(r_b, np.matmul(diff_matrix, r_T)).reshape(-1)  # shape (N,)
 
-        overlaps = i_0 * np.exp(-(d_i + d_j)/beta * quad)
+        # Evaluate the normalized overlap directly
+        exponent = (d_i + d_j) / beta * quad
+        normalized_overlaps = np.exp(-exponent)
+
+        # Recover the absolute overlap using the same geometry
+        max_overlaps = i_0
+        overlaps = max_overlaps * normalized_overlaps
+
+        return overlaps, normalized_overlaps, max_overlaps
+
+    def calculate_overlaps(
+        self,
+        cell_index: int,
+        neighbor_indices: np.ndarray,
+        relative_positions: np.ndarray,
+    ) -> np.ndarray:
+        """Return absolute overlaps using the shared calculation."""
+        overlaps, _, _ = self.calculate_overlap_components(
+            cell_index=cell_index,
+            neighbor_indices=neighbor_indices,
+            relative_positions=relative_positions,
+        )
 
         return overlaps
-
+    
     def propose_new_position_to_deform(
         self, cell_index: int, new_phi: float, new_aspect_ratio: float
     ) -> np.ndarray:
@@ -1041,21 +1065,18 @@ class Culture:
                     self.cell_positions[candidate_neighbors],
                 )
 
-                overlaps = self.calculate_overlaps(
-                    cell_index=cell_index,
-                    neighbor_indices=candidate_neighbors,
-                    relative_positions=relative_positions,
+                overlaps, normalized_overlaps, _ = (
+                    self.calculate_overlap_components(
+                        cell_index=cell_index,
+                        neighbor_indices=candidate_neighbors,
+                        relative_positions=relative_positions,
+                    )
                 )
 
-                max_overlaps = self.calculate_max_overlaps(
-                    cell_index=cell_index,
-                    neighbor_indices=candidate_neighbors,
-                )
-
-                # Use the same acceptance criterion in both modes
+                # Reject proposals exceeding the normalized threshold
                 significant_overlap_mask = (
-                    overlaps
-                    > self.overlap_threshold_ratio * max_overlaps
+                    normalized_overlaps
+                    > self.overlap_threshold_ratio
                 )
 
                 if not np.any(significant_overlap_mask):
@@ -1156,10 +1177,18 @@ class Culture:
                 np.array([self.cell_positions[i] for i in candidate_neighbors])
             )
             # Vectorized overlap + threshold check
-            overlaps = self.calculate_overlaps(cell_index, candidate_neighbors, relative_positions)
-            max_overlaps = self.calculate_max_overlaps(cell_index, candidate_neighbors)
-            mask = overlaps > self.overlap_threshold_ratio * max_overlaps
+            _, normalized_overlaps, _ = (
+                self.calculate_overlap_components(
+                    cell_index=cell_index,
+                    neighbor_indices=candidate_neighbors,
+                    relative_positions=relative_positions,
+                )
+            )
 
+            mask = (
+                normalized_overlaps
+                > self.overlap_threshold_ratio
+            )
             # If there is overlap, turn back to original values
             if np.any(mask):
                 self.cell_positions[cell_index] = old_position
@@ -1208,28 +1237,14 @@ class Culture:
             self.cell_positions[candidate_neighbors],
         )
 
-        # Calculate overlaps and max overlaps
-        overlaps = self.calculate_overlaps(
-            cell_index=cell_index,
-            neighbor_indices=candidate_neighbors,
-            relative_positions=relative_positions,
+        _, normalized_overlaps, _ = (
+            self.calculate_overlap_components(
+                cell_index=cell_index,
+                neighbor_indices=candidate_neighbors,
+                relative_positions=relative_positions,
+            )
         )
 
-        # Calculate max overlaps
-        max_overlaps = self.calculate_max_overlaps(
-            cell_index=cell_index,
-            neighbor_indices=candidate_neighbors,
-        )
-
-        # Calculate normalized overlaps, avoiding division by zero
-        normalized_overlaps = np.divide(
-            overlaps,
-            max_overlaps,
-            out=np.zeros_like(overlaps),
-            where=max_overlaps > 0,
-        )
-
-        # Return the maximum normalized overlap
         return float(np.max(normalized_overlaps))
 
     def shrink_from_elliptical(
@@ -1355,8 +1370,8 @@ class Culture:
 
         Notes
         -----
-        The dictionaries ``neighbors_relative_pos`` and
-        ``neighbors_overlap`` are temporary symmetric caches.
+        Relative positions, absolute overlaps, and normalized overlaps
+        are stored in temporary symmetric caches.
         """
         cell = self.cells[cell_index]
 
@@ -1403,81 +1418,76 @@ class Culture:
                 ] = -relative_position
 
 
-        # Identify overlaps that have not yet been calculated
+        # Identify pairs whose overlap components are not yet cached
         to_calculate_overlap = [
             neighbor_index
             for neighbor_index in candidate_neighbors
-            if neighbor_index not in cell.neighbors_overlap
+            if (
+                neighbor_index not in cell.neighbors_overlap
+                or neighbor_index
+                not in cell.neighbors_normalized_overlap
+            )
         ]
-        # Calculate them
+
         if to_calculate_overlap:
             relative_positions_overlap = [
                 cell.neighbors_relative_pos[neighbor_index]
                 for neighbor_index in to_calculate_overlap
             ]
 
-            overlaps = self.calculate_overlaps(
-                cell_index=cell_index,
-                neighbor_indices=to_calculate_overlap,
-                relative_positions=relative_positions_overlap,
+            overlaps, normalized_overlaps, _ = (
+                self.calculate_overlap_components(
+                    cell_index=cell_index,
+                    neighbor_indices=to_calculate_overlap,
+                    relative_positions=relative_positions_overlap,
+                )
             )
 
-            # Store each overlap for both cells in the pair
-            for neighbor_index, overlap in zip(
+            # Store both quantities symmetrically for each pair
+            for neighbor_index, overlap, normalized_overlap in zip(
                 to_calculate_overlap,
                 overlaps,
+                normalized_overlaps,
             ):
-                cell.neighbors_overlap[
-                    neighbor_index
-                ] = overlap
+                neighbor = self.cells[neighbor_index]
 
-                self.cells[
+                cell.neighbors_overlap[neighbor_index] = overlap
+                neighbor.neighbors_overlap[cell_index] = overlap
+
+                cell.neighbors_normalized_overlap[
                     neighbor_index
-                ].neighbors_overlap[
+                ] = normalized_overlap
+
+                neighbor.neighbors_normalized_overlap[
                     cell_index
-                ] = overlap
+                ] = normalized_overlap
 
-        # Get the indices and overlap calculated of the neighbors
         neighbor_indices = np.asarray(
             list(cell.neighbors_overlap.keys()),
             dtype=int,
         )
-        overlaps = np.asarray(
-            list(cell.neighbors_overlap.values()),
+
+        if neighbor_indices.size == 0:
+            return np.empty(0, dtype=int)
+
+        # Retrieve values in the same order as neighbor_indices
+        normalized_overlaps = np.asarray(
+            [
+                cell.neighbors_normalized_overlap[neighbor_index]
+                for neighbor_index in neighbor_indices
+            ],
             dtype=float,
         )
 
-        # A cell with no candidate overlaps has no interacting neighbors
-        if neighbor_indices.size == 0:
-            return np.empty(
-                0,
-                dtype=int,
-            )
-
-        # Calculate the maximum possible overlap for every candidate pair
-        max_overlaps = self.calculate_max_overlaps(
-            cell_index=cell_index,
-            neighbor_indices=neighbor_indices,
-        )
-
-        # Update the overlap diagnostic only during force evaluation
+        # Accumulate the maximum before filtering interacting neighbors
         if update_overlap_diagnostic:
-            normalized_overlaps = np.divide(
-                overlaps,
-                max_overlaps,
-                out=np.zeros_like(overlaps),
-                where=max_overlaps > 0,
-            )
-
             self.max_normalized_overlap_interval = max(
                 self.max_normalized_overlap_interval,
                 float(np.max(normalized_overlaps)),
             )
 
-        # Apply the same interaction criterion in both deformation modes
         significant_neighbors_mask = (
-            overlaps
-            > self.overlap_threshold_ratio * max_overlaps
+            normalized_overlaps > self.overlap_threshold_ratio
         )
 
         return neighbor_indices[significant_neighbors_mask]
@@ -1526,6 +1536,7 @@ class Culture:
         # Reset the neighbor dictionaries to empty
         cell.neighbors_relative_pos.clear()
         cell.neighbors_overlap.clear()
+        cell.neighbors_normalized_overlap.clear()
 
         # Return the change in the position and in the phi angle of the cell
         return dif_position, dif_phi
@@ -1620,6 +1631,7 @@ class Culture:
             # cells are visited.
             cell.neighbors_relative_pos.clear()
             cell.neighbors_overlap.clear()
+            cell.neighbors_normalized_overlap.clear()
 
         # Transform the internal Union-Find representation into explicit
         # lists containing the indices of the cells in every cluster.

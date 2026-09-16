@@ -76,6 +76,9 @@ class Cell:
     shrink: bool = False
     neighbors_relative_pos: Dict[int, np.ndarray] =  field(default_factory=dict)
     neighbors_overlap: Dict[int, float] =  field(default_factory=dict)
+    neighbors_normalized_overlap: Dict[int, float] = field(
+        default_factory=dict
+    )
     anisotropy: float = None
     squared_diagonal: float = None
 
@@ -146,6 +149,7 @@ class Cell:
         self.neighbors_relative_pos = dict()
         # and the overlap with the neighbors
         self.neighbors_overlap = dict()
+        self.neighbors_normalized_overlap = dict()
         # we FIRST get the cell's index
         self._index = len(culture.cell_positions)
 
