@@ -163,7 +163,7 @@ class Culture:
         movement: bool = True,
         deformation: bool = True,
         stabilization_time: int = 120,
-        overlap_threshold_ratio: float = 0.35,
+        overlap_threshold_ratio: float = np.exp(-1),
         overlap_threshold_tfg: float = 0.61,
         delta_t: float = 0.05,
         deformation_attempt_period: Optional[float] = None,
@@ -402,14 +402,14 @@ class Culture:
         self.steps_without_deformation = 0
         self.elongation_sleep_remaining = 0
 
-        # TFG
+        # Select instantaneous or gradual shape changes
         self.trabajo_final = trabajo_final
 
-        # delta aspect ratio
-        if trabajo_final is True:
-            self.delta_aspect_ratio = aspect_ratio_max-1
+        if self.trabajo_final:
+            self.delta_aspect_ratio = aspect_ratio_max - 1.0
         else:
             self.delta_aspect_ratio = delta_aspect_ratio
+
         # we instantiate the culture's RNG with the provided entropy
         self.rng_seed = rng_seed
         self.rng = np.random.default_rng(rng_seed)
@@ -1008,7 +1008,10 @@ class Culture:
         for attempt in range(n_attempts):
             # random phi and new aspect ratio and generate a position with them
             new_phi = self.rng.uniform(low=0, high=2 * np.pi)
-            new_aspect_ratio = old_aspect_ratio + self.delta_aspect_ratio
+            new_aspect_ratio = min(
+                old_aspect_ratio + self.delta_aspect_ratio,
+                self.aspect_ratio_max,
+            )
             new_position = self.propose_new_position_to_deform(
                 cell_index, new_phi, new_aspect_ratio
             )
@@ -1027,83 +1030,38 @@ class Culture:
             candidate_neighbors.remove(cell_index)
 
             if not candidate_neighbors:
-                # If there are no neighbors, total_overlap = 0
-                total_overlap[(new_phi, tuple(new_position))] = 0
+                total_overlap[
+                    (new_phi, tuple(new_position))
+                ] = 0.0
+
             else:
-                # Calculate relative positions for all neighbors
+                # Evaluate the proposed position, orientation, and shape
                 relative_positions = self.calculate_relative_positions(
                     self.cell_positions[cell_index],
-                    np.array([self.cell_positions[i] for i in candidate_neighbors])
+                    self.cell_positions[candidate_neighbors],
                 )
 
-                # TFG criterion: only consider neighbors whose distance
-                # is smaller than the sum of the major semi-axes
-                if self.trabajo_final:
+                overlaps = self.calculate_overlaps(
+                    cell_index=cell_index,
+                    neighbor_indices=candidate_neighbors,
+                    relative_positions=relative_positions,
+                )
 
-                    cell_semi_major_axis = np.sqrt(
-                        (self.cell_area * cell.aspect_ratio) / np.pi
-                    )
+                max_overlaps = self.calculate_max_overlaps(
+                    cell_index=cell_index,
+                    neighbor_indices=candidate_neighbors,
+                )
 
-                    distances = np.linalg.norm(
-                        relative_positions,
-                        axis=1,
-                    )
+                # Use the same acceptance criterion in both modes
+                significant_overlap_mask = (
+                    overlaps
+                    > self.overlap_threshold_ratio * max_overlaps
+                )
 
-                    neighbor_semi_major_axes = np.sqrt(
-                        self.cell_area
-                        * np.array(
-                            [
-                                self.cells[i].aspect_ratio
-                                for i in candidate_neighbors
-                            ]
-                        )
-                        / np.pi
-                    )
-
-                    distance_mask = (
-                        distances
-                        <= (
-                            cell_semi_major_axis
-                            + neighbor_semi_major_axes
-                        )
-                    )
-
-                    candidate_neighbors = list(
-                        np.array(candidate_neighbors)[distance_mask]
-                    )
-
-                    relative_positions = relative_positions[
-                        distance_mask
-                    ]
-
-                # Calculate overlaps
-                overlaps = self.calculate_overlaps(cell_index, candidate_neighbors, relative_positions)
-
-                # Filter neighbors
-                if self.trabajo_final:
-
-                    # TFG criterion
-                    mask = overlaps > self.overlap_threshold_tfg
-
-                else:
-
-                    # Calculate max overlaps
-                    max_overlaps = self.calculate_max_overlaps(
-                        cell_index,
-                        candidate_neighbors,
-                    )
-
-                    mask = (
-                        overlaps
-                        > (
-                            self.overlap_threshold_ratio
-                            * max_overlaps
-                        )
-                    )
-
-                # Sum total overlap if there is no significant overlap
-                if not mask.any():
-                    total_overlap[(new_phi, tuple(new_position))] = np.sum(overlaps)
+                if not np.any(significant_overlap_mask):
+                    total_overlap[
+                        (new_phi, tuple(new_position))
+                    ] = np.sum(overlaps)
 
             # Restore original values
             self.cell_positions[cell_index] = old_position
@@ -1123,7 +1081,12 @@ class Culture:
             chosen_phi = chosen_key[0]
             chosen_position = np.array(chosen_key[1]) 
             # and set the new values of aspect ratio, position and orientation
-            cell.set_aspect_ratio(old_aspect_ratio + self.delta_aspect_ratio)
+            cell.set_aspect_ratio(
+                min(
+                    old_aspect_ratio + self.delta_aspect_ratio,
+                    self.aspect_ratio_max,
+                )
+            )
             self.cell_phies[cell_index] = chosen_phi
             self.update_nematic_tensors([cell_index])
             self.cell_positions[cell_index] = chosen_position
@@ -1380,21 +1343,20 @@ class Culture:
         update_overlap_diagnostic: bool = False,
     ) -> np.ndarray:
         """
-        Return the indices of cells that significantly interact with one cell.
+        Return neighbors whose normalized overlap exceeds the threshold.
 
-        The interaction criterion is exactly the same one used by the dynamics:
+        Candidates are obtained from the spatial hash grid. A pair
+        interacts when its overlap exceeds `overlap_threshold_ratio`
+        times its maximum possible overlap, without an additional
+        distance cutoff.
 
-        - For the TFG model, neighbors must satisfy the major-semi-axis
-        distance criterion and the absolute overlap threshold.
-        - Otherwise, the overlap must exceed a fixed fraction of the
-        maximum overlap.
+        The same criterion applies to instantaneous and gradual
+        deformation modes.
 
         Notes
         -----
-        The dictionaries ``neighbors_relative_pos`` and ``neighbors_overlap``
-        are used as temporary symmetric caches. When a quantity is calculated
-        for a pair of cells, it is stored for both cells so that it does not
-        need to be recalculated when the other cell is processed.
+        The dictionaries ``neighbors_relative_pos`` and
+        ``neighbors_overlap`` are temporary symmetric caches.
         """
         cell = self.cells[cell_index]
 
@@ -1440,51 +1402,6 @@ class Culture:
                     cell_index
                 ] = -relative_position
 
-        # In the TFG model, discard candidate neighbors that are farther
-        # apart than the sum of their major semi-axes
-        if self.trabajo_final and candidate_neighbors:
-            cell_semi_major_axis = np.sqrt(
-                (
-                    self.cell_area
-                    * cell.aspect_ratio
-                )
-                / np.pi
-            )
-
-            distances = np.array([
-                np.linalg.norm(
-                    cell.neighbors_relative_pos[neighbor_index]
-                )
-                for neighbor_index in candidate_neighbors
-            ])
-
-            neighbor_semi_major_axes = np.sqrt(
-                (
-                    self.cell_area
-                    * np.array([
-                        self.cells[
-                            neighbor_index
-                        ].aspect_ratio
-                        for neighbor_index in candidate_neighbors
-                    ])
-                )
-                / np.pi
-            )
-
-            distance_mask = (
-                distances
-                <= (
-                    cell_semi_major_axis
-                    + neighbor_semi_major_axes
-                )
-            )
-
-            candidate_neighbors = list(
-                np.asarray(
-                    candidate_neighbors,
-                    dtype=int,
-                )[distance_mask]
-            )
 
         # Identify overlaps that have not yet been calculated
         to_calculate_overlap = [
@@ -1557,16 +1474,11 @@ class Culture:
                 float(np.max(normalized_overlaps)),
             )
 
-        # Filter with the mask
-        if self.trabajo_final:
-            significant_neighbors_mask = (
-                overlaps > self.overlap_threshold_tfg
-            )
-        else:
-            significant_neighbors_mask = (
-                overlaps
-                > self.overlap_threshold_ratio * max_overlaps
-            )
+        # Apply the same interaction criterion in both deformation modes
+        significant_neighbors_mask = (
+            overlaps
+            > self.overlap_threshold_ratio * max_overlaps
+        )
 
         return neighbor_indices[significant_neighbors_mask]
 
