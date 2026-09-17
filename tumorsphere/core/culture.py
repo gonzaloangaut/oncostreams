@@ -998,127 +998,139 @@ class Culture:
         )
 
     def elongate_from_round(self, cell_index: int) -> bool:
-        """If the cell is round, an angle is chosen randomly.
-        If the new cell with these angle and an increment in the
-        aspect ratio does not overlap with others, it remains.
-        If not, try again up to cell_max_def_attempts.
-        If it fails to deform, it remains as it was originally.
+        """Choose the valid proposal with the smallest maximum normalized overlap.
 
-        Parameters
-        ----------
-        cell_index : int
-            The index of the cell.
-
-        Returns
-        ----------
-        succesful_elongation : bool
-            True if the elongation was successful, False otherwise.
+        All proposals start from the original position and use the same
+        proposed aspect ratio. Exact ties are resolved randomly.
         """
         cell = self.cells[cell_index]
-
-        # Number of attempts
         n_attempts = self.cell_max_def_attempts
 
-        # we save the old attributes
-        old_position = np.array(self.cell_positions[cell_index])
+        if n_attempts <= 0:
+            return False
+
+        # Save the original state
+        old_position = self.cell_positions[cell_index].copy()
         old_phi = self.cell_phies[cell_index]
         old_aspect_ratio = cell.aspect_ratio
-        # and get the place of the grid that correspond to the cell
-        old_index = self.grid.get_hash_key(old_position)
-        # create a dict that contains the total overlap of the cell with others
-        total_overlap = dict()
-        for attempt in range(n_attempts):
-            # random phi and new aspect ratio and generate a position with them
-            new_phi = self.rng.uniform(low=0, high=2 * np.pi)
-            new_aspect_ratio = min(
-                old_aspect_ratio + self.delta_aspect_ratio,
-                self.aspect_ratio_max,
-            )
-            new_position = self.propose_new_position_to_deform(
-                cell_index, new_phi, new_aspect_ratio
-            )
-            # updating attributes
-            self.cell_positions[cell_index] = new_position
-            self.cell_phies[cell_index] = new_phi
-            self.update_nematic_tensors([cell_index])
-            cell.set_aspect_ratio(new_aspect_ratio)
-            # list of neighbors
-            candidate_neighbors = list(
-                self.grid.find_neighbors(
-                    position=new_position,
-                )
-            )
-            # modifies the set in-place to remove the actual cell index
-            candidate_neighbors.remove(cell_index)
+        old_tensor = self.nematic_tensors[cell_index].copy()
+        old_bucket = self.grid.get_hash_key(old_position)
 
-            if not candidate_neighbors:
-                total_overlap[
-                    (new_phi, tuple(new_position))
-                ] = 0.0
+        # All proposals share the same shape and displacement magnitude
+        new_aspect_ratio = min(
+            old_aspect_ratio + self.delta_aspect_ratio,
+            self.aspect_ratio_max,
+        )
 
-            else:
-                # Evaluate the proposed position, orientation, and shape
-                relative_positions = self.calculate_relative_positions(
-                    self.cell_positions[cell_index],
-                    self.cell_positions[candidate_neighbors],
+        displacement_length = (
+            np.sqrt((self.cell_area * new_aspect_ratio) / np.pi)
+            - np.sqrt((self.cell_area * old_aspect_ratio) / np.pi)
+        )
+
+        candidate_neighbors_by_bucket = {}
+        best_score = np.inf
+        best_proposals = []
+
+        # Apply the proposed shape once for all attempts
+        cell.set_aspect_ratio(new_aspect_ratio)
+
+        try:
+            for _ in range(n_attempts):
+                new_phi = self.rng.uniform(
+                    low=0,
+                    high=2 * np.pi,
                 )
 
-                overlaps, normalized_overlaps, _ = (
-                    self.calculate_overlap_components(
-                        cell_index=cell_index,
-                        neighbor_indices=candidate_neighbors,
-                        relative_positions=relative_positions,
+                # Always propose from the original position
+                new_position = np.mod(
+                    old_position
+                    + np.array([
+                        displacement_length * np.cos(new_phi),
+                        displacement_length * np.sin(new_phi),
+                        0.0,
+                    ]),
+                    self.side,
+                )
+
+                self.cell_positions[cell_index] = new_position
+                self.cell_phies[cell_index] = new_phi
+                self.update_nematic_tensors([cell_index])
+
+                # Reuse candidate lists for proposals in the same bucket
+                proposal_bucket = self.grid.get_hash_key(new_position)
+
+                if proposal_bucket not in candidate_neighbors_by_bucket:
+                    candidate_neighbors_by_bucket[proposal_bucket] = [
+                        neighbor_index
+                        for neighbor_index in self.grid.find_neighbors(
+                            position=new_position,
+                        )
+                        if neighbor_index != cell_index
+                    ]
+
+                candidate_neighbors = candidate_neighbors_by_bucket[
+                    proposal_bucket
+                ]
+
+                if candidate_neighbors:
+                    relative_positions = self.calculate_relative_positions(
+                        new_position,
+                        self.cell_positions[candidate_neighbors],
                     )
-                )
 
-                # Reject proposals exceeding the normalized threshold
-                significant_overlap_mask = (
-                    normalized_overlaps
-                    > self.overlap_threshold_ratio
-                )
+                    _, normalized_overlaps, _ = (
+                        self.calculate_overlap_components(
+                            cell_index=cell_index,
+                            neighbor_indices=candidate_neighbors,
+                            relative_positions=relative_positions,
+                        )
+                    )
 
-                if not np.any(significant_overlap_mask):
-                    total_overlap[
-                        (new_phi, tuple(new_position))
-                    ] = np.sum(overlaps)
+                    score = float(np.max(normalized_overlaps))
+                else:
+                    score = 0.0
 
-            # Restore original values
+                # Only retain valid proposals with the best score
+                if score <= self.overlap_threshold_ratio:
+                    if score < best_score:
+                        best_score = score
+                        best_proposals = [(new_phi, new_position)]
+                    elif score == best_score:
+                        best_proposals.append((new_phi, new_position))
+
+        finally:
+            # Restore the original state, including if evaluation fails
             self.cell_positions[cell_index] = old_position
             self.cell_phies[cell_index] = old_phi
-            self.update_nematic_tensors([cell_index])
+            self.nematic_tensors[cell_index] = old_tensor
             cell.set_aspect_ratio(old_aspect_ratio)
 
-        # Check if total_overlap is not empty (else, pass)
-        if total_overlap:
-            # get the minimum overlap value
-            min_overlap = min(total_overlap.values())
-            # find all angles and positions with the minimum overlap
-            min_angles_positions = [key for key, overlap in total_overlap.items() if overlap == min_overlap]
-            # choose a random key from those with the minimum overlap
-            #chosen_key = self.rng.choice(min_angles_positions)
-            chosen_key = self.rng.choice(np.array(min_angles_positions, dtype=object))
-            chosen_phi = chosen_key[0]
-            chosen_position = np.array(chosen_key[1]) 
-            # and set the new values of aspect ratio, position and orientation
-            cell.set_aspect_ratio(
-                min(
-                    old_aspect_ratio + self.delta_aspect_ratio,
-                    self.aspect_ratio_max,
-                )
-            )
-            self.cell_phies[cell_index] = chosen_phi
-            self.update_nematic_tensors([cell_index])
-            self.cell_positions[cell_index] = chosen_position
-            # and calculate the new place in the grid
-            new_index = self.grid.get_hash_key(chosen_position)
-            succesful_elongation = True
-            if old_index != new_index:
-                self.grid.remove_cell_from_hash_table(cell_index, old_position)
-                self.grid.add_cell_to_hash_table(cell_index, chosen_position)
-        else:
-            succesful_elongation = False
+        if not best_proposals:
+            return False
 
-        return succesful_elongation
+        # Choose uniformly among proposals tied for the best score
+        chosen_index = self.rng.choice(len(best_proposals))
+        chosen_phi, chosen_position = best_proposals[chosen_index]
+
+        # Commit the selected proposal
+        cell.set_aspect_ratio(new_aspect_ratio)
+        self.cell_positions[cell_index] = chosen_position
+        self.cell_phies[cell_index] = chosen_phi
+        self.update_nematic_tensors([cell_index])
+
+        chosen_bucket = self.grid.get_hash_key(chosen_position)
+
+        if chosen_bucket != old_bucket:
+            self.grid.remove_cell_from_hash_table(
+                cell_index,
+                old_position,
+            )
+            self.grid.add_cell_to_hash_table(
+                cell_index,
+                chosen_position,
+            )
+
+        return True
 
     def elongate_from_elliptical(self, cell_index: int) -> bool:
         """If the cell is round, an angle is chosen randomly.
