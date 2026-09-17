@@ -764,7 +764,11 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
         """
 
         # List of elongated cells
-        elongated_cells = [cell._index for cell in cells if not np.isclose(cell.aspect_ratio, 1)]
+        elongated_cells = [
+            cell._index
+            for cell in cells
+            if not cell.is_round
+        ]
         # Calculation of the number of elongated cells and cells
         num_elongated = len(elongated_cells)
         num_cells = len(cells)
@@ -866,7 +870,11 @@ class DatOutput_order_parameters(TumorsphereOutput):
         """
 
         # List of elongated cells
-        elongated_cells = [cell._index for cell in cells if not np.isclose(cell.aspect_ratio, 1)]
+        elongated_cells = [
+            cell._index
+            for cell in cells
+            if not cell.is_round
+        ]
         # Calculation of the number of elongated cells and cells
         num_elongated = len(elongated_cells)
         num_cells = len(cells)
@@ -1344,13 +1352,7 @@ class DatOutput_local_order_parameters(
 
         # Identify elongated cells
         elongated_mask = np.asarray(
-            [
-                not np.isclose(
-                    cell.aspect_ratio,
-                    1.0,
-                )
-                for cell in cells
-            ],
+            [not cell.is_round for cell in cells],
             dtype=bool,
         )
 

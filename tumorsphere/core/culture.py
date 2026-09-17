@@ -1335,11 +1335,7 @@ class Culture:
             value=proposed_max_normalized_overlap,
         )
 
-        # A completely round cell has no meaningful orientation
-        if np.isclose(
-            new_aspect_ratio,
-            1.0,
-        ):
+        if cell.is_round:
             self.cell_phies[cell_index] = 0.0
 
             self.update_nematic_tensors(
@@ -1595,19 +1591,13 @@ class Culture:
 
             # In the current model, a cell is round when its aspect ratio
             # is numerically equal to one. All other cells are elongated.
-            cell_is_round = np.isclose(
-                cell.aspect_ratio,
-                1.0,
-            )
+            cell_is_round = cell.is_round
 
             for neighbor_index in significant_neighbors:
                 neighbor_index = int(neighbor_index)
                 neighbor = self.cells[neighbor_index]
 
-                neighbor_is_round = np.isclose(
-                    neighbor.aspect_ratio,
-                    1.0,
-                )
+                neighbor_is_round = neighbor.is_round
 
                 same_phenotype = (
                     cell_is_round
@@ -1643,12 +1633,7 @@ class Culture:
             # was only called between cells of the same phenotype.
             representative_index = cluster_indices[0]
 
-            representative_is_round = np.isclose(
-                self.cells[
-                    representative_index
-                ].aspect_ratio,
-                1.0,
-            )
+            representative_is_round = self.cells[representative_index].is_round
 
             if representative_is_round:
                 round_clusters.append(
@@ -2031,11 +2016,7 @@ class Culture:
                     for index in active_cell_indexes:
                         cell = self.cells[index]
 
-                        if np.isclose(
-                            cell.aspect_ratio,
-                            1.0,
-                        ):
-
+                        if cell.is_round:
                             # Round cells only try to elongate while elongation is active
                             if not elongation_is_sleeping:
                                 # Add to the count of deformation events
@@ -2071,10 +2052,7 @@ class Culture:
                                 ] += 1
 
                                 # Check if the final state is a round cell
-                                if np.isclose(
-                                    cell.aspect_ratio,
-                                    1.0,
-                                ):
+                                if cell.is_round:
                                     self.deformation_event_counts[
                                         "contraction_to_round_events"
                                     ] += 1

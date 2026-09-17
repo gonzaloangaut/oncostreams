@@ -256,7 +256,7 @@ class Grosmann(Force):
         # nematic matrix
         Q_cell = nematic_tensors[cell_index]
         # longitudinal & transversal mobility
-        if np.isclose(cell.aspect_ratio, 1):
+        if cell.is_round:
             mP = 1 / np.sqrt((area * cell.aspect_ratio) / np.pi)
             mS = 1 / np.sqrt((area * cell.aspect_ratio) / np.pi)
         else:
@@ -396,6 +396,16 @@ class Anisotropic_Grosmann(Force):
         self.bExp = bExp
         self.noise_eta = noise_eta
         self.d_phi = d_phi
+        # Noise parameters remain fixed during each simulation
+        self.translational_noise_enabled = bool(
+            self.noise_eta is not None
+            and not np.isclose(self.noise_eta, 0.0)
+        )
+
+        self.rotational_noise_enabled = bool(
+            self.d_phi is not None
+            and not np.isclose(self.d_phi, 0.0)
+        )
         self.shrinking = shrinking
         if (
             not np.isfinite(lambda_core)
@@ -469,7 +479,7 @@ class Anisotropic_Grosmann(Force):
         the cell
         """
         # longitudinal & transversal mobility
-        if np.isclose(cell.aspect_ratio, 1):
+        if cell.is_round:
             mP = 1 / np.sqrt((area * cell.aspect_ratio) / np.pi)
             mS = 1 / np.sqrt((area * cell.aspect_ratio) / np.pi)
         else:
@@ -531,7 +541,7 @@ class Anisotropic_Grosmann(Force):
 
         # We add the noise in the position:
         # First in the parallel direction
-        if (self.noise_eta is None) or np.isclose(self.noise_eta, 0):
+        if not self.translational_noise_enabled:
             translational_noise = 0
         else:
             # We need the direction vector
@@ -560,7 +570,7 @@ class Anisotropic_Grosmann(Force):
             translational_noise = noise_parallel+noise_perpendicular
 
         # Rotational noise
-        if (self.d_phi is None) or np.isclose(self.d_phi, 0):
+        if not self.rotational_noise_enabled:
             rotational_noise = 0
         else:
             s_nR = np.sqrt(2 * self.d_phi * mR * delta_t)
@@ -590,13 +600,9 @@ class Anisotropic_Grosmann(Force):
         # This prevents a request from remaining active until a later
         # deformation sweep after the mechanical condition has disappeared.
         cell.shrink = (
-            not np.isclose(
-                cell.aspect_ratio,
-                1.0,
-            )
+            not cell.is_round
             and speed + dif_velocity_project <= 0
         )
-
     def calculate_interaction(
         self,
         cells,
@@ -722,7 +728,10 @@ class Anisotropic_Grosmann(Force):
         dif_phi = mR * torque * delta_t
 
         # we calculate the noise if we are in that case
-        if (self.noise_eta is not None) or (self.d_phi is not None):
+        if (
+            self.translational_noise_enabled
+            or self.rotational_noise_enabled
+        ):
             translational_noise, rotational_noise = self.calculate_noise(cells, phies, cell_index, area, delta_t, mP, mS, mR)
             dif_position += translational_noise
             dif_phi += rotational_noise

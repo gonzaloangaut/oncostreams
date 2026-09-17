@@ -70,6 +70,7 @@ class Cell:
     culture: "Culture"
     is_stem: bool
     aspect_ratio: float = 1
+    is_round: bool = field(default=True, init=False)
     parent_index: Optional[int] = 0
     available_space: bool = True
     _index: Optional[int] = field(default=False, init=False)
@@ -197,11 +198,23 @@ class Cell:
 
     def update_shape_parameters(self) -> None:
         """
-        Updates de anisotropy and squared diagonal given the aspect ratio
+        Updates the geometric parameters and cached round-cell state.
         """
         ar = self.aspect_ratio
-        self.anisotropy = (ar**2 - 1) / (ar**2 + 1)
-        self.squared_diagonal = (self.culture.cell_area / np.pi) * (ar + 1 / ar)
+
+        # Equivalent to np.isclose(ar, 1.0) with default tolerances
+        self.is_round = bool(
+            abs(ar - 1.0) <= (1e-8 + 1e-5)
+        )
+
+        self.anisotropy = (
+            (ar**2 - 1) / (ar**2 + 1)
+        )
+
+        self.squared_diagonal = (
+            (self.culture.cell_area / np.pi)
+            * (ar + 1 / ar)
+        )
 
     def set_aspect_ratio(self, new_ar) -> None:
         """
