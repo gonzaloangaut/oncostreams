@@ -6,7 +6,6 @@ Classes:
     on the Simulation class.
 """
 
-# import os
 from datetime import datetime
 from typing import (
     Set,
@@ -20,6 +19,7 @@ import pandas as pd
 import numpy as np
 import pickle
 import os
+import tempfile
 
 from tumorsphere.core.cells import Cell
 from tumorsphere.core.output import TumorsphereOutput
@@ -1775,6 +1775,52 @@ class Culture:
 
         self.overlap_interval_start_tic = tic + 1
 
+    def save_checkpoint(self, checkpoint_path: str, tic: int) -> None:
+        """
+        Write a checkpoint atomically, preserving the previous one on failure.
+        """
+        checkpoint_path = os.path.abspath(checkpoint_path)
+        checkpoint_dir = os.path.dirname(checkpoint_path)
+
+        os.makedirs(checkpoint_dir, exist_ok=True)
+
+        temporary_path = None
+
+        try:
+            # Use the same directory to allow an atomic replacement
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=checkpoint_dir,
+                prefix=os.path.basename(checkpoint_path) + ".",
+                suffix=".tmp",
+                delete=False,
+            ) as checkpoint_file:
+                temporary_path = checkpoint_file.name
+
+                state = self.rng.bit_generator.state
+
+                pickle.dump(
+                    (self, tic, state),
+                    checkpoint_file,
+                    protocol=pickle.HIGHEST_PROTOCOL,
+                )
+
+                # Flush Python buffers and synchronize the file before replacement
+                checkpoint_file.flush()
+                os.fsync(checkpoint_file.fileno())
+
+            # Replace the previous checkpoint only after writing successfully
+            os.replace(temporary_path, checkpoint_path)
+            temporary_path = None
+
+        finally:
+            # Remove an unfinished temporary file after a handled failure
+            if temporary_path is not None:
+                try:
+                    os.remove(temporary_path)
+                except FileNotFoundError:
+                    pass
+
     # ---------------------------------------------------------
 
     def simulate(
@@ -2116,12 +2162,15 @@ class Culture:
                 final_tic=num_times,
             )
 
-            if checkpoint_path and i % 100 == 0:
-                os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
-                with open(checkpoint_path, "wb") as f:
-                    # pickle.dump((self, i), f)
-                    state = self.rng.bit_generator.state
-                    pickle.dump((self, i, state), f)
+            # Save periodically and at the final integration step
+            if checkpoint_path and (
+                i % 100 == 0
+                or i == num_times
+            ):
+                self.save_checkpoint(
+                    checkpoint_path=checkpoint_path,
+                    tic=i,
+                )
 
         self.output.record_final_state(
             tic=num_times,

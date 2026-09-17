@@ -1057,6 +1057,9 @@ def simulate_single_culture(
         grid_torus,
     ) = args
 
+    # Store absolute paths in output objects and checkpoints
+    output_dir = os.path.abspath(output_dir)
+
     # Requested simulation parameters depending on the initialization mode
     if sim.initialization_mode == "random":
         number_of_cells = int(sim.initial_number_of_cells[f])
@@ -1193,6 +1196,120 @@ def simulate_single_culture(
         requested_number_of_removed_cells=(number_of_removed_cells),
     )
 
+    # Model parameters that must remain unchanged when resuming
+    parameter_names = (
+        "adjacency_threshold",
+        "cell_radius",
+        "cell_max_repro_attempts",
+        "cell_max_def_attempts",
+        "first_cell_is_stem",
+        "swap_probability",
+        "reproduction",
+        "movement",
+        "deformation",
+        "overlap_threshold_ratio",
+        "contraction_overlap_safety_ratio",
+        "delta_t",
+        "initial_aspect_ratio",
+        "aspect_ratio_max",
+        "cell_speed_max",
+        "trabajo_final",
+        "initialization_mode",
+        "deformation_warmup_steps",
+        "deformation_probe_steps",
+        "elongation_sleep_steps",
+    )
+
+    expected_config = {
+        name: getattr(sim, name)
+        for name in parameter_names
+    }
+
+    # Record the effective values passed to this realization
+    expected_config.update({
+        "checkpoint_config_version": 1,
+        "initial_number_of_cells": actual_number_of_cells,
+        "initial_fraction_elongated": sim.initial_fraction_elongated[t],
+        "prob_stem": sim.prob_stem[i],
+        "prob_diff": sim.prob_diff[k],
+        "rng_seed": seed,
+        "stabilization_time": effective_stabilization_time,
+        "culture_bounds": culture_bounds,
+        "grid_cube_size": grid_cube_size,
+        "grid_torus": grid_torus,
+        "deformation_attempt_period": (
+            sim.delta_t
+            if sim.deformation_attempt_period is None
+            else sim.deformation_attempt_period
+        ),
+        "delta_aspect_ratio": (
+            sim.aspect_ratio_max - 1.0
+            if sim.trabajo_final
+            else sim.delta_aspect_ratio
+        ),
+        "requested_number_of_removed_cells": number_of_removed_cells,
+    })
+
+    # Compare the force parameters directly, without rounded name strings
+    force = sim.forces[m]
+
+    expected_config["force_class"] = (
+        f"{type(force).__module__}.{type(force).__qualname__}"
+    )
+
+    for name in (
+        "kRep",
+        "bExp",
+        "noise_eta",
+        "d_phi",
+        "shrinking",
+        "lambda_core",
+    ):
+        expected_config[f"force.{name}"] = getattr(force, name, None)
+
+    # Output settings must remain unchanged when resuming
+    output_intervals = {
+        "dat_pos_ar": {
+            "save_step": save_step_dat_pos_ar,
+        },
+        "dat_order_par": {
+            "save_step": save_step_dat_order_par,
+        },
+        "dat_motion_par": {
+            "save_step": save_step_dat_motion_par,
+        },
+        "dat_cluster_par": {
+            "summary_save_step": save_step_dat_cluster_summary,
+            "raw_save_step": save_step_dat_cluster_raw,
+        },
+        "dat_deformation_par": {
+            "save_step": save_step_dat_deformation_par,
+        },
+        "dat_overlap_par": {
+            "save_step": save_step_dat_overlap_par,
+        },
+        "dat_local_order_par": {
+            "summary_save_step": save_step_dat_local_order_summary,
+            "raw_save_step": save_step_dat_local_order_raw,
+        },
+        "ovito": {
+            "save_step": save_step_ovito,
+        },
+    }
+
+    expected_config["output.directory"] = os.path.abspath(output_dir)
+    expected_config["output.enabled"] = tuple(sorted(outputs))
+
+    # Only compare recording intervals for enabled outputs
+    for output_name in sorted(set(outputs)):
+        for setting, value in output_intervals.get(
+            output_name,
+            {},
+        ).items():
+            expected_config[
+                f"output.{output_name}.{setting}"
+            ] = value
+            
     checkpoint_path_save = os.path.join(
         output_dir, "checkpoints", current_realization_name + ".pkl"
     )
@@ -1205,17 +1322,54 @@ def simulate_single_culture(
     )
     # Verify if there is a checkpoint
     if os.path.exists(checkpoint_path):
-        with open(checkpoint_path, "rb") as f:
-            # culture, start_tic = pickle.load(f)
-            # sim.cultures[current_realization_name] = culture
-            culture, start_tic, state = pickle.load(f)
-            sim.cultures[current_realization_name] = culture
-            sim.cultures[current_realization_name].rng = (
-                np.random.default_rng()
+        with open(checkpoint_path, "rb") as checkpoint_file:
+            culture, start_tic, state = pickle.load(checkpoint_file)
+
+        saved_config = getattr(
+            culture,
+            "_checkpoint_model_config",
+            None,
+        )
+
+        if saved_config is None:
+            raise ValueError(
+                "This checkpoint has no model configuration metadata. "
+                "Its compatibility cannot be verified. "
+                "Use a new output directory for a fresh simulation."
             )
-            sim.cultures[current_realization_name].rng.bit_generator.state = (
-                state
+
+        differences = []
+
+        for key in sorted(set(saved_config) | set(expected_config)):
+            if key not in saved_config or key not in expected_config:
+                differences.append(
+                    f"{key}: missing from one configuration"
+                )
+            elif saved_config[key] != expected_config[key]:
+                differences.append(
+                    f"{key}: checkpoint={saved_config[key]!r}, "
+                    f"requested={expected_config[key]!r}"
+                )
+
+        if differences:
+            raise ValueError(
+                "Checkpoint configuration mismatch:\n"
+                + "\n".join(differences)
+                + "\nUse the original parameters to resume, "
+                "or a new output directory for a different simulation."
             )
+
+        if sim.num_of_steps_per_realization < start_tic:
+            raise ValueError(
+                f"The requested final step "
+                f"({sim.num_of_steps_per_realization}) precedes "
+                f"the checkpoint step ({start_tic})."
+            )
+
+        # Restore the saved RNG state without replacing the generator
+        culture.rng.bit_generator.state = state
+
+        sim.cultures[current_realization_name] = culture
     else:
         # We create the output object
         output = create_output_demux(
@@ -1278,6 +1432,11 @@ def simulate_single_culture(
             deformation_probe_steps=(sim.deformation_probe_steps),
             elongation_sleep_steps=(sim.elongation_sleep_steps),
         )
+        # Persist the original configuration in every subsequent checkpoint
+        sim.cultures[
+            current_realization_name
+        ]._checkpoint_model_config = expected_config.copy()
+
         start_tic = 0
     sim.cultures[current_realization_name].simulate(
         sim.num_of_steps_per_realization,
