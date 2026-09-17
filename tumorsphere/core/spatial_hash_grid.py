@@ -92,12 +92,35 @@ class SpatialHashGrid:
         self.offsets = np.array(list(product(range(-1, 2), repeat=3)))
         self.hash_table = defaultdict(set)
 
+        if not np.isfinite(cube_size) or cube_size <= 0:
+            raise ValueError(
+                "cube_size must be finite and positive."
+            )
+
         if self.torus and self.bounds is not None:
-            # We calculate the number of buckets
-            self.number_of_buckets = int(np.floor(self.bounds / cube_size))
-            # We update the self.cube_size in order to have
-            # an integer number of buckets completed
-            self.cube_size = self.bounds/self.number_of_buckets
+            if not np.isfinite(self.bounds) or self.bounds <= 0:
+                raise ValueError(
+                    "Periodic bounds must be finite and positive."
+                )
+
+            self.number_of_buckets = int(
+                np.floor(self.bounds / cube_size)
+            )
+
+            # Avoid repeated neighboring buckets after periodic wrapping
+            if self.number_of_buckets < 3:
+                raise ValueError(
+                    "The periodic grid requires at least 3 buckets "
+                    "per axis. Increase the box size or use a smaller "
+                    "cube_size only if it still covers the full "
+                    "interaction range."
+                )
+
+            # Fit an integer number of buckets into the periodic box
+            self.cube_size = (
+                self.bounds / self.number_of_buckets
+            )
+
         else:
             self.cube_size = cube_size
 
