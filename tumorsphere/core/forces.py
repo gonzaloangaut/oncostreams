@@ -625,10 +625,13 @@ class Anisotropic_Grosmann(Force):
         # initialization of the parameters of interaction
         torque = 0
         force = np.zeros(3)
+
+        identity = np.identity(3)
         # Calculate interaction with filtered neighbors
         for neighbor_index in neighbors_indexes:
             relative_pos = cell.neighbors_relative_pos[neighbor_index]
-            overlap = cell.neighbors_overlap[neighbor_index]
+            # Reuse the normalized overlap computed during neighbor selection
+            xi = cell.neighbors_normalized_overlap[neighbor_index]
             # Calculate change in velocity and orientation given by the force model
             neighbor = cells[neighbor_index]
             # First we calculate some parameters of the neighbor cell
@@ -656,10 +659,6 @@ class Anisotropic_Grosmann(Force):
                 * (np.cos(relative_angle)) ** 2
             )
 
-            # calculate the kernel, using f[ξ]=ξ**gamma. ξ=xi calculated
-            # and now we can calculate xi
-            xi = overlap/(4 * area**2 / (np.pi * np.sqrt(beta)))
-
             # Compute the power of xi for the core amplification calculation
             xi_power = xi**self.bExp
 
@@ -685,9 +684,13 @@ class Anisotropic_Grosmann(Force):
                 )
                 * core_amplification
             )
-            # finally we can calculate the force:
-            force_2 = kernel * np.matmul(np.identity(3) - matrix_M, relative_pos)
+            # Reuse this matrix-vector product in both force and torque
+            c_times_r = np.matmul(
+                identity - matrix_M,
+                relative_pos,
+            )
 
+            force_2 = kernel * c_times_r
             # On the other way, we calculate the torque
             # we introduce the theta=angle of r_kj
             theta = np.arctan2(relative_pos[1], relative_pos[0])
@@ -703,10 +706,7 @@ class Anisotropic_Grosmann(Force):
                     )
                     / beta
                 )
-                * np.matmul(
-                    relative_pos,
-                    np.matmul(np.identity(3) - matrix_M, relative_pos),
-                )
+                * np.matmul(relative_pos, c_times_r)
                 + (cell.squared_diagonal * cell.anisotropy / (cell.squared_diagonal + neighbor.squared_diagonal))
                 * np.linalg.norm(relative_pos) ** 2
                 * np.sin(2 * (phies[cell_index] - theta))
@@ -718,7 +718,8 @@ class Anisotropic_Grosmann(Force):
         
         # then the change in the velocity is given by:
         dif_velocity = np.matmul(
-            ((mP + mS) / 2) * np.identity(3) + ((mP - mS) / 2) * Q_cell,
+            ((mP + mS) / 2) * identity
+            + ((mP - mS) / 2) * Q_cell,
             force,
         )
         # we calculate the change in the position of the cell, given all the neighbors.
