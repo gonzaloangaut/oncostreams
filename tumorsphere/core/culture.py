@@ -26,6 +26,7 @@ from tumorsphere.core.output import TumorsphereOutput
 from tumorsphere.core.spatial_hash_grid import SpatialHashGrid
 from tumorsphere.core.forces import Force
 
+
 class _UnionFind:
     """
     Manage disjoint groups of integer indices.
@@ -95,12 +96,8 @@ class _UnionFind:
             return
 
         # After this possible swap, root_i represents the larger group.
-        should_swap = (
-            self.size[root_i] < self.size[root_j]
-            or (
-                self.size[root_i] == self.size[root_j]
-                and root_i > root_j
-            )
+        should_swap = self.size[root_i] < self.size[root_j] or (
+            self.size[root_i] == self.size[root_j] and root_i > root_j
         )
 
         if should_swap:
@@ -335,46 +332,34 @@ class Culture:
         self.movement = movement
         self.deformation = deformation
         self.overlap_threshold_ratio = overlap_threshold_ratio
-        self.contraction_overlap_safety_ratio = contraction_overlap_safety_ratio
+        self.contraction_overlap_safety_ratio = (
+            contraction_overlap_safety_ratio
+        )
         self.delta_t = delta_t
-        # Preserve the legacy behavior when None is provided: 
+        # Preserve the legacy behavior when None is provided:
         # perform one deformation sweep per integration step.
-        if (
-            deformation_attempt_period is None
-        ):
+        if deformation_attempt_period is None:
             deformation_attempt_period = self.delta_t
 
         # Convert the physical deformation period into integration steps
-        interval_in_steps = (
-            deformation_attempt_period
-            / self.delta_t
-        )
+        interval_in_steps = deformation_attempt_period / self.delta_t
 
-        rounded_interval = int(
-            round(interval_in_steps)
-        )
+        rounded_interval = int(round(interval_in_steps))
 
         # The physical period must be representable by an integer
         # number of integration steps
-        if (
-            rounded_interval < 1
-            or not np.isclose(
-                interval_in_steps,
-                rounded_interval,
-            )
+        if rounded_interval < 1 or not np.isclose(
+            interval_in_steps,
+            rounded_interval,
         ):
             raise ValueError(
                 "deformation_attempt_period must be an integer "
                 "multiple of delta_t."
             )
 
-        self.deformation_attempt_period = float(
-            deformation_attempt_period
-        )
+        self.deformation_attempt_period = float(deformation_attempt_period)
 
-        self.deformation_attempt_interval_steps = (
-            rounded_interval
-        )
+        self.deformation_attempt_interval_steps = rounded_interval
 
         # Number of deformation sweeps performed
         self.deformation_attempt_count = 0
@@ -384,17 +369,11 @@ class Culture:
         self.stabilization_time = stabilization_time
 
         # Adaptive elongation timing
-        self.deformation_warmup_steps = (
-            deformation_warmup_steps
-        )
+        self.deformation_warmup_steps = deformation_warmup_steps
 
-        self.deformation_probe_steps = (
-            deformation_probe_steps
-        )
+        self.deformation_probe_steps = deformation_probe_steps
 
-        self.elongation_sleep_steps = (
-            elongation_sleep_steps
-        )
+        self.elongation_sleep_steps = elongation_sleep_steps
 
         # Adaptive elongation state
         self.steps_without_deformation = 0
@@ -428,7 +407,7 @@ class Culture:
         self.cell_phies = np.array([])
 
         # and the nematic tensors matrix
-        self.nematic_tensors = np.empty((0, 3, 3), float) 
+        self.nematic_tensors = np.empty((0, 3, 3), float)
 
         # we initialize the lists of cells
         self.cells = []
@@ -457,7 +436,7 @@ class Culture:
         # calculation of the side of the culture using other parameters
         self.side = self.grid.bounds
         # and calculation of the cells_area given the radius
-        self.cell_area = np.pi*self.cell_radius**2
+        self.cell_area = np.pi * self.cell_radius**2
 
         # Initial-condition protocol
         self.initialization_mode = initialization_mode
@@ -699,12 +678,10 @@ class Culture:
 
     # ------------------movement related behavior------------------
     def calculate_relative_positions(
-        self, 
-        cell_position: np.ndarray, 
-        neighbor_positions: np.ndarray
+        self, cell_position: np.ndarray, neighbor_positions: np.ndarray
     ) -> np.ndarray:
         """
-        It calculates the relative position in x and y of q cell with every neighbor 
+        It calculates the relative position in x and y of q cell with every neighbor
         taking into account that they move in a box with periodic boundary conditions.
 
         Parameters
@@ -719,7 +696,7 @@ class Culture:
         relative_pos : np.ndarray
             The relative position of the cell with every neighbor.
         """
-        
+
         # Calculate the relative positions between all the neighbors and the cell
         relative_positions = cell_position - neighbor_positions
 
@@ -733,8 +710,12 @@ class Culture:
         mask_y = abs_ry > 0.5 * self.side
 
         # For those True in masks, we adjust the position
-        relative_positions[mask_x, 0] -= np.sign(relative_positions[mask_x, 0]) * self.side
-        relative_positions[mask_y, 1] -= np.sign(relative_positions[mask_y, 1]) * self.side
+        relative_positions[mask_x, 0] -= (
+            np.sign(relative_positions[mask_x, 0]) * self.side
+        )
+        relative_positions[mask_y, 1] -= (
+            np.sign(relative_positions[mask_y, 1]) * self.side
+        )
 
         return relative_positions
 
@@ -746,7 +727,7 @@ class Culture:
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculate absolute, normalized, and maximum pairwise overlaps.
-        
+
         Parameters
         ----------
         cell_index : int
@@ -783,30 +764,34 @@ class Culture:
         cos_phi_diff = np.cos(phi_i - phi_j)
 
         beta = (
-            (d_i + d_j)**2
-            - (d_i * eps_i - d_j * eps_j)**2
+            (d_i + d_j) ** 2
+            - (d_i * eps_i - d_j * eps_j) ** 2
             - 4 * d_i * d_j * eps_i * eps_j * (cos_phi_diff**2)
         )
 
         # get Q matrices
-        Q_i = self.nematic_tensors[cell_index]           # shape (3,3)
-        Q_j = self.nematic_tensors[neighbor_indices]     # shape (N,3,3)
+        Q_i = self.nematic_tensors[cell_index]  # shape (3,3)
+        Q_j = self.nematic_tensors[neighbor_indices]  # shape (N,3,3)
 
         # matrix M
-        M = (d_i * eps_i * Q_i + (d_j * eps_j)[:, None, None] * Q_j) / (d_i + d_j)[:, None, None]
+        M = (d_i * eps_i * Q_i + (d_j * eps_j)[:, None, None] * Q_j) / (
+            d_i + d_j
+        )[:, None, None]
 
         I = np.eye(3)
-        diff_matrix = I - M                         # shape (N,3,3)
+        diff_matrix = I - M  # shape (N,3,3)
 
         # calculate i_0
         i_0 = 4 * self.cell_area**2 / (np.pi * np.sqrt(beta))  # shape (N,)
 
         # quadratic form: rᵀ (I - M) r, vectorized
-        r = np.array(relative_positions)                      # shape (N,3)
-        r_T = r[:, :, None]                         # shape (N,3,1)
-        r_b = r[:, None, :]                         # shape (N,1,3)
+        r = np.array(relative_positions)  # shape (N,3)
+        r_T = r[:, :, None]  # shape (N,3,1)
+        r_b = r[:, None, :]  # shape (N,1,3)
 
-        quad = np.matmul(r_b, np.matmul(diff_matrix, r_T)).reshape(-1)  # shape (N,)
+        quad = np.matmul(r_b, np.matmul(diff_matrix, r_T)).reshape(
+            -1
+        )  # shape (N,)
 
         # Evaluate the normalized overlap directly
         exponent = (d_i + d_j) / beta * quad
@@ -832,7 +817,7 @@ class Culture:
         )
 
         return overlaps
-    
+
     def propose_new_position_to_deform(
         self, cell_index: int, new_phi: float, new_aspect_ratio: float
     ) -> np.ndarray:
@@ -874,8 +859,8 @@ class Culture:
     def calculate_max_overlaps(
         self,
         cell_index: int,
-        neighbor_indices: list,        # shape (N,)
-    ) -> np.ndarray:                         # returns shape (N,)
+        neighbor_indices: list,  # shape (N,)
+    ) -> np.ndarray:  # returns shape (N,)
         """
         Calculates the maximum overlap between a single cell and multiple neighbors using
         overlap calculated in the TF in a vectorized way. (with the orientation of each cell)
@@ -910,8 +895,8 @@ class Culture:
         cos_phi_diff = np.cos(phi_i - phi_j)
 
         beta = (
-            (d_i + d_j)**2
-            - (d_i * eps_i - d_j * eps_j)**2
+            (d_i + d_j) ** 2
+            - (d_i * eps_i - d_j * eps_j) ** 2
             - 4 * d_i * d_j * eps_i * eps_j * (cos_phi_diff**2)
         )
         # finally we can calculate i_0
@@ -919,7 +904,7 @@ class Culture:
         # with l_parallel = np.sqrt((cell_area*cell.aspect_ratio)/np.pi)
         # and l_perp = sqrt(cell_area/(np.pi*cell.aspect_ratio))
         max_overlap = 4 * self.cell_area**2 / (np.pi * np.sqrt(beta))
-        
+
         return max_overlap
 
     def update_nematic_tensors(self, cell_indices: np.ndarray = None) -> None:
@@ -954,9 +939,7 @@ class Culture:
         """
         Return whether a deformation sweep is scheduled at this step.
         """
-        steps_since_stabilization = (
-            tic - self.stabilization_time
-        )
+        steps_since_stabilization = tic - self.stabilization_time
 
         return (
             steps_since_stabilization > 0
@@ -1022,10 +1005,9 @@ class Culture:
             self.aspect_ratio_max,
         )
 
-        displacement_length = (
-            np.sqrt((self.cell_area * new_aspect_ratio) / np.pi)
-            - np.sqrt((self.cell_area * old_aspect_ratio) / np.pi)
-        )
+        displacement_length = np.sqrt(
+            (self.cell_area * new_aspect_ratio) / np.pi
+        ) - np.sqrt((self.cell_area * old_aspect_ratio) / np.pi)
 
         candidate_neighbors_by_bucket = {}
         best_score = np.inf
@@ -1044,11 +1026,13 @@ class Culture:
                 # Always propose from the original position
                 new_position = np.mod(
                     old_position
-                    + np.array([
-                        displacement_length * np.cos(new_phi),
-                        displacement_length * np.sin(new_phi),
-                        0.0,
-                    ]),
+                    + np.array(
+                        [
+                            displacement_length * np.cos(new_phi),
+                            displacement_length * np.sin(new_phi),
+                            0.0,
+                        ]
+                    ),
                     self.side,
                 )
 
@@ -1155,12 +1139,11 @@ class Culture:
         old_aspect_ratio = cell.aspect_ratio
         # and get the place of the grid that correspond to the cell
         old_index = self.grid.get_hash_key(old_position)
-   
+
         # random phi and aspect ratio=max and generate a position with them
-        #new_phi = self.rng.uniform(low=0, high=2 * np.pi)
+        # new_phi = self.rng.uniform(low=0, high=2 * np.pi)
         new_aspect_ratio = min(
-            old_aspect_ratio + self.delta_aspect_ratio,
-            self.aspect_ratio_max
+            old_aspect_ratio + self.delta_aspect_ratio, self.aspect_ratio_max
         )
         new_position = self.propose_new_position_to_deform(
             cell_index, self.cell_phies[cell_index], new_aspect_ratio
@@ -1184,21 +1167,18 @@ class Culture:
             # Calculate relative positions for all neighbors
             relative_positions = self.calculate_relative_positions(
                 self.cell_positions[cell_index],
-                np.array([self.cell_positions[i] for i in candidate_neighbors])
+                np.array(
+                    [self.cell_positions[i] for i in candidate_neighbors]
+                ),
             )
             # Vectorized overlap + threshold check
-            _, normalized_overlaps, _ = (
-                self.calculate_overlap_components(
-                    cell_index=cell_index,
-                    neighbor_indices=candidate_neighbors,
-                    relative_positions=relative_positions,
-                )
+            _, normalized_overlaps, _ = self.calculate_overlap_components(
+                cell_index=cell_index,
+                neighbor_indices=candidate_neighbors,
+                relative_positions=relative_positions,
             )
 
-            mask = (
-                normalized_overlaps
-                > self.overlap_threshold_ratio
-            )
+            mask = normalized_overlaps > self.overlap_threshold_ratio
             # If there is overlap, turn back to original values
             if np.any(mask):
                 self.cell_positions[cell_index] = old_position
@@ -1247,12 +1227,10 @@ class Culture:
             self.cell_positions[candidate_neighbors],
         )
 
-        _, normalized_overlaps, _ = (
-            self.calculate_overlap_components(
-                cell_index=cell_index,
-                neighbor_indices=candidate_neighbors,
-                relative_positions=relative_positions,
-            )
+        _, normalized_overlaps, _ = self.calculate_overlap_components(
+            cell_index=cell_index,
+            neighbor_indices=candidate_neighbors,
+            relative_positions=relative_positions,
         )
 
         return float(np.max(normalized_overlaps))
@@ -1288,8 +1266,7 @@ class Culture:
         old_aspect_ratio = cell.aspect_ratio
 
         new_aspect_ratio = max(
-            old_aspect_ratio
-            - self.delta_aspect_ratio,
+            old_aspect_ratio - self.delta_aspect_ratio,
             1.0,
         )
 
@@ -1315,17 +1292,14 @@ class Culture:
         # Reject the proposed contraction if the safety criterion
         # is enabled and its threshold is exceeded
         safety_check_is_enabled = (
-            self.contraction_overlap_safety_ratio
-            is not None
+            self.contraction_overlap_safety_ratio is not None
         )
         if (
             safety_check_is_enabled
             and proposed_max_normalized_overlap
             > self.contraction_overlap_safety_ratio
         ):
-            self.deformation_event_counts[
-                "contraction_overlap_rejections"
-            ] = (
+            self.deformation_event_counts["contraction_overlap_rejections"] = (
                 self.deformation_event_counts.get(
                     "contraction_overlap_rejections",
                     0,
@@ -1399,9 +1373,7 @@ class Culture:
         ]
         # Calculate the relative position to them
         if to_calculate_relative_pos:
-            neighbor_positions = self.cell_positions[
-                to_calculate_relative_pos
-            ]
+            neighbor_positions = self.cell_positions[to_calculate_relative_pos]
 
             relative_positions = self.calculate_relative_positions(
                 self.cell_positions[cell_index],
@@ -1413,16 +1385,11 @@ class Culture:
                 to_calculate_relative_pos,
                 relative_positions,
             ):
-                cell.neighbors_relative_pos[
-                    neighbor_index
-                ] = relative_position
+                cell.neighbors_relative_pos[neighbor_index] = relative_position
 
-                self.cells[
-                    neighbor_index
-                ].neighbors_relative_pos[
+                self.cells[neighbor_index].neighbors_relative_pos[
                     cell_index
                 ] = -relative_position
-
 
         # Identify pairs whose overlap components are not yet cached
         to_calculate_overlap = [
@@ -1430,8 +1397,7 @@ class Culture:
             for neighbor_index in candidate_neighbors
             if (
                 neighbor_index not in cell.neighbors_overlap
-                or neighbor_index
-                not in cell.neighbors_normalized_overlap
+                or neighbor_index not in cell.neighbors_normalized_overlap
             )
         ]
 
@@ -1460,13 +1426,13 @@ class Culture:
                 cell.neighbors_overlap[neighbor_index] = overlap
                 neighbor.neighbors_overlap[cell_index] = overlap
 
-                cell.neighbors_normalized_overlap[
-                    neighbor_index
-                ] = normalized_overlap
+                cell.neighbors_normalized_overlap[neighbor_index] = (
+                    normalized_overlap
+                )
 
-                neighbor.neighbors_normalized_overlap[
-                    cell_index
-                ] = normalized_overlap
+                neighbor.neighbors_normalized_overlap[cell_index] = (
+                    normalized_overlap
+                )
 
         neighbor_indices = np.asarray(
             list(cell.neighbors_overlap.keys()),
@@ -1498,7 +1464,9 @@ class Culture:
 
         return neighbor_indices[significant_neighbors_mask]
 
-    def interaction(self, cell_index: int, delta_t: float) -> Tuple[np.ndarray, float]:
+    def interaction(
+        self, cell_index: int, delta_t: float
+    ) -> Tuple[np.ndarray, float]:
         """The given cell interacts with others if they are close enough.
 
         It describes the interaction of the cells given a force. It changes the position
@@ -1521,12 +1489,10 @@ class Culture:
         -----
         """
         cell = self.cells[cell_index]
-        
-        significant_neighbors_indexes = (
-            self._get_significant_neighbors(
-                cell_index=cell_index,
-                update_overlap_diagnostic=True,
-            )
+
+        significant_neighbors_indexes = self._get_significant_neighbors(
+            cell_index=cell_index,
+            update_overlap_diagnostic=True,
         )
         # Calculate interaction with final neighbors
         dif_position, dif_phi = self.force.calculate_interaction(
@@ -1594,11 +1560,9 @@ class Culture:
         for cell_index in range(number_of_cells):
             cell = self.cells[cell_index]
 
-            significant_neighbors = (
-                self._get_significant_neighbors(
-                    cell_index=cell_index,
-                    update_overlap_diagnostic=False,
-                )
+            significant_neighbors = self._get_significant_neighbors(
+                cell_index=cell_index,
+                update_overlap_diagnostic=False,
             )
 
             # In the current model, a cell is round when its aspect ratio
@@ -1611,10 +1575,7 @@ class Culture:
 
                 neighbor_is_round = neighbor.is_round
 
-                same_phenotype = (
-                    cell_is_round
-                    == neighbor_is_round
-                )
+                same_phenotype = cell_is_round == neighbor_is_round
 
                 # Only interacting cells of the same phenotype are joined.
                 if same_phenotype:
@@ -1648,19 +1609,14 @@ class Culture:
             representative_is_round = self.cells[representative_index].is_round
 
             if representative_is_round:
-                round_clusters.append(
-                    list(cluster_indices)
-                )
+                round_clusters.append(list(cluster_indices))
             else:
-                elongated_clusters.append(
-                    list(cluster_indices)
-                )
+                elongated_clusters.append(list(cluster_indices))
 
         return {
             "round": round_clusters,
             "elongated": elongated_clusters,
         }
-
 
     def move(
         self,
@@ -1668,7 +1624,7 @@ class Culture:
         dif_phies: np.ndarray,
     ) -> None:
         """The given cell moves with a given velocity and changes its orientation.
- 
+
         Attempts to move one step with a particular velocity and changes its orientation.
         If the cell arrives to a border of the culture's square, it appears on the other
         side (periodic boundary conditions).
@@ -1693,15 +1649,18 @@ class Culture:
         # Enforcing boundary condition
         self.cell_positions = np.mod(self.cell_positions, self.side)
 
-        # Remove the cells from their old place in grid and add them to their 
-        # new place 
+        # Remove the cells from their old place in grid and add them to their
+        # new place
         for cell_index in self.active_cell_indexes:
             old_key = self.grid.get_hash_key(old_positions[cell_index])
             new_key = self.grid.get_hash_key(self.cell_positions[cell_index])
             if old_key != new_key:
-                self.grid.remove_cell_from_hash_table(cell_index, old_positions[cell_index])
-                self.grid.add_cell_to_hash_table(cell_index, self.cell_positions[cell_index])
-
+                self.grid.remove_cell_from_hash_table(
+                    cell_index, old_positions[cell_index]
+                )
+                self.grid.add_cell_to_hash_table(
+                    cell_index, self.cell_positions[cell_index]
+                )
 
     def _record_clusters_if_needed(
         self,
@@ -1728,9 +1687,7 @@ class Culture:
             cells=self.cells,
             cell_positions=self.cell_positions,
             cell_phies=self.cell_phies,
-            cell_instantaneous_velocities=(
-                self.cell_instantaneous_velocities
-            ),
+            cell_instantaneous_velocities=(self.cell_instantaneous_velocities),
             clusters=clusters,
             side=self.side,
         )
@@ -1783,16 +1740,12 @@ class Culture:
             tic_start=self.deformation_interval_start_tic,
             tic_end=tic,
             final_tic=final_tic,
-            event_counts=dict(
-                self.deformation_event_counts
-            ),
+            event_counts=dict(self.deformation_event_counts),
         )
 
         self.reset_deformation_event_counts()
 
-        self.deformation_interval_start_tic = (
-            tic + 1
-        )
+        self.deformation_interval_start_tic = tic + 1
 
     def _record_overlap_parameters_if_needed(
         self,
@@ -1815,20 +1768,18 @@ class Culture:
             tic_start=self.overlap_interval_start_tic,
             tic_end=tic,
             final_tic=final_tic,
-            max_normalized_overlap=(
-                self.max_normalized_overlap_interval
-            ),
+            max_normalized_overlap=(self.max_normalized_overlap_interval),
         )
 
         self.max_normalized_overlap_interval = 0.0
 
-        self.overlap_interval_start_tic = (
-            tic + 1
-        )
+        self.overlap_interval_start_tic = tic + 1
 
     # ---------------------------------------------------------
 
-    def simulate(self, num_times: int, start_tic: int, checkpoint_path: str) -> None:
+    def simulate(
+        self, num_times: int, start_tic: int, checkpoint_path: str
+    ) -> None:
         """Simulate culture growth for a specified number of time steps.
 
         At each time step, we randomly sort the list of active cells and then
@@ -1886,23 +1837,17 @@ class Culture:
                         replace=False,
                     )
 
-                    elongated_mask[
-                        elongated_indices
-                    ] = True
+                    elongated_mask[elongated_indices] = True
 
                 # Define the parameters if the cell is round or elongated
-                for cell_index in range(
-                    self.initial_number_of_cells
-                ):
+                for cell_index in range(self.initial_number_of_cells):
                     if elongated_mask[cell_index]:
                         phi = self.rng.uniform(
                             low=0,
                             high=2 * np.pi,
                         )
 
-                        aspect_ratio = (
-                            self.aspect_ratio_max
-                        )
+                        aspect_ratio = self.aspect_ratio_max
 
                     else:
                         phi = (
@@ -1917,16 +1862,11 @@ class Culture:
                             )
                         )
 
-                        aspect_ratio = (
-                            self.initial_aspect_ratio
-                        )
+                        aspect_ratio = self.initial_aspect_ratio
 
                     # Take the positions of the cells depending on the
                     # initialization mode
-                    if (
-                        self.initialization_mode
-                        == "random"
-                    ):
+                    if self.initialization_mode == "random":
                         position = np.array(
                             [
                                 self.rng.uniform(
@@ -1943,18 +1883,12 @@ class Culture:
                         )
 
                     else:
-                        position = (
-                            self.initial_positions[
-                                cell_index
-                            ].copy()
-                        )
+                        position = self.initial_positions[cell_index].copy()
 
                     Cell(
                         position=position,
                         culture=self,
-                        is_stem=(
-                            self.first_cell_is_stem
-                        ),
+                        is_stem=(self.first_cell_is_stem),
                         phi=phi,
                         aspect_ratio=aspect_ratio,
                         parent_index=0,
@@ -1990,7 +1924,7 @@ class Culture:
             )
 
         # we simulate for num_times time steps
-        for i in range(start_tic+1, num_times + 1):
+        for i in range(start_tic + 1, num_times + 1):
             # we reproduce and (or) move the cells
             if self.reproduction:
                 # we get a permuted copy of the cells list
@@ -2011,9 +1945,8 @@ class Culture:
                     self.deformation_attempt_count += 1
                     # Boolean to see if the elongation is sleeping
                     elongation_is_sleeping = (
-                        self.deformation_attempt_count > (
-                            self.deformation_warmup_steps
-                        )
+                        self.deformation_attempt_count
+                        > (self.deformation_warmup_steps)
                         and self.elongation_sleep_remaining > 0
                     )
 
@@ -2037,9 +1970,7 @@ class Culture:
                                 ] += 1
 
                                 # Try to elongate it
-                                success = self.elongate_from_round(
-                                    index
-                                )
+                                success = self.elongate_from_round(index)
 
                                 if success:
                                     # Deformation succesful
@@ -2051,9 +1982,7 @@ class Culture:
 
                         else:
                             # Contractions are always allowed, including during sleep
-                            success = self.shrink_from_elliptical(
-                                index
-                            )
+                            success = self.shrink_from_elliptical(index)
 
                             if success:
                                 # Deformation succesful
@@ -2072,17 +2001,14 @@ class Culture:
                             # If the cell cant shrink, it tries to elongate
                             elif (
                                 not elongation_is_sleeping
-                                and cell.aspect_ratio
-                                < self.aspect_ratio_max
+                                and cell.aspect_ratio < self.aspect_ratio_max
                             ):
 
                                 self.deformation_event_counts[
                                     "elliptical_elongation_attempts"
                                 ] += 1
 
-                                success = self.elongate_from_elliptical(
-                                    index
-                                )
+                                success = self.elongate_from_elliptical(index)
 
                                 if success:
                                     # Deformation succesful
@@ -2095,7 +2021,7 @@ class Culture:
                     # Adaptive elongation starts only after the initial warmup
                     if self.deformation_attempt_count > (
                         self.deformation_warmup_steps
-                    ):                        
+                    ):
 
                         if elongation_is_sleeping:
                             # A contraction changes the geometry, so elongation
@@ -2138,7 +2064,8 @@ class Culture:
                 # Calculate the interaction for every cell
                 for index in self.active_cell_indexes:
                     dif_position, dif_phi = self.interaction(
-                        cell_index=index, delta_t=self.delta_t,
+                        cell_index=index,
+                        delta_t=self.delta_t,
                     )
                     # add the change in position to the matrix
                     dif_positions[index] = dif_position
@@ -2147,8 +2074,7 @@ class Culture:
 
                 # Instantaneous resultant velocities
                 self.cell_instantaneous_velocities = (
-                    dif_positions
-                    / self.delta_t
+                    dif_positions / self.delta_t
                 )
                 # Move all cells
                 self.move(dif_positions=dif_positions, dif_phies=dif_phies)
@@ -2189,14 +2115,13 @@ class Culture:
                 tic=i,
                 final_tic=num_times,
             )
-            
+
             if checkpoint_path and i % 100 == 0:
                 os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
                 with open(checkpoint_path, "wb") as f:
-                    #pickle.dump((self, i), f)
+                    # pickle.dump((self, i), f)
                     state = self.rng.bit_generator.state
                     pickle.dump((self, i, state), f)
-
 
         self.output.record_final_state(
             tic=num_times,

@@ -29,7 +29,7 @@ class SpatialHashGrid:
         that cells have usually radius 1, so a cube of side `h=2r` is enough
         to make sure that we only have to check superpositions with cells on
         the same or first neighboring grid cells. Enlarge if using larger
-        cells. If we are in a torus, it can change in order to have an 
+        cells. If we are in a torus, it can change in order to have an
         integer number of buckets in the grid completed.
     torus : bool, optional
         Whether the grid is a torus or not. If True, the grid is a torus, so
@@ -93,9 +93,7 @@ class SpatialHashGrid:
         self.hash_table = defaultdict(set)
 
         if not np.isfinite(cube_size) or cube_size <= 0:
-            raise ValueError(
-                "cube_size must be finite and positive."
-            )
+            raise ValueError("cube_size must be finite and positive.")
 
         if self.torus and self.bounds is not None:
             if not np.isfinite(self.bounds) or self.bounds <= 0:
@@ -103,9 +101,7 @@ class SpatialHashGrid:
                     "Periodic bounds must be finite and positive."
                 )
 
-            self.number_of_buckets = int(
-                np.floor(self.bounds / cube_size)
-            )
+            self.number_of_buckets = int(np.floor(self.bounds / cube_size))
 
             # Avoid repeated neighboring buckets after periodic wrapping
             if self.number_of_buckets < 3:
@@ -117,9 +113,7 @@ class SpatialHashGrid:
                 )
 
             # Fit an integer number of buckets into the periodic box
-            self.cube_size = (
-                self.bounds / self.number_of_buckets
-            )
+            self.cube_size = self.bounds / self.number_of_buckets
 
         else:
             self.cube_size = cube_size
@@ -237,7 +231,7 @@ class SpatialHashGrid:
 
         # Handle toroidal wrapping
         if self.bounds is not None and self.torus:
-            #adj_buckets = np.mod(adj_buckets, self.bounds)
+            # adj_buckets = np.mod(adj_buckets, self.bounds)
             adj_buckets = np.mod(adj_buckets, self.number_of_buckets)
         return chain.from_iterable(
             map(lambda b: self.hash_table[b.tobytes()], adj_buckets)

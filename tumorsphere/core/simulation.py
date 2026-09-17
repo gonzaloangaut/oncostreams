@@ -187,7 +187,7 @@ class Simulation:
         deformation_attempt_period: Optional[float] = None,
         initial_aspect_ratio: float = 1,
         aspect_ratio_max: float = 5,
-        cell_speed_max : float = 1,
+        cell_speed_max: float = 1,
         delta_aspect_ratio: float = 0.1,
         trabajo_final: bool = False,
         initialization_mode: str = "random",
@@ -201,13 +201,9 @@ class Simulation:
         self.initial_fraction_elongated = initial_fraction_elongated
         self.initial_density = initial_density
 
-        self.requested_number_of_cells = (
-            requested_number_of_cells
-        )
+        self.requested_number_of_cells = requested_number_of_cells
 
-        self.requested_density = (
-            requested_density
-        )
+        self.requested_density = requested_density
 
         self.requested_number_of_removed_cells = (
             requested_number_of_removed_cells
@@ -226,7 +222,9 @@ class Simulation:
         self.rng = np.random.default_rng(rng_seed)
         self.stabilization_time = stabilization_time
         self.overlap_threshold_ratio = overlap_threshold_ratio
-        self.contraction_overlap_safety_ratio = contraction_overlap_safety_ratio
+        self.contraction_overlap_safety_ratio = (
+            contraction_overlap_safety_ratio
+        )
         self.delta_t = delta_t
         self.deformation_attempt_period = deformation_attempt_period
         self.initial_aspect_ratio = initial_aspect_ratio
@@ -234,21 +232,15 @@ class Simulation:
         self.cell_speed_max = cell_speed_max
         self.delta_aspect_ratio = delta_aspect_ratio
 
-        # TFG 
+        # TFG
         self.trabajo_final = trabajo_final
 
         # Adaptive elongation timing
-        self.deformation_warmup_steps = (
-            deformation_warmup_steps
-        )
+        self.deformation_warmup_steps = deformation_warmup_steps
 
-        self.deformation_probe_steps = (
-            deformation_probe_steps
-        )
+        self.deformation_probe_steps = deformation_probe_steps
 
-        self.elongation_sleep_steps = (
-            elongation_sleep_steps
-        )
+        self.elongation_sleep_steps = elongation_sleep_steps
         # Initialization mode
         valid_initialization_modes = {
             "random",
@@ -289,19 +281,13 @@ class Simulation:
                     "requested_number_of_cells."
                 )
 
-            density_was_provided = (
-                requested_density is not None
-            )
+            density_was_provided = requested_density is not None
 
             removed_cells_were_provided = (
-                requested_number_of_removed_cells
-                is not None
+                requested_number_of_removed_cells is not None
             )
 
-            if (
-                density_was_provided
-                == removed_cells_were_provided
-            ):
+            if density_was_provided == removed_cells_were_provided:
                 raise ValueError(
                     "For triangular_vacancies, provide exactly one "
                     "of requested_density or "
@@ -381,64 +367,34 @@ class Simulation:
             spacings and full-lattice packing fraction.
         """
         if requested_number_of_cells <= 0:
-            raise ValueError(
-                "requested_number_of_cells must be positive."
-            )
+            raise ValueError("requested_number_of_cells must be positive.")
 
         # Estimate the number of rows from
         # N ≈ (sqrt(3) / 2) * n_y**2
         estimated_number_of_rows = np.sqrt(
-            (
-                2
-                * requested_number_of_cells
-            )
-            / np.sqrt(3)
+            (2 * requested_number_of_cells) / np.sqrt(3)
         )
 
         # Choose the closest even number of rows
         number_of_rows = max(
             2,
-            2
-            * int(
-                np.round(
-                    estimated_number_of_rows / 2
-                )
-            ),
+            2 * int(np.round(estimated_number_of_rows / 2)),
         )
 
         # Choose the number of columns so that
         # n_x / n_y ≈ sqrt(3) / 2
         number_of_columns = max(
             1,
-            int(
-                np.round(
-                    (
-                        np.sqrt(3)
-                        / 2
-                    )
-                    * number_of_rows
-                )
-            ),
+            int(np.round((np.sqrt(3) / 2) * number_of_rows)),
         )
 
         # Now we calculate the reference number of cells
-        reference_number_of_cells = (
-            number_of_columns
-            * number_of_rows
-        )
+        reference_number_of_cells = number_of_columns * number_of_rows
 
         # Natural dimensions of a compact triangular lattice
-        natural_width = (
-            2
-            * self.cell_radius
-            * number_of_columns
-        )
+        natural_width = 2 * self.cell_radius * number_of_columns
 
-        natural_height = (
-            np.sqrt(3)
-            * self.cell_radius
-            * number_of_rows
-        )
+        natural_height = np.sqrt(3) * self.cell_radius * number_of_rows
 
         # Use the longest natural dimension as the square side
         side = max(
@@ -446,40 +402,19 @@ class Simulation:
             natural_height,
         )
 
-        spacing_x = (
-            side
-            / number_of_columns
-        )
+        spacing_x = side / number_of_columns
 
-        spacing_y = (
-            side
-            / number_of_rows
-        )
+        spacing_y = side / number_of_rows
 
-        cell_area = (
-            np.pi
-            * self.cell_radius**2
-        )
+        cell_area = np.pi * self.cell_radius**2
 
-        full_density = (
-            reference_number_of_cells
-            * cell_area
-            / side**2
-        )
+        full_density = reference_number_of_cells * cell_area / side**2
 
         return {
-            "requested_number_of_cells": (
-                requested_number_of_cells
-            ),
-            "number_of_columns": (
-                number_of_columns
-            ),
-            "number_of_rows": (
-                number_of_rows
-            ),
-            "reference_number_of_cells": (
-                reference_number_of_cells
-            ),
+            "requested_number_of_cells": (requested_number_of_cells),
+            "number_of_columns": (number_of_columns),
+            "number_of_rows": (number_of_rows),
+            "reference_number_of_cells": (reference_number_of_cells),
             "natural_width": natural_width,
             "natural_height": natural_height,
             "side": side,
@@ -509,39 +444,21 @@ class Simulation:
         positions : np.ndarray
             Array with shape (reference_number_of_cells, 3).
         """
-        number_of_columns = int(
-            geometry["number_of_columns"]
-        )
+        number_of_columns = int(geometry["number_of_columns"])
 
-        number_of_rows = int(
-            geometry["number_of_rows"]
-        )
+        number_of_rows = int(geometry["number_of_rows"])
 
-        reference_number_of_cells = int(
-            geometry["reference_number_of_cells"]
-        )
+        reference_number_of_cells = int(geometry["reference_number_of_cells"])
 
-        side = float(
-            geometry["side"]
-        )
+        side = float(geometry["side"])
 
-        spacing_x = float(
-            geometry["spacing_x"]
-        )
+        spacing_x = float(geometry["spacing_x"])
 
-        spacing_y = float(
-            geometry["spacing_y"]
-        )
+        spacing_y = float(geometry["spacing_y"])
 
-        expected_number_of_cells = (
-            number_of_columns
-            * number_of_rows
-        )
+        expected_number_of_cells = number_of_columns * number_of_rows
 
-        if (
-            reference_number_of_cells
-            != expected_number_of_cells
-        ):
+        if reference_number_of_cells != expected_number_of_cells:
             raise ValueError(
                 "reference_number_of_cells must be equal to "
                 "number_of_columns * number_of_rows."
@@ -568,22 +485,9 @@ class Simulation:
         )
 
         # Odd rows are shifted by half a horizontal spacing
-        horizontal_offsets = (
-            0.5
-            * (
-                row_indices
-                % 2
-            )
-        )
+        horizontal_offsets = 0.5 * (row_indices % 2)
 
-        x_positions = (
-            (
-                column_indices
-                + 0.5
-                + horizontal_offsets
-            )
-            * spacing_x
-        )
+        x_positions = (column_indices + 0.5 + horizontal_offsets) * spacing_x
 
         # The modulo is needed because the final point of an odd row
         # can coincide with the right periodic boundary
@@ -592,10 +496,7 @@ class Simulation:
             side,
         )
 
-        y_positions = (
-            row_indices
-            + 0.5
-        ) * spacing_y
+        y_positions = (row_indices + 0.5) * spacing_y
 
         z_positions = np.zeros(
             reference_number_of_cells,
@@ -656,18 +557,11 @@ class Simulation:
         """
         # Make sure that only the density or the number of cells to removed
         # was provided
-        target_density_was_provided = (
-            target_density is not None
-        )
+        target_density_was_provided = target_density is not None
 
-        number_removed_was_provided = (
-            number_of_removed_cells is not None
-        )
+        number_removed_was_provided = number_of_removed_cells is not None
 
-        if (
-            target_density_was_provided
-            == number_removed_was_provided
-        ):
+        if target_density_was_provided == number_removed_was_provided:
             raise ValueError(
                 "Provide exactly one of target_density or "
                 "number_of_removed_cells."
@@ -677,17 +571,11 @@ class Simulation:
             rng = self.rng
 
         # Take the data from the lattice geometry
-        reference_number_of_cells = int(
-            geometry["reference_number_of_cells"]
-        )
+        reference_number_of_cells = int(geometry["reference_number_of_cells"])
 
-        side = float(
-            geometry["side"]
-        )
+        side = float(geometry["side"])
 
-        full_density = float(
-            geometry["full_density"]
-        )
+        full_density = float(geometry["full_density"])
 
         expected_shape = (
             reference_number_of_cells,
@@ -701,28 +589,18 @@ class Simulation:
                 f"{lattice_positions.shape}."
             )
 
-        cell_area = (
-            np.pi
-            * self.cell_radius**2
-        )
+        cell_area = np.pi * self.cell_radius**2
 
         # Analyzed the case in which the target density was provided
         if target_density_was_provided:
-            target_density = float(
-                target_density
-            )
+            target_density = float(target_density)
 
             if target_density <= 0:
-                raise ValueError(
-                    "target_density must be positive."
-                )
+                raise ValueError("target_density must be positive.")
 
-            if (
-                target_density > full_density
-                and not np.isclose(
-                    target_density,
-                    full_density,
-                )
+            if target_density > full_density and not np.isclose(
+                target_density,
+                full_density,
             ):
                 raise ValueError(
                     "The requested density is larger than the "
@@ -733,13 +611,7 @@ class Simulation:
                 )
 
             number_of_cells = int(
-                np.rint(
-                    (
-                        target_density
-                        * side**2
-                    )
-                    / cell_area
-                )
+                np.rint((target_density * side**2) / cell_area)
             )
 
             # Protect against small floating-point differences when the
@@ -755,8 +627,7 @@ class Simulation:
                 )
 
             number_of_removed_cells = (
-                reference_number_of_cells
-                - number_of_cells
+                reference_number_of_cells - number_of_cells
             )
 
         # Analyzed the case in which the number of removed cells was provided
@@ -765,19 +636,11 @@ class Simulation:
                 number_of_removed_cells,
                 (int, np.integer),
             ):
-                raise TypeError(
-                    "number_of_removed_cells must be an integer."
-                )
+                raise TypeError("number_of_removed_cells must be an integer.")
 
-            number_of_removed_cells = int(
-                number_of_removed_cells
-            )
+            number_of_removed_cells = int(number_of_removed_cells)
 
-            if not (
-                0
-                <= number_of_removed_cells
-                < reference_number_of_cells
-            ):
+            if not (0 <= number_of_removed_cells < reference_number_of_cells):
                 raise ValueError(
                     "number_of_removed_cells must satisfy "
                     "0 <= number_of_removed_cells "
@@ -785,8 +648,7 @@ class Simulation:
                 )
 
             number_of_cells = (
-                reference_number_of_cells
-                - number_of_removed_cells
+                reference_number_of_cells - number_of_removed_cells
             )
 
         # For each case, take all the indices
@@ -809,9 +671,7 @@ class Simulation:
                 replace=False,
             )
 
-            vacant_indices = np.sort(
-                vacant_indices
-            )
+            vacant_indices = np.sort(vacant_indices)
 
         # Applied a mask to the geometry to have vacants
         occupied_mask = np.ones(
@@ -819,32 +679,20 @@ class Simulation:
             dtype=bool,
         )
 
-        occupied_mask[
-            vacant_indices
-        ] = False
+        occupied_mask[vacant_indices] = False
 
-        occupied_indices = all_indices[
-            occupied_mask
-        ]
+        occupied_indices = all_indices[occupied_mask]
 
-        occupied_positions = lattice_positions[
-            occupied_indices
-        ].copy()
+        occupied_positions = lattice_positions[occupied_indices].copy()
 
-        actual_density = (
-            number_of_cells
-            * cell_area
-            / side**2
-        )
+        actual_density = number_of_cells * cell_area / side**2
 
         return {
             "positions": occupied_positions,
             "occupied_indices": occupied_indices,
             "vacant_indices": vacant_indices,
             "number_of_cells": number_of_cells,
-            "number_of_removed_cells": (
-                number_of_removed_cells
-            ),
+            "number_of_removed_cells": (number_of_removed_cells),
             "target_density": target_density,
             "actual_density": actual_density,
             "full_density": full_density,
@@ -955,7 +803,7 @@ class Simulation:
         dat_overlap_par: bool = False,
         dat_local_order_par: bool = False,
         save_step_dat_order_par: int = 100,
-        save_step_dat_motion_par: int = 100,    
+        save_step_dat_motion_par: int = 100,
         save_step_dat_cluster_summary: int = 100,
         save_step_dat_cluster_raw: int = 1000,
         save_step_dat_deformation_par: int = 100,
@@ -1025,28 +873,18 @@ class Simulation:
 
         # Choose the parameters depending on the initialization mode
         if self.initialization_mode == "random":
-            number_of_cells_values = (
-                self.initial_number_of_cells
-            )
+            number_of_cells_values = self.initial_number_of_cells
 
-            density_values = (
-                self.initial_density
-            )
+            density_values = self.initial_density
 
             removed_cells_values = None
 
         else:
-            number_of_cells_values = (
-                self.requested_number_of_cells
-            )
+            number_of_cells_values = self.requested_number_of_cells
 
-            density_values = (
-                self.requested_density
-            )
+            density_values = self.requested_density
 
-            removed_cells_values = (
-                self.requested_number_of_removed_cells
-            )
+            removed_cells_values = self.requested_number_of_removed_cells
 
         with mp.Pool(number_of_processes) as p:
             p.map(
@@ -1126,81 +964,47 @@ def realization_name(
     name = "culture"
 
     if repro:
-        name += (
-            f"_pd={pd}"
-            f"_ps={ps}"
-        )
+        name += f"_pd={pd}" f"_ps={ps}"
 
     if moving:
         if initialization_mode == "random":
-            name += (
-                f"_initial_nc={nc}"
-            )
+            name += f"_initial_nc={nc}"
 
             if rho is not None:
-                name += (
-                    f"_density={rho:g}"
-                )
+                name += f"_density={rho:g}"
             else:
-                name += (
-                    f"_bounds={bounds:g}"
-                )
+                name += f"_bounds={bounds:g}"
 
-        elif (
-            initialization_mode
-            == "triangular_vacancies"
-        ):
-            name += (
-                f"_requested_nc={nc}"
-            )
+        elif initialization_mode == "triangular_vacancies":
+            name += f"_requested_nc={nc}"
 
-            name += (
-                f"_reference_nc="
-                f"{reference_number_of_cells}"
-            )
+            name += f"_reference_nc=" f"{reference_number_of_cells}"
 
-            name += (
-                f"_initial_nc="
-                f"{actual_number_of_cells}"
-            )
+            name += f"_initial_nc=" f"{actual_number_of_cells}"
 
             if rho is not None:
-                name += (
-                    f"_requested_density={rho:g}"
-                )
+                name += f"_requested_density={rho:g}"
 
             else:
-                name += (
-                    f"_removed_nc="
-                    f"{requested_number_of_removed_cells}"
-                )
+                name += f"_removed_nc=" f"{requested_number_of_removed_cells}"
 
-            name += (
-                f"_density="
-                f"{actual_density:.6f}"
-            )
+            name += f"_density=" f"{actual_density:.6f}"
 
         if not np.isclose(
             f_e,
             0.0,
         ):
-            name += (
-                f"_initial_f_e="
-                f"{f_e:g}"
-            )
+            name += f"_initial_f_e=" f"{f_e:g}"
 
-        name += (
-            f"_force={force_name}"
-        )
+        name += f"_force={force_name}"
 
-    name += (
-        f"_rng_seed={seed}"
-    )
+    name += f"_rng_seed={seed}"
 
     return name
 
+
 def simulate_single_culture(
-    args: Tuple[int, int, int, Simulation, List[str], str]
+    args: Tuple[int, int, int, Simulation, List[str], str],
 ) -> None:
     """A worker function for multiprocessing.
 
@@ -1255,9 +1059,7 @@ def simulate_single_culture(
 
     # Requested simulation parameters depending on the initialization mode
     if sim.initialization_mode == "random":
-        number_of_cells = int(
-            sim.initial_number_of_cells[f]
-        )
+        number_of_cells = int(sim.initial_number_of_cells[f])
 
         density = (
             float(sim.initial_density[g])
@@ -1268,9 +1070,7 @@ def simulate_single_culture(
         number_of_removed_cells = None
 
     else:
-        number_of_cells = int(
-            sim.requested_number_of_cells[f]
-        )
+        number_of_cells = int(sim.requested_number_of_cells[f])
 
         density = (
             float(sim.requested_density[g])
@@ -1279,37 +1079,23 @@ def simulate_single_culture(
         )
 
         number_of_removed_cells = (
-            int(
-                sim.requested_number_of_removed_cells[r]
-            )
-            if (
-                sim.requested_number_of_removed_cells
-                is not None
-            )
+            int(sim.requested_number_of_removed_cells[r])
+            if (sim.requested_number_of_removed_cells is not None)
             else None
         )
-        
-    # Default values for the random initialization
-    reference_number_of_cells = (
-        number_of_cells
-    )
 
-    actual_number_of_cells = (
-        number_of_cells
-    )
+    # Default values for the random initialization
+    reference_number_of_cells = number_of_cells
+
+    actual_number_of_cells = number_of_cells
 
     actual_density = density
 
     initial_positions = None
 
-    effective_stabilization_time = (
-        sim.stabilization_time
-    )
+    effective_stabilization_time = sim.stabilization_time
 
-    if (
-        sim.initialization_mode
-        == "triangular_vacancies"
-    ):
+    if sim.initialization_mode == "triangular_vacancies":
         if not np.isclose(
             sim.initial_aspect_ratio,
             1.0,
@@ -1324,37 +1110,24 @@ def simulate_single_culture(
                 "The triangular_vacancies initialization "
                 "requires periodic boundary conditions."
             )
-        geometry = (
-            sim.calculate_triangular_lattice_geometry(
-                requested_number_of_cells=(
-                    number_of_cells
-                ),
-            )
+        geometry = sim.calculate_triangular_lattice_geometry(
+            requested_number_of_cells=(number_of_cells),
         )
 
-        lattice_positions = (
-            sim.generate_triangular_lattice_positions(
-                geometry=geometry,
-            )
+        lattice_positions = sim.generate_triangular_lattice_positions(
+            geometry=geometry,
         )
 
         # Encode the vacancy-control parameter for SeedSequence
         if density is not None:
             vacancy_control_type = 0
 
-            vacancy_control_value = int(
-                np.rint(
-                    density
-                    * 1_000_000_000
-                )
-            )
+            vacancy_control_value = int(np.rint(density * 1_000_000_000))
 
         else:
             vacancy_control_type = 1
 
-            vacancy_control_value = int(
-                number_of_removed_cells
-            )
+            vacancy_control_value = int(number_of_removed_cells)
 
         # Use the same vacancy configuration for equal realizations,
         # sizes and densities across other parameter combinations
@@ -1368,60 +1141,37 @@ def simulate_single_culture(
             ]
         )
 
-        vacancy_rng = np.random.default_rng(
-            vacancy_seed_sequence
+        vacancy_rng = np.random.default_rng(vacancy_seed_sequence)
+
+        selection = sim.select_triangular_lattice_positions(
+            lattice_positions=lattice_positions,
+            geometry=geometry,
+            target_density=density,
+            number_of_removed_cells=(number_of_removed_cells),
+            rng=vacancy_rng,
         )
 
-        selection = (
-            sim.select_triangular_lattice_positions(
-                lattice_positions=lattice_positions,
-                geometry=geometry,
-                target_density=density,
-                number_of_removed_cells=(
-                    number_of_removed_cells
-                ),
-                rng=vacancy_rng,
-            )
-        )
+        culture_bounds = float(geometry["side"])
 
-        culture_bounds = float(
-            geometry["side"]
-        )
+        initial_positions = selection["positions"]
 
-        initial_positions = selection[
-            "positions"
-        ]
+        reference_number_of_cells = int(geometry["reference_number_of_cells"])
 
-        reference_number_of_cells = int(
-            geometry[
-                "reference_number_of_cells"
-            ]
-        )
+        actual_number_of_cells = int(selection["number_of_cells"])
 
-        actual_number_of_cells = int(
-            selection["number_of_cells"]
-        )
-
-        actual_density = float(
-            selection["actual_density"]
-        )
+        actual_density = float(selection["actual_density"])
 
         # Deformation is enabled from the first dynamic step.
         effective_stabilization_time = 0
 
     else:
         if density is not None:
-            culture_bounds = (
-                sim.calculate_culture_bounds_from_density(
-                    number_of_cells=(
-                        number_of_cells
-                    ),
-                    density=density,
-                )
+            culture_bounds = sim.calculate_culture_bounds_from_density(
+                number_of_cells=(number_of_cells),
+                density=density,
             )
         else:
             culture_bounds = sim.culture_bounds
-
 
     # We compute the name of the realization after preparing
     # the initial condition.
@@ -1436,36 +1186,36 @@ def simulate_single_culture(
         culture_bounds,
         sim.reproduction,
         sim.movement,
-        initialization_mode=(
-            sim.initialization_mode
-        ),
-        reference_number_of_cells=(
-            reference_number_of_cells
-        ),
-        actual_number_of_cells=(
-            actual_number_of_cells
-        ),
+        initialization_mode=(sim.initialization_mode),
+        reference_number_of_cells=(reference_number_of_cells),
+        actual_number_of_cells=(actual_number_of_cells),
         actual_density=actual_density,
-        requested_number_of_removed_cells=(
-            number_of_removed_cells
-        ),
+        requested_number_of_removed_cells=(number_of_removed_cells),
     )
 
-    checkpoint_path_save = os.path.join(output_dir, "checkpoints", current_realization_name + ".pkl")
+    checkpoint_path_save = os.path.join(
+        output_dir, "checkpoints", current_realization_name + ".pkl"
+    )
     # checkpoint_dir = os.path.join(os.environ["HOME"], "oncostream", "checkpoints")
     # os.makedirs(checkpoint_dir, exist_ok=True)
-    checkpoint_dir = os.path.join(output_dir, "checkpoints") #
-    os.makedirs(checkpoint_dir, exist_ok=True) #
-    checkpoint_path = os.path.join(checkpoint_dir, current_realization_name + ".pkl")
+    checkpoint_dir = os.path.join(output_dir, "checkpoints")  #
+    os.makedirs(checkpoint_dir, exist_ok=True)  #
+    checkpoint_path = os.path.join(
+        checkpoint_dir, current_realization_name + ".pkl"
+    )
     # Verify if there is a checkpoint
     if os.path.exists(checkpoint_path):
         with open(checkpoint_path, "rb") as f:
-            #culture, start_tic = pickle.load(f)
-            #sim.cultures[current_realization_name] = culture
+            # culture, start_tic = pickle.load(f)
+            # sim.cultures[current_realization_name] = culture
             culture, start_tic, state = pickle.load(f)
             sim.cultures[current_realization_name] = culture
-            sim.cultures[current_realization_name].rng = np.random.default_rng()
-            sim.cultures[current_realization_name].rng.bit_generator.state = state
+            sim.cultures[current_realization_name].rng = (
+                np.random.default_rng()
+            )
+            sim.cultures[current_realization_name].rng.bit_generator.state = (
+                state
+            )
     else:
         # We create the output object
         output = create_output_demux(
@@ -1475,24 +1225,14 @@ def simulate_single_culture(
             save_step_dat_pos_ar=save_step_dat_pos_ar,
             save_step_dat_order_par=save_step_dat_order_par,
             save_step_dat_motion_par=save_step_dat_motion_par,
-            save_step_dat_cluster_summary=(
-                save_step_dat_cluster_summary
-            ),
-            save_step_dat_cluster_raw=(
-                save_step_dat_cluster_raw
-            ),
-            save_step_dat_deformation_par=(
-                save_step_dat_deformation_par
-            ),
-            save_step_dat_overlap_par=(
-                save_step_dat_overlap_par
-            ),
+            save_step_dat_cluster_summary=(save_step_dat_cluster_summary),
+            save_step_dat_cluster_raw=(save_step_dat_cluster_raw),
+            save_step_dat_deformation_par=(save_step_dat_deformation_par),
+            save_step_dat_overlap_par=(save_step_dat_overlap_par),
             save_step_dat_local_order_summary=(
                 save_step_dat_local_order_summary
             ),
-            save_step_dat_local_order_raw=(
-                save_step_dat_local_order_raw
-            ),
+            save_step_dat_local_order_raw=(save_step_dat_local_order_raw),
             save_step_ovito=save_step_ovito,
         )
 
@@ -1518,7 +1258,7 @@ def simulate_single_culture(
             prob_stem=sim.prob_stem[i],
             prob_diff=sim.prob_diff[k],
             rng_seed=seed,
-            swap_probability=sim.swap_probability,    
+            swap_probability=sim.swap_probability,
             reproduction=sim.reproduction,
             movement=sim.movement,
             deformation=sim.deformation,
@@ -1534,17 +1274,11 @@ def simulate_single_culture(
             trabajo_final=sim.trabajo_final,
             initialization_mode=sim.initialization_mode,
             initial_positions=initial_positions,
-            deformation_warmup_steps=(
-                sim.deformation_warmup_steps
-            ),
-            deformation_probe_steps=(
-                sim.deformation_probe_steps
-            ),
-            elongation_sleep_steps=(
-                sim.elongation_sleep_steps
-            ),
+            deformation_warmup_steps=(sim.deformation_warmup_steps),
+            deformation_probe_steps=(sim.deformation_probe_steps),
+            elongation_sleep_steps=(sim.elongation_sleep_steps),
         )
-        start_tic=0
+        start_tic = 0
     sim.cultures[current_realization_name].simulate(
         sim.num_of_steps_per_realization,
         start_tic,

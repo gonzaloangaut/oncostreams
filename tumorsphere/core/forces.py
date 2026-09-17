@@ -5,9 +5,10 @@ import numpy as np
 
 class Force(ABC):
     """
-    The force or model used to calculate the interaction between 1 cell and all its 
+    The force or model used to calculate the interaction between 1 cell and all its
     neighbors.
     """
+
     # Let's add an abstract attribute to the class called 'name'
     @abstractmethod
     def name(self):
@@ -44,7 +45,7 @@ class No_Forces(Force):
 
     def name(self):
         return "No_Forces"
-    
+
     def calculate_interaction(
         self,
         cells,
@@ -59,7 +60,7 @@ class No_Forces(Force):
         # there is no change in the orientation and no force so the only change in
         # position is because of the intrinsic velocity
         dif_phi = 0
-        dif_position = (cell.velocity())*delta_t
+        dif_position = (cell.velocity()) * delta_t
         return dif_position, dif_phi
 
 
@@ -78,7 +79,7 @@ class Spring_Force(Force):
     def name(self):
         """
         The force is a spring force with constant k.
-        """ 
+        """
         return f"Spring_Force_k={self.k_spring_force}"
 
     def calculate_interaction(
@@ -95,7 +96,7 @@ class Spring_Force(Force):
 
         # initialization of the parameters of interaction
         dif_velocity = np.zeros(3)
-        
+
         # Calculate interaction with neighbors
         for neighbor_index in neighbors_indexes:
             relative_pos = cell.neighbors_relative_pos[neighbor_index]
@@ -106,15 +107,23 @@ class Spring_Force(Force):
             dif_velocity_2 = np.array([fx, fy, 0])
             # Accumulate changes in velocity
             dif_velocity += dif_velocity_2
-        
+
         # In this model the change in the velocity is equal to the force
-        dif_position = (cell.velocity() + dif_velocity)*delta_t
+        dif_position = (cell.velocity() + dif_velocity) * delta_t
         # Orientation change is based on the new velocity (if the cell moves intrinsically)
         dif_phi = 0
         if np.linalg.norm(cell.velocity()) != 0:
-            dif_phi = np.arctan2(cell.velocity()[1] + dif_velocity[1], cell.velocity()[0] + dif_velocity[0]) - phies[cell_index]
-            dif_phi = np.arctan2(np.sin(dif_phi), np.cos(dif_phi))  # Normalize to [-pi, pi]
-        
+            dif_phi = (
+                np.arctan2(
+                    cell.velocity()[1] + dif_velocity[1],
+                    cell.velocity()[0] + dif_velocity[0],
+                )
+                - phies[cell_index]
+            )
+            dif_phi = np.arctan2(
+                np.sin(dif_phi), np.cos(dif_phi)
+            )  # Normalize to [-pi, pi]
+
         return dif_position, dif_phi
 
 
@@ -145,19 +154,26 @@ class Vicsek(Force):
         # Calculate interaction with filtered neighbors
         dif_phi = 0  # Default value in case the cell is not moving
         # Their orientations allign (if the cell move)
-        if np.linalg.norm(cell.velocity()) != 0: # Check if the cell is moving
+        if np.linalg.norm(cell.velocity()) != 0:  # Check if the cell is moving
             # We take into account only the cells that move
-            neighbors_indexes_moving = [index for index in neighbors_indexes if np.linalg.norm(cells[index].velocity()) != 0]
+            neighbors_indexes_moving = [
+                index
+                for index in neighbors_indexes
+                if np.linalg.norm(cells[index].velocity()) != 0
+            ]
             # Calculate the alignment based on moving neighbors
             sin_sum = np.sum(np.sin(phies[neighbors_indexes_moving]))
             cos_sum = np.sum(np.cos(phies[neighbors_indexes_moving]))
-            alpha = np.arctan2(sin_sum + np.sin(phies[cell_index]), cos_sum + np.cos(phies[cell_index]))
+            alpha = np.arctan2(
+                sin_sum + np.sin(phies[cell_index]),
+                cos_sum + np.cos(phies[cell_index]),
+            )
             dif_phi = alpha - phies[cell_index]
             # Normalize increment to the range [-pi, pi]
             dif_phi = np.arctan2(np.sin(dif_phi), np.cos(dif_phi))
 
         # No change in velocity, movement is straight with constant speed
-        dif_position = cell.velocity()*delta_t
+        dif_position = cell.velocity() * delta_t
         return dif_position, dif_phi
 
 
@@ -194,13 +210,20 @@ class Vicsek_and_Spring_Force(Force):
         # Calculate interaction with filtered neighbors
         dif_phi = 0  # Default value in case the cell is not moving
         # Their orientations allign (if the cell move)
-        if np.linalg.norm(cell.velocity()) != 0: # Check if the cell is moving
+        if np.linalg.norm(cell.velocity()) != 0:  # Check if the cell is moving
             # We take into account only the cells that move
-            neighbors_indexes_moving = [index for index in neighbors_indexes if np.linalg.norm(cells[index].velocity()) != 0]
+            neighbors_indexes_moving = [
+                index
+                for index in neighbors_indexes
+                if np.linalg.norm(cells[index].velocity()) != 0
+            ]
             # Calculate the alignment based on moving neighbors
             sin_sum = np.sum(np.sin(phies[neighbors_indexes_moving]))
             cos_sum = np.sum(np.cos(phies[neighbors_indexes_moving]))
-            alpha = np.arctan2(sin_sum + np.sin(phies[cell_index]), cos_sum + np.cos(phies[cell_index]))
+            alpha = np.arctan2(
+                sin_sum + np.sin(phies[cell_index]),
+                cos_sum + np.cos(phies[cell_index]),
+            )
             dif_phi = alpha - phies[cell_index]
             # Normalize increment to the range [-pi, pi]
             dif_phi = np.arctan2(np.sin(dif_phi), np.cos(dif_phi))
@@ -215,9 +238,9 @@ class Vicsek_and_Spring_Force(Force):
             dif_velocity_2 = np.array([fx, fy, 0])
             # Accumulate changes in velocity
             dif_velocity += dif_velocity_2
-        
+
         # In this model the change in the velocity is equal to the force
-        dif_position = (cell.velocity() + dif_velocity)*delta_t
+        dif_position = (cell.velocity() + dif_velocity) * delta_t
         return dif_position, dif_phi
 
 
@@ -320,14 +343,24 @@ class Grosmann(Force):
                 -1
                 * np.matmul(
                     relative_pos,
-                    (np.matmul(np.identity(3) - cell.anisotropy * mean_nematic, relative_pos)),
+                    (
+                        np.matmul(
+                            np.identity(3) - cell.anisotropy * mean_nematic,
+                            relative_pos,
+                        )
+                    ),
                 )
-                / (2 * (1 - cell.anisotropy**2 * (np.cos(relative_angle)) ** 2) * cell.squared_diagonal)
+                / (
+                    2
+                    * (1 - cell.anisotropy**2 * (np.cos(relative_angle)) ** 2)
+                    * cell.squared_diagonal
+                )
             )
 
             # the kernel is: (k_rep = k, b_exp=gamma (from the paper))
             kernel = (self.kRep * self.bExp * xi**self.bExp) / (
-                cell.squared_diagonal * (1 - cell.anisotropy**2 * (np.cos(relative_angle)) ** 2)
+                cell.squared_diagonal
+                * (1 - cell.anisotropy**2 * (np.cos(relative_angle)) ** 2)
             )
 
             # finally we can calculate the force:
@@ -349,7 +382,9 @@ class Grosmann(Force):
                         relative_pos,
                         (
                             np.matmul(
-                                np.identity(3) - cell.anisotropy * mean_nematic, relative_pos
+                                np.identity(3)
+                                - cell.anisotropy * mean_nematic,
+                                relative_pos,
                             )
                         ),
                     )
@@ -372,7 +407,7 @@ class Grosmann(Force):
         # we calculate the change in the position of the cell, given all the neighbors.
         # Remember that the intrinsic velocity is already multiplied by the mobility
         # (Like in Grosmann paper).
-        dif_position = (cell.velocity()+dif_velocity)*delta_t
+        dif_position = (cell.velocity() + dif_velocity) * delta_t
         # and the change in the orientation:
         dif_phi = mR * torque * delta_t
         return dif_position, dif_phi
@@ -398,22 +433,15 @@ class Anisotropic_Grosmann(Force):
         self.d_phi = d_phi
         # Noise parameters remain fixed during each simulation
         self.translational_noise_enabled = bool(
-            self.noise_eta is not None
-            and not np.isclose(self.noise_eta, 0.0)
+            self.noise_eta is not None and not np.isclose(self.noise_eta, 0.0)
         )
 
         self.rotational_noise_enabled = bool(
-            self.d_phi is not None
-            and not np.isclose(self.d_phi, 0.0)
+            self.d_phi is not None and not np.isclose(self.d_phi, 0.0)
         )
         self.shrinking = shrinking
-        if (
-            not np.isfinite(lambda_core)
-            or not 0 <= lambda_core <= 1
-        ):
-            raise ValueError(
-                "lambda_core must be between 0 and 1."
-            )
+        if not np.isfinite(lambda_core) or not 0 <= lambda_core <= 1:
+            raise ValueError("lambda_core must be between 0 and 1.")
         self.lambda_core = float(lambda_core)
         # Cache mobilities for each area and aspect ratio
         self._mobilities_cache = {}
@@ -421,7 +449,7 @@ class Anisotropic_Grosmann(Force):
     def name(self):
         """
         Force model given by the generalization of Grosmann paper with
-        parameters k and gamma. If some noise is None, then there is no 
+        parameters k and gamma. If some noise is None, then there is no
         noise. If shrinking is True, we update the attribute of the cell
         in order to shrink if the force is strong enough.
         """
@@ -429,7 +457,7 @@ class Anisotropic_Grosmann(Force):
         if (self.noise_eta is not None) or (self.d_phi is not None):
             name += f"_With_Noise"
         if self.lambda_core > 0:
-            name +=f"_lambda_core={self.lambda_core:g}"
+            name += f"_lambda_core={self.lambda_core:g}"
         if self.noise_eta is not None:
             name += f"_eta={self.noise_eta:.3f}"
         if self.d_phi is not None:
@@ -462,20 +490,11 @@ class Anisotropic_Grosmann(Force):
             np.nextafter(1.0, 0.0),
         )
 
-        # Return the amplification factor, 
+        # Return the amplification factor,
         # which is 1 + lambda_core * xi**gamma / (1 - xi**gamma)
-        return (
-            1.0
-            + self.lambda_core
-            * xi_power_safe
-            / (1.0 - xi_power_safe)
-        )
+        return 1.0 + self.lambda_core * xi_power_safe / (1.0 - xi_power_safe)
 
-    def calculate_mobilities(
-        self,
-        cell,
-        area
-    ):
+    def calculate_mobilities(self, cell, area):
         """
         Calculate the longitudinal, transversal and rotational mobilities of
         the cell
@@ -536,7 +555,7 @@ class Anisotropic_Grosmann(Force):
         self._mobilities_cache[cache_key] = mobilities
 
         return mobilities
-    
+
     def calculate_noise(
         self,
         cells,
@@ -564,24 +583,26 @@ class Anisotropic_Grosmann(Force):
                     np.cos(phies[cell_index]),
                     np.sin(phies[cell_index]),
                     0,
-                ])
-            s_nP = self.noise_eta*np.sqrt(mP * delta_t)
-            nP = s_nP*cell.culture.rng.normal(0, 1)
-            noise_parallel = nP*direction_vector
+                ]
+            )
+            s_nP = self.noise_eta * np.sqrt(mP * delta_t)
+            nP = s_nP * cell.culture.rng.normal(0, 1)
+            noise_parallel = nP * direction_vector
 
             # And in the perpendicular direction
             perpendicular_vector = np.array(
                 [
-                    np.cos(phies[cell_index]+np.pi/2),
-                    np.sin(phies[cell_index]+np.pi/2),
+                    np.cos(phies[cell_index] + np.pi / 2),
+                    np.sin(phies[cell_index] + np.pi / 2),
                     0,
-                ])
-            s_nS = self.noise_eta*np.sqrt(mS * delta_t)
-            nS = s_nS*cell.culture.rng.normal(0, 1)
-            noise_perpendicular = nS*perpendicular_vector
-        
+                ]
+            )
+            s_nS = self.noise_eta * np.sqrt(mS * delta_t)
+            nS = s_nS * cell.culture.rng.normal(0, 1)
+            noise_perpendicular = nS * perpendicular_vector
+
             # Translational noise
-            translational_noise = noise_parallel+noise_perpendicular
+            translational_noise = noise_parallel + noise_perpendicular
 
         # Rotational noise
         if not self.rotational_noise_enabled:
@@ -602,21 +623,21 @@ class Anisotropic_Grosmann(Force):
         The cell shrinks if the projection of the change in the velocity in the
         direction of the intrinsic velocity counteracts the speed.
         """
-        #cell = self.cells[cell_index]
+        # cell = self.cells[cell_index]
         # Now we want to see if the cell shrink. For these, we see the speed of the cell
         speed = np.linalg.norm(cell.velocity())
         # And calculate the projection of the diference in position in that direction
         if speed > 0:
-            dif_velocity_project = np.dot(dif_velocity, cell.velocity()) / speed
+            dif_velocity_project = (
+                np.dot(dif_velocity, cell.velocity()) / speed
+            )
         else:
             dif_velocity_project = 0
         # Store the contraction condition corresponding to the current force.
         # This prevents a request from remaining active until a later
         # deformation sweep after the mechanical condition has disappeared.
-        cell.shrink = (
-            not cell.is_round
-            and speed + dif_velocity_project <= 0
-        )
+        cell.shrink = not cell.is_round and speed + dif_velocity_project <= 0
+
     def calculate_interaction(
         self,
         cells,
@@ -654,7 +675,7 @@ class Anisotropic_Grosmann(Force):
 
             # relative position and angle
             relative_angle = phies[cell_index] - phies[neighbor_index]
-            
+
             # we now calculate the mean nematic matrix (different than before) (the matrix M)
             matrix_M = (
                 cell.squared_diagonal * cell.anisotropy * Q_cell
@@ -664,7 +685,11 @@ class Anisotropic_Grosmann(Force):
             # now we introduce the constant beta introduced by us in the TF
             beta = (
                 (cell.squared_diagonal + neighbor.squared_diagonal) ** 2
-                - (cell.squared_diagonal * cell.anisotropy - neighbor.squared_diagonal * neighbor.anisotropy) ** 2
+                - (
+                    cell.squared_diagonal * cell.anisotropy
+                    - neighbor.squared_diagonal * neighbor.anisotropy
+                )
+                ** 2
                 - 4
                 * cell.squared_diagonal
                 * cell.anisotropy
@@ -677,10 +702,8 @@ class Anisotropic_Grosmann(Force):
             xi_power = xi**self.bExp
 
             # Calculate the core amplification factor
-            core_amplification = (
-                self.calculate_core_amplification(
-                    xi_power=xi_power,
-                )
+            core_amplification = self.calculate_core_amplification(
+                xi_power=xi_power,
             )
 
             # Calculate the kernel with core amplification
@@ -689,13 +712,7 @@ class Anisotropic_Grosmann(Force):
                 * self.kRep
                 * self.bExp
                 * xi_power
-                * (
-                    (
-                        cell.squared_diagonal
-                        + neighbor.squared_diagonal
-                    )
-                    / beta
-                )
+                * ((cell.squared_diagonal + neighbor.squared_diagonal) / beta)
                 * core_amplification
             )
             # Reuse this matrix-vector product in both force and torque
@@ -721,7 +738,11 @@ class Anisotropic_Grosmann(Force):
                     / beta
                 )
                 * np.matmul(relative_pos, c_times_r)
-                + (cell.squared_diagonal * cell.anisotropy / (cell.squared_diagonal + neighbor.squared_diagonal))
+                + (
+                    cell.squared_diagonal
+                    * cell.anisotropy
+                    / (cell.squared_diagonal + neighbor.squared_diagonal)
+                )
                 * np.linalg.norm(relative_pos) ** 2
                 * np.sin(2 * (phies[cell_index] - theta))
             )
@@ -729,28 +750,26 @@ class Anisotropic_Grosmann(Force):
             # Accumulate changes in force and torque
             force += force_2
             torque += torque_2
-        
+
         # then the change in the velocity is given by:
         dif_velocity = np.matmul(
-            ((mP + mS) / 2) * identity
-            + ((mP - mS) / 2) * Q_cell,
+            ((mP + mS) / 2) * identity + ((mP - mS) / 2) * Q_cell,
             force,
         )
         # we calculate the change in the position of the cell, given all the neighbors.
-        dif_position = (cell.velocity()+dif_velocity)*delta_t
+        dif_position = (cell.velocity() + dif_velocity) * delta_t
 
         # and the change in the orientation:
         dif_phi = mR * torque * delta_t
 
         # we calculate the noise if we are in that case
-        if (
-            self.translational_noise_enabled
-            or self.rotational_noise_enabled
-        ):
-            translational_noise, rotational_noise = self.calculate_noise(cells, phies, cell_index, area, delta_t, mP, mS, mR)
+        if self.translational_noise_enabled or self.rotational_noise_enabled:
+            translational_noise, rotational_noise = self.calculate_noise(
+                cells, phies, cell_index, area, delta_t, mP, mS, mR
+            )
             dif_position += translational_noise
             dif_phi += rotational_noise
-        
+
         # We check if the cell should shrink or not
         if self.shrinking is True:
             self.check_shrink_condition(cell, dif_velocity)

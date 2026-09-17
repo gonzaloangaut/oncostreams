@@ -41,10 +41,10 @@ class Cell:
         The index of the cell's position in the culture's cell_positions array.
         It's not directly settable during instantiation.
     neighbors_relative_pos : Dict[int, np.ndarray]
-        A dictionary where the keys are the indices of the neighbors, and the values 
+        A dictionary where the keys are the indices of the neighbors, and the values
         are their relative positions with respect to the reference cell.
     neighbors_overlap : Dict[int, float]
-        A dictionary where the keys are the indices of the neighbors, and the values 
+        A dictionary where the keys are the indices of the neighbors, and the values
         are their overlap with the reference cell.
     anisotropy : float
         Anisotropy of the cell (epsilon), calculated from the aspect ratio.
@@ -75,8 +75,8 @@ class Cell:
     available_space: bool = True
     _index: Optional[int] = field(default=False, init=False)
     shrink: bool = False
-    neighbors_relative_pos: Dict[int, np.ndarray] =  field(default_factory=dict)
-    neighbors_overlap: Dict[int, float] =  field(default_factory=dict)
+    neighbors_relative_pos: Dict[int, np.ndarray] = field(default_factory=dict)
+    neighbors_overlap: Dict[int, float] = field(default_factory=dict)
     neighbors_normalized_overlap: Dict[int, float] = field(
         default_factory=dict
     )
@@ -120,7 +120,7 @@ class Cell:
             Whether the cell has available space around it or not.
         shrink : bool, default=False
             Whether the cell has to shrink or not.
-        
+
 
 
         Notes
@@ -145,7 +145,7 @@ class Cell:
         # we calculate the shape parameters given the aspect ratio
         self.update_shape_parameters()
 
-        # we initialize the dictionary for storing neighbors' relative 
+        # we initialize the dictionary for storing neighbors' relative
         # positions
         self.neighbors_relative_pos = dict()
         # and the overlap with the neighbors
@@ -166,17 +166,18 @@ class Cell:
         culture.cell_phies = np.append(culture.cell_phies, phi)
 
         # Calculate the nematic tensor
-        new_tensor = np.array([
-            [np.cos(2 * phi), np.sin(2 * phi), 0],
-            [np.sin(2 * phi), -np.cos(2 * phi), 0],
-            [0, 0, 0]
-        ])
+        new_tensor = np.array(
+            [
+                [np.cos(2 * phi), np.sin(2 * phi), 0],
+                [np.sin(2 * phi), -np.cos(2 * phi), 0],
+                [0, 0, 0],
+            ]
+        )
 
         # add it to the matrix
         culture.nematic_tensors = np.append(
             culture.nematic_tensors, [new_tensor], axis=0
         )
-
 
         # We also add the cell to the culture's spatial hash grid
         self.culture.grid.add_cell_to_hash_table(
@@ -203,17 +204,12 @@ class Cell:
         ar = self.aspect_ratio
 
         # Equivalent to np.isclose(ar, 1.0) with default tolerances
-        self.is_round = bool(
-            abs(ar - 1.0) <= (1e-8 + 1e-5)
-        )
+        self.is_round = bool(abs(ar - 1.0) <= (1e-8 + 1e-5))
 
-        self.anisotropy = (
-            (ar**2 - 1) / (ar**2 + 1)
-        )
+        self.anisotropy = (ar**2 - 1) / (ar**2 + 1)
 
-        self.squared_diagonal = (
-            (self.culture.cell_area / np.pi)
-            * (ar + 1 / ar)
+        self.squared_diagonal = (self.culture.cell_area / np.pi) * (
+            ar + 1 / ar
         )
 
     def set_aspect_ratio(self, new_ar) -> None:
@@ -233,7 +229,11 @@ class Cell:
         np.ndarray
             The velocity vector of the cell.
         """
-        speed = self.culture.cell_speed_max*(self.aspect_ratio-1)/(self.culture.aspect_ratio_max-1)
+        speed = (
+            self.culture.cell_speed_max
+            * (self.aspect_ratio - 1)
+            / (self.culture.aspect_ratio_max - 1)
+        )
         return speed * np.array(
             [
                 np.cos(self.culture.cell_phies[self._index]),
@@ -241,4 +241,3 @@ class Cell:
                 0,
             ]
         )
-

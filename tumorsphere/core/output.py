@@ -137,7 +137,6 @@ class TumorsphereOutput(ABC):
         """
         return False
 
-
     def record_local_order_state(
         self,
         tic,
@@ -195,6 +194,7 @@ class TumorsphereOutput(ABC):
         Record overlap diagnostics accumulated during one time interval.
         """
         pass
+
 
 class OutputDemux(TumorsphereOutput):
     """Class managing multiple output objects and delegating method calls."""
@@ -340,7 +340,6 @@ class OutputDemux(TumorsphereOutput):
             for result in self.result_list
         )
 
-
     def record_local_order_state(
         self,
         tic,
@@ -446,6 +445,7 @@ class OutputDemux(TumorsphereOutput):
                     final_tic=final_tic,
                     max_normalized_overlap=max_normalized_overlap,
                 )
+
 
 class SQLOutput(TumorsphereOutput):
     """Class for handling output to a SQLite database."""
@@ -732,12 +732,13 @@ class DatOutput(TumorsphereOutput):
         """
         pass
 
+
 class DatOutput_position_aspectratio(TumorsphereOutput):
     def __init__(self, culture_name, output_dir=".", save_step=1):
         self.output_dir = output_dir
         self.save_step = save_step
         self.culture_name = culture_name
-     
+
     def begin_culture(
         self,
         prob_stem,
@@ -757,18 +758,14 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
     def record_deactivation(self, cell_index, tic):
         """We do not record the individual deactivations."""
         pass
- 
+
     def calculate_order_parameters(self, cells, cell_phies):
         """
         Calculate the order parameters for all cells in the current step
         """
 
         # List of elongated cells
-        elongated_cells = [
-            cell._index
-            for cell in cells
-            if not cell.is_round
-        ]
+        elongated_cells = [cell._index for cell in cells if not cell.is_round]
         # Calculation of the number of elongated cells and cells
         num_elongated = len(elongated_cells)
         num_cells = len(cells)
@@ -776,14 +773,14 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
         # Calculate sin(phi), cos(phi), sin(2phi), cos(2phi) for every elongated cell
         sin = np.sin(cell_phies[elongated_cells])
         cos = np.cos(cell_phies[elongated_cells])
-        sin_2 = np.sin(2*cell_phies[elongated_cells])
-        cos_2 = np.cos(2*cell_phies[elongated_cells])
+        sin_2 = np.sin(2 * cell_phies[elongated_cells])
+        cos_2 = np.cos(2 * cell_phies[elongated_cells])
         # Add them
         sum_sin = sin.sum()
         sum_cos = cos.sum()
         sum_sin_2 = sin_2.sum()
         sum_cos_2 = cos_2.sum()
-        # Calculate the parameters     
+        # Calculate the parameters
         if num_elongated != 0:
             nematic = np.sqrt(sum_sin_2**2 + sum_cos_2**2) / num_elongated
             polar = np.sqrt(sum_sin**2 + sum_cos**2) / num_elongated
@@ -794,7 +791,7 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
             polar = 0
             nematic_2 = 0
             polar_2 = 0
-        fraction_elongated = num_cells/num_elongated
+        fraction_elongated = num_cells / num_elongated
 
         return nematic, polar, nematic_2, polar_2, fraction_elongated
 
@@ -838,12 +835,13 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
         """
         pass
 
+
 class DatOutput_order_parameters(TumorsphereOutput):
     def __init__(self, culture_name, output_dir=".", save_step=1):
         self.output_dir = output_dir
         self.save_step = save_step
         self.culture_name = culture_name
-     
+
     def begin_culture(
         self,
         prob_stem,
@@ -863,18 +861,14 @@ class DatOutput_order_parameters(TumorsphereOutput):
     def record_deactivation(self, cell_index, tic):
         """We do not record the individual deactivations."""
         pass
- 
+
     def calculate_order_parameters(self, cells, cell_phies):
         """
         Calculate the order parameters for all cells in the current step
         """
 
         # List of elongated cells
-        elongated_cells = [
-            cell._index
-            for cell in cells
-            if not cell.is_round
-        ]
+        elongated_cells = [cell._index for cell in cells if not cell.is_round]
         # Calculation of the number of elongated cells and cells
         num_elongated = len(elongated_cells)
         num_cells = len(cells)
@@ -882,14 +876,14 @@ class DatOutput_order_parameters(TumorsphereOutput):
         # Calculate sin(phi), cos(phi), sin(2phi), cos(2phi) for every elongated cell
         sin_phi = np.sin(cell_phies[elongated_cells])
         cos_phi = np.cos(cell_phies[elongated_cells])
-        sin_2_phi = np.sin(2*cell_phies[elongated_cells])
-        cos_2_phi = np.cos(2*cell_phies[elongated_cells])
+        sin_2_phi = np.sin(2 * cell_phies[elongated_cells])
+        cos_2_phi = np.cos(2 * cell_phies[elongated_cells])
         # Add them
         sum_sin = sin_phi.sum()
         sum_cos = cos_phi.sum()
         sum_sin_2 = sin_2_phi.sum()
         sum_cos_2 = cos_2_phi.sum()
-        # Calculate the parameters     
+        # Calculate the parameters
         if num_elongated != 0:
             nematic = np.sqrt(sum_sin_2**2 + sum_cos_2**2) / num_elongated
             polar = np.sqrt(sum_sin**2 + sum_cos**2) / num_elongated
@@ -900,7 +894,7 @@ class DatOutput_order_parameters(TumorsphereOutput):
             polar = 0
             nematic_2 = 0
             polar_2 = 0
-        fraction_elongated = num_elongated/num_cells
+        fraction_elongated = num_elongated / num_cells
 
         return nematic, polar, nematic_2, polar_2, fraction_elongated
 
@@ -915,11 +909,13 @@ class DatOutput_order_parameters(TumorsphereOutput):
         cell_area,
     ):
         if np.mod(tic, self.save_step) == 0:
-            os.makedirs(f"{self.output_dir}/dat_order_parameters", exist_ok=True)
-            filename = (
-                f"{self.output_dir}/dat_order_parameters/op_{self.culture_name}_step={tic:05}.dat"
+            os.makedirs(
+                f"{self.output_dir}/dat_order_parameters", exist_ok=True
             )
-            nematic, polar, nematic_2, polar_2, fraction_elongated = self.calculate_order_parameters(cells, cell_phies)
+            filename = f"{self.output_dir}/dat_order_parameters/op_{self.culture_name}_step={tic:05}.dat"
+            nematic, polar, nematic_2, polar_2, fraction_elongated = (
+                self.calculate_order_parameters(cells, cell_phies)
+            )
             with open(filename, "w") as datfile:
                 datfile.write(
                     "nematic,polar,nematic_2,polar_2,fraction_elongated\n"
@@ -942,6 +938,7 @@ class DatOutput_order_parameters(TumorsphereOutput):
         data we are saving.
         """
         pass
+
 
 class DatOutput_motion_parameters(TumorsphereOutput):
     def __init__(self, culture_name, output_dir=".", save_step=1):
@@ -984,31 +981,22 @@ class DatOutput_motion_parameters(TumorsphereOutput):
             cell_positions,
             dtype=float,
         ).copy()
-        
+
         # First recorded state
         if self.previous_wrapped_positions is None:
-            self.previous_wrapped_positions = (
-                current_wrapped_positions.copy()
-            )
-            self.unwrapped_positions = (
-                current_wrapped_positions.copy()
-            )
-            self.initial_unwrapped_positions = (
-                current_wrapped_positions.copy()
-            )
+            self.previous_wrapped_positions = current_wrapped_positions.copy()
+            self.unwrapped_positions = current_wrapped_positions.copy()
+            self.initial_unwrapped_positions = current_wrapped_positions.copy()
 
             return 0.0, 0.0, 0.0, 0.0, 0.0
 
         # Wrapped displacement between consecutive simulation steps
         delta_positions = (
-            current_wrapped_positions
-            - self.previous_wrapped_positions
+            current_wrapped_positions - self.previous_wrapped_positions
         )
 
         # Minimum-image correction (Boundary conditions)
-        delta_positions -= (
-            side * np.round(delta_positions / side)
-        )
+        delta_positions -= side * np.round(delta_positions / side)
 
         # Update unwrapped positions
         self.unwrapped_positions += delta_positions
@@ -1019,27 +1007,20 @@ class DatOutput_motion_parameters(TumorsphereOutput):
             axis=1,
         )
 
-        mean_step_displacement = np.mean(
-            step_displacements
-        )
+        mean_step_displacement = np.mean(step_displacements)
 
-        mean_squared_step_displacement = np.mean(
-            step_displacements**2
-        )
+        mean_squared_step_displacement = np.mean(step_displacements**2)
 
         p95_step_displacement = np.percentile(
             step_displacements,
             95,
         )
 
-        max_step_displacement = np.max(
-            step_displacements
-        )
+        max_step_displacement = np.max(step_displacements)
 
         # MSD with respect to the initial state
         displacement_from_initial = (
-            self.unwrapped_positions
-            - self.initial_unwrapped_positions
+            self.unwrapped_positions - self.initial_unwrapped_positions
         )
 
         msd_t0 = np.mean(
@@ -1050,9 +1031,7 @@ class DatOutput_motion_parameters(TumorsphereOutput):
         )
 
         # Update previous wrapped positions for next step
-        self.previous_wrapped_positions = (
-            current_wrapped_positions.copy()
-        )
+        self.previous_wrapped_positions = current_wrapped_positions.copy()
 
         return (
             mean_step_displacement,
@@ -1061,7 +1040,6 @@ class DatOutput_motion_parameters(TumorsphereOutput):
             max_step_displacement,
             msd_t0,
         )
-
 
     def record_culture_state(
         self,
@@ -1114,7 +1092,6 @@ class DatOutput_motion_parameters(TumorsphereOutput):
                 f"{msd_t0}\n"
             )
 
-
     def record_cell(
         self,
         index,
@@ -1140,9 +1117,8 @@ class DatOutput_motion_parameters(TumorsphereOutput):
         """
         pass
 
-class DatOutput_local_order_parameters(
-    TumorsphereOutput
-):
+
+class DatOutput_local_order_parameters(TumorsphereOutput):
     def __init__(
         self,
         culture_name,
@@ -1248,9 +1224,9 @@ class DatOutput_local_order_parameters(
             or np.mod(
                 tic,
                 self.summary_save_step,
-            ) == 0
+            )
+            == 0
         )
-
 
     def should_record_local_order_raw(
         self,
@@ -1265,9 +1241,9 @@ class DatOutput_local_order_parameters(
             or np.mod(
                 tic,
                 self.raw_save_step,
-            ) == 0
+            )
+            == 0
         )
-
 
     def should_record_local_order(
         self,
@@ -1277,15 +1253,12 @@ class DatOutput_local_order_parameters(
         """
         Calculate the local grid whenever either output requires it.
         """
-        return (
-            self.should_record_local_order_summary(
-                tic=tic,
-                final_tic=final_tic,
-            )
-            or self.should_record_local_order_raw(
-                tic=tic,
-                final_tic=final_tic,
-            )
+        return self.should_record_local_order_summary(
+            tic=tic,
+            final_tic=final_tic,
+        ) or self.should_record_local_order_raw(
+            tic=tic,
+            final_tic=final_tic,
         )
 
     def calculate_local_order_grid(
@@ -1316,16 +1289,10 @@ class DatOutput_local_order_parameters(
         # periodic system is covered without leaving a remainder
         number_of_bins = max(
             1,
-            int(
-                np.round(
-                    side / self.local_box_size
-                )
-            ),
+            int(np.round(side / self.local_box_size)),
         )
 
-        actual_box_size = (
-            side / number_of_bins
-        )
+        actual_box_size = side / number_of_bins
 
         # Apply periodic boundary conditions before assigning cells
         # to the local boxes
@@ -1335,9 +1302,7 @@ class DatOutput_local_order_parameters(
         )
 
         # Two-dimensional box coordinates of every cell
-        grid_indices = np.floor(
-            positions_xy / actual_box_size
-        ).astype(int)
+        grid_indices = np.floor(positions_xy / actual_box_size).astype(int)
 
         grid_indices = np.mod(
             grid_indices,
@@ -1346,8 +1311,7 @@ class DatOutput_local_order_parameters(
 
         # Convert the pair (grid_x, grid_y) into one integer index
         flat_grid_indices = (
-            grid_indices[:, 1] * number_of_bins
-            + grid_indices[:, 0]
+            grid_indices[:, 1] * number_of_bins + grid_indices[:, 0]
         )
 
         # Identify elongated cells
@@ -1360,118 +1324,62 @@ class DatOutput_local_order_parameters(
         # Empty boxes are not included
         cells_by_box = {}
 
-        for cell_index, box_index in enumerate(
-            flat_grid_indices
-        ):
+        for cell_index, box_index in enumerate(flat_grid_indices):
             cells_by_box.setdefault(
                 int(box_index),
                 [],
-            ).append(
-                cell_index
-            )
+            ).append(cell_index)
 
         local_data = []
 
         # Calculate the local observables independently in each
         # occupied box
-        for box_index, box_cell_indices in sorted(
-            cells_by_box.items()
-        ):
+        for box_index, box_cell_indices in sorted(cells_by_box.items()):
             box_cell_indices = np.asarray(
                 box_cell_indices,
                 dtype=int,
             )
 
-            box_elongated_mask = elongated_mask[
-                box_cell_indices
-            ]
+            box_elongated_mask = elongated_mask[box_cell_indices]
 
-            elongated_cell_indices = box_cell_indices[
-                box_elongated_mask
-            ]
+            elongated_cell_indices = box_cell_indices[box_elongated_mask]
 
-            occupancy = int(
-                box_cell_indices.size
-            )
+            occupancy = int(box_cell_indices.size)
 
-            number_elongated = int(
-                elongated_cell_indices.size
-            )
+            number_elongated = int(elongated_cell_indices.size)
 
-            number_round = (
-                occupancy
-                - number_elongated
-            )
+            number_round = occupancy - number_elongated
 
-            fraction_elongated = (
-                number_elongated
-                / occupancy
-            )
+            fraction_elongated = number_elongated / occupancy
 
             # Orientational order is defined only when the box
             # contains at least one elongated cell
             if number_elongated > 0:
-                elongated_phies = phies[
-                    elongated_cell_indices
-                ]
+                elongated_phies = phies[elongated_cell_indices]
 
                 # Polar order
-                sum_cos = np.sum(
-                    np.cos(
-                        elongated_phies
-                    )
-                )
+                sum_cos = np.sum(np.cos(elongated_phies))
 
-                sum_sin = np.sum(
-                    np.sin(
-                        elongated_phies
-                    )
-                )
+                sum_sin = np.sum(np.sin(elongated_phies))
 
                 # Nematic order
-                sum_cos_2 = np.sum(
-                    np.cos(
-                        2.0 * elongated_phies
-                    )
-                )
+                sum_cos_2 = np.sum(np.cos(2.0 * elongated_phies))
 
-                sum_sin_2 = np.sum(
-                    np.sin(
-                        2.0 * elongated_phies
-                    )
-                )
+                sum_sin_2 = np.sum(np.sin(2.0 * elongated_phies))
 
-                polar_magnitude = np.sqrt(
-                    sum_cos**2
-                    + sum_sin**2
-                )
+                polar_magnitude = np.sqrt(sum_cos**2 + sum_sin**2)
 
-                nematic_magnitude = np.sqrt(
-                    sum_cos_2**2
-                    + sum_sin_2**2
-                )
+                nematic_magnitude = np.sqrt(sum_cos_2**2 + sum_sin_2**2)
 
                 # Order normalized by the number of elongated cells.
-                polar_order = (
-                    polar_magnitude
-                    / number_elongated
-                )
+                polar_order = polar_magnitude / number_elongated
 
-                nematic_order = (
-                    nematic_magnitude
-                    / number_elongated
-                )
+                nematic_order = nematic_magnitude / number_elongated
 
                 # Order normalized by the total number of cells.
-                polar_order_hat = (
-                    polar_magnitude
-                    / occupancy
-                )
+                polar_order_hat = polar_magnitude / occupancy
 
-                nematic_order_hat = (
-                    nematic_magnitude
-                    / occupancy
-                )
+                nematic_order_hat = nematic_magnitude / occupancy
 
             else:
                 # Polar and nematic order are not defined when there
@@ -1485,26 +1393,16 @@ class DatOutput_local_order_parameters(
                 nematic_order_hat = 0.0
 
             # Recover the two-dimensional coordinates of the box.
-            grid_x = (
-                box_index
-                % number_of_bins
-            )
+            grid_x = box_index % number_of_bins
 
-            grid_y = (
-                box_index
-                // number_of_bins
-            )
+            grid_y = box_index // number_of_bins
 
             local_data.append(
                 {
                     "grid_x": grid_x,
                     "grid_y": grid_y,
-                    "center_x": (
-                        grid_x + 0.5
-                    ) * actual_box_size,
-                    "center_y": (
-                        grid_y + 0.5
-                    ) * actual_box_size,
+                    "center_x": (grid_x + 0.5) * actual_box_size,
+                    "center_y": (grid_y + 0.5) * actual_box_size,
                     "occupancy": occupancy,
                     "number_round": number_round,
                     "number_elongated": number_elongated,
@@ -1517,9 +1415,7 @@ class DatOutput_local_order_parameters(
             )
 
         # One row is returned for every occupied box
-        data = pd.DataFrame(
-            local_data
-        )
+        data = pd.DataFrame(local_data)
 
         # This information is needed to reconstruct the complete grid,
         # including the boxes that were empty and therefore not stored
@@ -1545,72 +1441,39 @@ class DatOutput_local_order_parameters(
         a single elongated cell.
         """
         # Boxes where the orientational order parameters are defined
-        boxes_with_elongated = data[
-            data["number_elongated"] > 0
-        ]
+        boxes_with_elongated = data[data["number_elongated"] > 0]
 
         # Boxes containing at least two elongated cells
-        boxes_with_at_least_2 = data[
-            data["number_elongated"] > 1
-        ]
+        boxes_with_at_least_2 = data[data["number_elongated"] > 1]
 
-        total_number_of_cells = int(
-            data["occupancy"].sum()
-        )
+        total_number_of_cells = int(data["occupancy"].sum())
 
-        number_elongated = int(
-            data["number_elongated"].sum()
-        )
+        number_elongated = int(data["number_elongated"].sum())
 
-        fraction_elongated = (
-            number_elongated
-            / total_number_of_cells
-        )
+        fraction_elongated = number_elongated / total_number_of_cells
 
-        number_occupied_boxes = len(
-            data
-        )
+        number_occupied_boxes = len(data)
 
-        number_boxes_with_elongated = len(
-            boxes_with_elongated
-        )
+        number_boxes_with_elongated = len(boxes_with_elongated)
 
-        number_boxes_with_at_least_2 = len(
-            boxes_with_at_least_2
-        )
+        number_boxes_with_at_least_2 = len(boxes_with_at_least_2)
 
         # Means over all boxes containing at least one elongated cell
         if number_boxes_with_elongated > 0:
-            mean_polar_order = (
-                boxes_with_elongated[
-                    "polar_order"
-                ].mean()
-            )
+            mean_polar_order = boxes_with_elongated["polar_order"].mean()
 
-            mean_nematic_order = (
-                boxes_with_elongated[
-                    "nematic_order"
-                ].mean()
-            )
+            mean_nematic_order = boxes_with_elongated["nematic_order"].mean()
 
             # Weight every local OP by the number of elongated cells
             # contained in its box
             weighted_mean_polar_order = np.average(
-                boxes_with_elongated[
-                    "polar_order"
-                ],
-                weights=boxes_with_elongated[
-                    "number_elongated"
-                ],
+                boxes_with_elongated["polar_order"],
+                weights=boxes_with_elongated["number_elongated"],
             )
 
             weighted_mean_nematic_order = np.average(
-                boxes_with_elongated[
-                    "nematic_order"
-                ],
-                weights=boxes_with_elongated[
-                    "number_elongated"
-                ],
+                boxes_with_elongated["nematic_order"],
+                weights=boxes_with_elongated["number_elongated"],
             )
 
         else:
@@ -1622,17 +1485,13 @@ class DatOutput_local_order_parameters(
         # Collective local order after excluding boxes with only
         # one elongated cell
         if number_boxes_with_at_least_2 > 0:
-            mean_polar_order_min_2 = (
-                boxes_with_at_least_2[
-                    "polar_order"
-                ].mean()
-            )
+            mean_polar_order_min_2 = boxes_with_at_least_2[
+                "polar_order"
+            ].mean()
 
-            mean_nematic_order_min_2 = (
-                boxes_with_at_least_2[
-                    "nematic_order"
-                ].mean()
-            )
+            mean_nematic_order_min_2 = boxes_with_at_least_2[
+                "nematic_order"
+            ].mean()
 
         else:
             mean_polar_order_min_2 = np.nan
@@ -1640,45 +1499,27 @@ class DatOutput_local_order_parameters(
 
         # The hatted observables are defined in every occupied box
         # Boxes containing only round cells contribute zero
-        mean_polar_order_hat = data[
-            "polar_order_hat"
-        ].mean()
+        mean_polar_order_hat = data["polar_order_hat"].mean()
 
-        mean_nematic_order_hat = data[
-            "nematic_order_hat"
-        ].mean()
+        mean_nematic_order_hat = data["nematic_order_hat"].mean()
 
         return {
-            "number_of_bins": metadata[
-                "number_of_bins"
-            ],
-            "actual_box_size": metadata[
-                "actual_box_size"
-            ],
+            "number_of_bins": metadata["number_of_bins"],
+            "actual_box_size": metadata["actual_box_size"],
             "total_number_of_cells": total_number_of_cells,
             "number_elongated": number_elongated,
             "fraction_elongated": fraction_elongated,
             "number_occupied_boxes": number_occupied_boxes,
-            "number_boxes_with_elongated": (
-                number_boxes_with_elongated
-            ),
+            "number_boxes_with_elongated": (number_boxes_with_elongated),
             "number_boxes_with_at_least_2_elongated": (
                 number_boxes_with_at_least_2
             ),
             "mean_polar_order": mean_polar_order,
             "mean_nematic_order": mean_nematic_order,
-            "mean_polar_order_min_2": (
-                mean_polar_order_min_2
-            ),
-            "mean_nematic_order_min_2": (
-                mean_nematic_order_min_2
-            ),
-            "weighted_mean_polar_order": (
-                weighted_mean_polar_order
-            ),
-            "weighted_mean_nematic_order": (
-                weighted_mean_nematic_order
-            ),
+            "mean_polar_order_min_2": (mean_polar_order_min_2),
+            "mean_nematic_order_min_2": (mean_nematic_order_min_2),
+            "weighted_mean_polar_order": (weighted_mean_polar_order),
+            "weighted_mean_nematic_order": (weighted_mean_nematic_order),
             "mean_polar_order_hat": mean_polar_order_hat,
             "mean_nematic_order_hat": mean_nematic_order_hat,
         }
@@ -1696,29 +1537,23 @@ class DatOutput_local_order_parameters(
         Record the compact local-order summary and, less frequently,
         the complete grid of occupied boxes.
         """
-        record_summary = (
-            self.should_record_local_order_summary(
-                tic=tic,
-                final_tic=final_tic,
-            )
+        record_summary = self.should_record_local_order_summary(
+            tic=tic,
+            final_tic=final_tic,
         )
 
-        record_raw = (
-            self.should_record_local_order_raw(
-                tic=tic,
-                final_tic=final_tic,
-            )
+        record_raw = self.should_record_local_order_raw(
+            tic=tic,
+            final_tic=final_tic,
         )
 
         # Calculate the grid only once, even when both files must
         # be recorded at the current timestep.
-        data, metadata = (
-            self.calculate_local_order_grid(
-                cells=cells,
-                cell_positions=cell_positions,
-                cell_phies=cell_phies,
-                side=side,
-            )
+        data, metadata = self.calculate_local_order_grid(
+            cells=cells,
+            cell_positions=cell_positions,
+            cell_phies=cell_phies,
+            side=side,
         )
 
         output_folder = os.path.join(
@@ -1733,18 +1568,12 @@ class DatOutput_local_order_parameters(
 
         raw_filename = os.path.join(
             output_folder,
-            (
-                f"local_order_grid_{self.culture_name}"
-                f"_step={tic:05}.dat"
-            ),
+            (f"local_order_grid_{self.culture_name}" f"_step={tic:05}.dat"),
         )
 
         summary_filename = os.path.join(
             output_folder,
-            (
-                f"local_order_summary_{self.culture_name}"
-                f"_step={tic:05}.dat"
-            ),
+            (f"local_order_summary_{self.culture_name}" f"_step={tic:05}.dat"),
         )
 
         if record_raw:
@@ -1763,11 +1592,9 @@ class DatOutput_local_order_parameters(
                 )
 
         if record_summary:
-            summary = (
-                self.calculate_local_order_summary(
-                    data=data,
-                    metadata=metadata,
-                )
+            summary = self.calculate_local_order_summary(
+                data=data,
+                metadata=metadata,
             )
 
             # Save one row containing the spatially averaged
@@ -1810,6 +1637,7 @@ class DatOutput_local_order_parameters(
                     f"{summary['mean_polar_order_hat']},"
                     f"{summary['mean_nematic_order_hat']}\n"
                 )
+
 
 class DatOutput_cluster_parameters(TumorsphereOutput):
     def __init__(
@@ -1908,20 +1736,13 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             statistics.
         """
         cluster_sizes = np.asarray(
-            [
-                len(cluster)
-                for cluster in cluster_list
-            ],
+            [len(cluster) for cluster in cluster_list],
             dtype=int,
         )
 
-        number_of_clusters = int(
-            cluster_sizes.size
-        )
+        number_of_clusters = int(cluster_sizes.size)
 
-        total_number_of_cells = int(
-            np.sum(cluster_sizes)
-        )
+        total_number_of_cells = int(np.sum(cluster_sizes))
 
         if number_of_clusters == 0:
             return {
@@ -1934,36 +1755,26 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                 "mean_without_largest": np.nan,
             }
 
-        mean_cluster_size = float(
-            np.mean(cluster_sizes)
-        )
+        mean_cluster_size = float(np.mean(cluster_sizes))
 
-        largest_cluster_size = int(
-            np.max(cluster_sizes)
-        )
+        largest_cluster_size = int(np.max(cluster_sizes))
 
         # Remove exactly one largest cluster, even if several clusters
         # share the maximum size.
-        largest_cluster_index = int(
-            np.argmax(cluster_sizes)
-        )
+        largest_cluster_index = int(np.argmax(cluster_sizes))
 
         cluster_sizes_without_largest = np.delete(
             cluster_sizes,
             largest_cluster_index,
         )
 
-        number_without_largest = int(
-            cluster_sizes_without_largest.size
-        )
+        number_without_largest = int(cluster_sizes_without_largest.size)
 
         if number_without_largest == 0:
             mean_without_largest = np.nan
         else:
             mean_without_largest = float(
-                np.mean(
-                    cluster_sizes_without_largest
-                )
+                np.mean(cluster_sizes_without_largest)
             )
 
         return {
@@ -2003,54 +1814,29 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             dtype=int,
         )
 
-        number_of_cells = int(
-            cluster_indices.size
-        )
+        number_of_cells = int(cluster_indices.size)
 
         if number_of_cells == 0:
             return np.nan, np.nan
 
-        cluster_phies = cell_phies[
-            cluster_indices
-        ]
+        cluster_phies = cell_phies[cluster_indices]
 
-        sum_cos = np.sum(
-            np.cos(cluster_phies)
-        )
+        sum_cos = np.sum(np.cos(cluster_phies))
 
-        sum_sin = np.sum(
-            np.sin(cluster_phies)
-        )
+        sum_sin = np.sum(np.sin(cluster_phies))
 
-        sum_cos_2 = np.sum(
-            np.cos(2.0 * cluster_phies)
-        )
+        sum_cos_2 = np.sum(np.cos(2.0 * cluster_phies))
 
-        sum_sin_2 = np.sum(
-            np.sin(2.0 * cluster_phies)
-        )
+        sum_sin_2 = np.sum(np.sin(2.0 * cluster_phies))
 
-        polar_order = (
-            np.sqrt(
-                sum_cos**2
-                + sum_sin**2
-            )
-            / number_of_cells
-        )
+        polar_order = np.sqrt(sum_cos**2 + sum_sin**2) / number_of_cells
 
-        nematic_order = (
-            np.sqrt(
-                sum_cos_2**2
-                + sum_sin_2**2
-            )
-            / number_of_cells
-        )
+        nematic_order = np.sqrt(sum_cos_2**2 + sum_sin_2**2) / number_of_cells
 
         return (
             float(polar_order),
             float(nematic_order),
         )
-
 
     def calculate_cluster_order_statistics(
         self,
@@ -2077,16 +1863,11 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             Raw order parameters and summary statistics.
         """
         cluster_sizes = np.asarray(
-            [
-                len(cluster)
-                for cluster in cluster_list
-            ],
+            [len(cluster) for cluster in cluster_list],
             dtype=int,
         )
 
-        number_of_clusters = int(
-            cluster_sizes.size
-        )
+        number_of_clusters = int(cluster_sizes.size)
 
         polar_orders = np.full(
             number_of_clusters,
@@ -2101,9 +1882,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
         )
 
         # Calculate the order parameters of every elongated cluster.
-        for cluster_index, cluster in enumerate(
-            cluster_list
-        ):
+        for cluster_index, cluster in enumerate(cluster_list):
             (
                 polar_orders[cluster_index],
                 nematic_orders[cluster_index],
@@ -2114,13 +1893,9 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
 
         # Clusters containing a single cell have P = S = 1
         # trivially, so they are excluded from the means.
-        non_singleton_mask = (
-            cluster_sizes > 1
-        )
+        non_singleton_mask = cluster_sizes > 1
 
-        number_of_non_singleton_clusters = int(
-            np.sum(non_singleton_mask)
-        )
+        number_of_non_singleton_clusters = int(np.sum(non_singleton_mask))
 
         if number_of_non_singleton_clusters == 0:
             mean_polar_order_non_singleton = np.nan
@@ -2129,22 +1904,14 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             mean_nematic_order_non_singleton = np.nan
             weighted_mean_nematic_order_non_singleton = np.nan
         else:
-            non_singleton_sizes = cluster_sizes[
-                non_singleton_mask
-            ]
+            non_singleton_sizes = cluster_sizes[non_singleton_mask]
 
-            non_singleton_polar_orders = polar_orders[
-                non_singleton_mask
-            ]
+            non_singleton_polar_orders = polar_orders[non_singleton_mask]
 
-            non_singleton_nematic_orders = nematic_orders[
-                non_singleton_mask
-            ]
+            non_singleton_nematic_orders = nematic_orders[non_singleton_mask]
 
             mean_polar_order_non_singleton = float(
-                np.mean(
-                    non_singleton_polar_orders
-                )
+                np.mean(non_singleton_polar_orders)
             )
 
             weighted_mean_polar_order_non_singleton = float(
@@ -2155,9 +1922,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             )
 
             mean_nematic_order_non_singleton = float(
-                np.mean(
-                    non_singleton_nematic_orders
-                )
+                np.mean(non_singleton_nematic_orders)
             )
 
             weighted_mean_nematic_order_non_singleton = float(
@@ -2172,22 +1937,14 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             largest_cluster_nematic_order = np.nan
         else:
             # if several clusters share the largest size, take the first one.
-            largest_cluster_index = int(
-                np.argmax(
-                    cluster_sizes
-                )
-            )
+            largest_cluster_index = int(np.argmax(cluster_sizes))
 
             largest_cluster_polar_order = float(
-                polar_orders[
-                    largest_cluster_index
-                ]
+                polar_orders[largest_cluster_index]
             )
 
             largest_cluster_nematic_order = float(
-                nematic_orders[
-                    largest_cluster_index
-                ]
+                nematic_orders[largest_cluster_index]
             )
 
         return {
@@ -2196,9 +1953,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             "number_of_non_singleton_clusters": (
                 number_of_non_singleton_clusters
             ),
-            "mean_polar_order_non_singleton": (
-                mean_polar_order_non_singleton
-            ),
+            "mean_polar_order_non_singleton": (mean_polar_order_non_singleton),
             "weighted_mean_polar_order_non_singleton": (
                 weighted_mean_polar_order_non_singleton
             ),
@@ -2208,12 +1963,8 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             "weighted_mean_nematic_order_non_singleton": (
                 weighted_mean_nematic_order_non_singleton
             ),
-            "largest_cluster_polar_order": (
-                largest_cluster_polar_order
-            ),
-            "largest_cluster_nematic_order": (
-                largest_cluster_nematic_order
-            ),
+            "largest_cluster_polar_order": (largest_cluster_polar_order),
+            "largest_cluster_nematic_order": (largest_cluster_nematic_order),
         }
 
     def calculate_cluster_velocity_statistics(
@@ -2248,16 +1999,11 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             Raw cluster velocities and summary statistics.
         """
         cluster_sizes = np.asarray(
-            [
-                len(cluster)
-                for cluster in cluster_list
-            ],
+            [len(cluster) for cluster in cluster_list],
             dtype=int,
         )
 
-        number_of_clusters = int(
-            cluster_sizes.size
-        )
+        number_of_clusters = int(cluster_sizes.size)
 
         cluster_velocity_x = np.full(
             number_of_clusters,
@@ -2283,9 +2029,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             dtype=float,
         )
 
-        for cluster_index, cluster in enumerate(
-            cluster_list
-        ):
+        for cluster_index, cluster in enumerate(cluster_list):
             cluster_indices = np.asarray(
                 cluster,
                 dtype=int,
@@ -2295,12 +2039,10 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                 continue
 
             # Take the veloicities
-            cell_velocities_xy = (
-                cell_instantaneous_velocities[
-                    cluster_indices,
-                    :2,
-                ]
-            )
+            cell_velocities_xy = cell_instantaneous_velocities[
+                cluster_indices,
+                :2,
+            ]
 
             # Vectorial mean: translational velocity of the cluster
             cluster_velocity = np.mean(
@@ -2308,18 +2050,12 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                 axis=0,
             )
 
-            cluster_velocity_x[cluster_index] = float(
-                cluster_velocity[0]
-            )
+            cluster_velocity_x[cluster_index] = float(cluster_velocity[0])
 
-            cluster_velocity_y[cluster_index] = float(
-                cluster_velocity[1]
-            )
+            cluster_velocity_y[cluster_index] = float(cluster_velocity[1])
 
             cluster_speeds[cluster_index] = float(
-                np.linalg.norm(
-                    cluster_velocity
-                )
+                np.linalg.norm(cluster_velocity)
             )
 
             # Scalar mean: mean amount of cell movement inside the cluster
@@ -2328,21 +2064,11 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                 axis=1,
             )
 
-            mean_cell_speeds[cluster_index] = float(
-                np.mean(
-                    cell_speeds
-                )
-            )
+            mean_cell_speeds[cluster_index] = float(np.mean(cell_speeds))
 
-        non_singleton_mask = (
-            cluster_sizes > 1
-        )
+        non_singleton_mask = cluster_sizes > 1
 
-        number_of_non_singleton_clusters = int(
-            np.sum(
-                non_singleton_mask
-            )
-        )
+        number_of_non_singleton_clusters = int(np.sum(non_singleton_mask))
 
         if number_of_non_singleton_clusters == 0:
             mean_cluster_speed_non_singleton = np.nan
@@ -2351,13 +2077,9 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             mean_cell_speed_non_singleton = np.nan
             weighted_mean_cell_speed_non_singleton = np.nan
         else:
-            non_singleton_sizes = cluster_sizes[
-                non_singleton_mask
-            ]
+            non_singleton_sizes = cluster_sizes[non_singleton_mask]
 
-            non_singleton_cluster_speeds = cluster_speeds[
-                non_singleton_mask
-            ]
+            non_singleton_cluster_speeds = cluster_speeds[non_singleton_mask]
 
             non_singleton_mean_cell_speeds = mean_cell_speeds[
                 non_singleton_mask
@@ -2365,9 +2087,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
 
             # Every cluster contributes with the same weight
             mean_cluster_speed_non_singleton = float(
-                np.mean(
-                    non_singleton_cluster_speeds
-                )
+                np.mean(non_singleton_cluster_speeds)
             )
 
             # Large clusters contribute proportionally to their size
@@ -2380,9 +2100,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
 
             # Mean of the cluster-level mean cell speeds
             mean_cell_speed_non_singleton = float(
-                np.mean(
-                    non_singleton_mean_cell_speeds
-                )
+                np.mean(non_singleton_mean_cell_speeds)
             )
 
             # Equivalent to averaging the cell speeds over all cells
@@ -2399,22 +2117,14 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             largest_cluster_mean_cell_speed = np.nan
         else:
             # if several clusters have the maximum size, take the first
-            largest_cluster_index = int(
-                np.argmax(
-                    cluster_sizes
-                )
-            )
+            largest_cluster_index = int(np.argmax(cluster_sizes))
 
             largest_cluster_speed = float(
-                cluster_speeds[
-                    largest_cluster_index
-                ]
+                cluster_speeds[largest_cluster_index]
             )
 
             largest_cluster_mean_cell_speed = float(
-                mean_cell_speeds[
-                    largest_cluster_index
-                ]
+                mean_cell_speeds[largest_cluster_index]
             )
 
         return {
@@ -2431,15 +2141,11 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             "weighted_mean_cluster_speed_non_singleton": (
                 weighted_mean_cluster_speed_non_singleton
             ),
-            "mean_cell_speed_non_singleton": (
-                mean_cell_speed_non_singleton
-            ),
+            "mean_cell_speed_non_singleton": (mean_cell_speed_non_singleton),
             "weighted_mean_cell_speed_non_singleton": (
                 weighted_mean_cell_speed_non_singleton
             ),
-            "largest_cluster_speed": (
-                largest_cluster_speed
-            ),
+            "largest_cluster_speed": (largest_cluster_speed),
             "largest_cluster_mean_cell_speed": (
                 largest_cluster_mean_cell_speed
             ),
@@ -2458,9 +2164,9 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             or np.mod(
                 tic,
                 self.summary_save_step,
-            ) == 0
+            )
+            == 0
         )
-
 
     def should_record_cluster_raw(
         self,
@@ -2475,9 +2181,9 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             or np.mod(
                 tic,
                 self.raw_save_step,
-            ) == 0
+            )
+            == 0
         )
-
 
     def should_record_clusters(
         self,
@@ -2487,15 +2193,12 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
         """
         Calculate clusters whenever either output requires them.
         """
-        return (
-            self.should_record_cluster_summary(
-                tic=tic,
-                final_tic=final_tic,
-            )
-            or self.should_record_cluster_raw(
-                tic=tic,
-                final_tic=final_tic,
-            )
+        return self.should_record_cluster_summary(
+            tic=tic,
+            final_tic=final_tic,
+        ) or self.should_record_cluster_raw(
+            tic=tic,
+            final_tic=final_tic,
         )
 
     def record_cluster_state(
@@ -2514,18 +2217,14 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
 
         Round and elongated clusters are treated independently.
         """
-        record_summary = (
-            self.should_record_cluster_summary(
-                tic=tic,
-                final_tic=final_tic,
-            )
+        record_summary = self.should_record_cluster_summary(
+            tic=tic,
+            final_tic=final_tic,
         )
 
-        record_raw = (
-            self.should_record_cluster_raw(
-                tic=tic,
-                final_tic=final_tic,
-            )
+        record_raw = self.should_record_cluster_raw(
+            tic=tic,
+            final_tic=final_tic,
         )
 
         round_statistics = self.calculate_size_statistics(
@@ -2536,28 +2235,20 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
             clusters["elongated"],
         )
 
-        elongated_order_statistics = (
-            self.calculate_cluster_order_statistics(
-                cluster_list=clusters["elongated"],
-                cell_phies=cell_phies,
-            )
+        elongated_order_statistics = self.calculate_cluster_order_statistics(
+            cluster_list=clusters["elongated"],
+            cell_phies=cell_phies,
         )
 
-        round_velocity_statistics = (
-            self.calculate_cluster_velocity_statistics(
-                cluster_list=clusters["round"],
-                cell_instantaneous_velocities=(
-                    cell_instantaneous_velocities
-                ),
-            )
+        round_velocity_statistics = self.calculate_cluster_velocity_statistics(
+            cluster_list=clusters["round"],
+            cell_instantaneous_velocities=(cell_instantaneous_velocities),
         )
 
         elongated_velocity_statistics = (
             self.calculate_cluster_velocity_statistics(
                 cluster_list=clusters["elongated"],
-                cell_instantaneous_velocities=(
-                    cell_instantaneous_velocities
-                ),
+                cell_instantaneous_velocities=(cell_instantaneous_velocities),
             )
         )
 
@@ -2573,18 +2264,12 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
 
         raw_filename = os.path.join(
             output_folder,
-            (
-                f"cluster_sizes_{self.culture_name}"
-                f"_step={tic:05}.dat"
-            ),
+            (f"cluster_sizes_{self.culture_name}" f"_step={tic:05}.dat"),
         )
 
         summary_filename = os.path.join(
             output_folder,
-            (
-                f"cluster_summary_{self.culture_name}"
-                f"_step={tic:05}.dat"
-            ),
+            (f"cluster_summary_{self.culture_name}" f"_step={tic:05}.dat"),
         )
 
         if record_raw:
@@ -2615,9 +2300,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                             "nematic_orders"
                         ]
 
-                        velocity_statistics = (
-                            elongated_velocity_statistics
-                        )
+                        velocity_statistics = elongated_velocity_statistics
                     else:
                         number_of_clusters = int(
                             statistics["number_of_clusters"]
@@ -2635,9 +2318,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                             dtype=float,
                         )
 
-                        velocity_statistics = (
-                            round_velocity_statistics
-                        )
+                        velocity_statistics = round_velocity_statistics
 
                     for cluster_id, (
                         cluster_size,
@@ -2652,18 +2333,10 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                             statistics["sizes"],
                             polar_orders,
                             nematic_orders,
-                            velocity_statistics[
-                                "cluster_velocity_x"
-                            ],
-                            velocity_statistics[
-                                "cluster_velocity_y"
-                            ],
-                            velocity_statistics[
-                                "cluster_speeds"
-                            ],
-                            velocity_statistics[
-                                "mean_cell_speeds"
-                            ],
+                            velocity_statistics["cluster_velocity_x"],
+                            velocity_statistics["cluster_velocity_y"],
+                            velocity_statistics["cluster_speeds"],
+                            velocity_statistics["mean_cell_speeds"],
                         )
                     ):
                         datfile.write(
@@ -2709,20 +2382,14 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                     ("elongated", elongated_statistics),
                 ):
                     if phenotype == "elongated":
-                        order_statistics = (
-                            elongated_order_statistics
-                        )
+                        order_statistics = elongated_order_statistics
 
-                        velocity_statistics = (
-                            elongated_velocity_statistics
-                        )
+                        velocity_statistics = elongated_velocity_statistics
                     else:
                         # Orientational order is not defined for round cells.
                         order_statistics = {
                             "number_of_non_singleton_clusters": int(
-                                np.sum(
-                                    statistics["sizes"] > 1
-                                )
+                                np.sum(statistics["sizes"] > 1)
                             ),
                             "mean_polar_order_non_singleton": np.nan,
                             "weighted_mean_polar_order_non_singleton": np.nan,
@@ -2732,9 +2399,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                             "largest_cluster_nematic_order": np.nan,
                         }
 
-                        velocity_statistics = (
-                            round_velocity_statistics
-                        )
+                        velocity_statistics = round_velocity_statistics
 
                     datfile.write(
                         f"{phenotype},"
@@ -2759,9 +2424,8 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                         f"{velocity_statistics['largest_cluster_mean_cell_speed']}\n"
                     )
 
-class DatOutput_deformation_parameters(
-    TumorsphereOutput
-):
+
+class DatOutput_deformation_parameters(TumorsphereOutput):
     def __init__(
         self,
         culture_name,
@@ -2854,15 +2518,13 @@ class DatOutput_deformation_parameters(
         Return True at the selected recording frequency and at the
         final timestep.
         """
-        return (
-            tic > 0
-            and (
-                np.mod(
-                    tic,
-                    self.save_step,
-                ) == 0
-                or tic == final_tic
+        return tic > 0 and (
+            np.mod(
+                tic,
+                self.save_step,
             )
+            == 0
+            or tic == final_tic
         )
 
     def record_deformation_events(
@@ -2894,11 +2556,7 @@ class DatOutput_deformation_parameters(
             ),
         )
 
-        number_of_steps = (
-            tic_end
-            - tic_start
-            + 1
-        )
+        number_of_steps = tic_end - tic_start + 1
 
         with open(
             filename,
@@ -2934,9 +2592,8 @@ class DatOutput_deformation_parameters(
                 f"{event_counts.get('max_contraction_accepted_overlap', 0.0)}\n"
             )
 
-class DatOutput_overlap_parameters(
-    TumorsphereOutput
-):
+
+class DatOutput_overlap_parameters(TumorsphereOutput):
     def __init__(
         self,
         culture_name,
@@ -3015,15 +2672,13 @@ class DatOutput_overlap_parameters(
         Return True at the selected recording frequency and at the
         final timestep.
         """
-        return (
-            tic > 0
-            and (
-                np.mod(
-                    tic,
-                    self.save_step,
-                ) == 0
-                or tic == final_tic
+        return tic > 0 and (
+            np.mod(
+                tic,
+                self.save_step,
             )
+            == 0
+            or tic == final_tic
         )
 
     def record_overlap_parameters(
@@ -3055,11 +2710,7 @@ class DatOutput_overlap_parameters(
             ),
         )
 
-        number_of_steps = (
-            tic_end
-            - tic_start
-            + 1
-        )
+        number_of_steps = tic_end - tic_start + 1
 
         with open(
             filename,
@@ -3078,6 +2729,7 @@ class DatOutput_overlap_parameters(
                 f"{number_of_steps},"
                 f"{max_normalized_overlap}\n"
             )
+
 
 class OvitoOutput(TumorsphereOutput):
     """Class for handling output to a file for visualization in Ovito."""
@@ -3116,7 +2768,6 @@ class OvitoOutput(TumorsphereOutput):
         active_cell_indexes,
         side,
         cell_area,
-
     ):
         """Writes the data file in path for ovito, for time step t of self.
 
@@ -3124,9 +2775,7 @@ class OvitoOutput(TumorsphereOutput):
         """
         # we save the ovito if tic is multiple of the save_step or in some special situations
         # in order to see the deformation
-        if (
-            np.mod(tic, self.save_step) == 0
-        ):
+        if np.mod(tic, self.save_step) == 0:
             path_folder = os.path.join(self.output_dir, "ovito")
             os.makedirs(path_folder, exist_ok=True)
 
@@ -3144,12 +2793,14 @@ class OvitoOutput(TumorsphereOutput):
                     + ' 0.0 0.0 0.0 1.0"Properties=species:S:1:pos:R:3:aspherical_shape:R:3:orientation:R:4:Color:R:1'
                     + "\n"
                 )
-                for cell in cells: # csc activas
-                    
+                for cell in cells:  # csc activas
+
                     if cell.is_stem and cell.available_space:
                         phi = cell_phies[cell._index]
                         # Color condition in aspect ratio
-                        aspect_ratio_condition = (cell.aspect_ratio - 1) / (cell.culture.aspect_ratio_max - 1)
+                        aspect_ratio_condition = (cell.aspect_ratio - 1) / (
+                            cell.culture.aspect_ratio_max - 1
+                        )
 
                         if phi is None:
                             color_value = 1
@@ -3365,9 +3016,7 @@ class DfOutput(TumorsphereOutput):
         for cell in cells:
             data["stemness"].append(cell.is_stem)
             data["active"].append(cell._index in active_cell_indexes)
-            assert (
-                cell._index in active_cell_indexes
-            ) == cell.available_space
+            assert (cell._index in active_cell_indexes) == cell.available_space
 
         # we make the dataframe
         df = pd.DataFrame(data)
@@ -3414,17 +3063,13 @@ def create_output_demux(
             if out == "dat_pos_ar":
                 outputs.append(
                     output_types[out](
-                        culture_name, 
-                        output_dir, 
-                        save_step_dat_pos_ar
+                        culture_name, output_dir, save_step_dat_pos_ar
                     )
                 )
             elif out == "dat_order_par":
                 outputs.append(
                     output_types[out](
-                        culture_name,
-                        output_dir,
-                        save_step_dat_order_par
+                        culture_name, output_dir, save_step_dat_order_par
                     )
                 )
             elif out == "dat_motion_par":
@@ -3472,18 +3117,11 @@ def create_output_demux(
             elif out == "ovito":
                 outputs.append(
                     output_types[out](
-                        culture_name,
-                        output_dir,
-                        save_step_ovito
+                        culture_name, output_dir, save_step_ovito
                     )
                 )
             else:
-                outputs.append(
-                    output_types[out](
-                        culture_name,
-                        output_dir
-                    )
-                )
+                outputs.append(output_types[out](culture_name, output_dir))
         else:
             logging.warning(f"Invalid output {out} requested")
     return OutputDemux(culture_name, outputs)
