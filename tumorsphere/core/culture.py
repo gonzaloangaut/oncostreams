@@ -164,7 +164,6 @@ class Culture:
         deformation: bool = True,
         stabilization_time: int = 120,
         overlap_threshold_ratio: float = np.exp(-1),
-        overlap_threshold_tfg: float = 0.61,
         delta_t: float = 0.05,
         deformation_attempt_period: Optional[float] = None,
         initial_aspect_ratio: float = 1,
@@ -225,9 +224,8 @@ class Culture:
         stabilization_time : int
             The time we have to wait in order to start the deformation.
         overlap_threshold_ratio : float
-            A fraction (between 0 and 1) of the maximum allowed overlap between cells.
-        overlap_threshold_tfg : float
-            Overlap threshold used in the TFG.
+            Normalized overlap threshold used to identify interacting pairs
+            and reject elongation proposals. Defaults to exp(-1).
         delta_t : float
             The time interval used to move the cells.
         initial_apect_ratio : float
@@ -240,7 +238,9 @@ class Culture:
             Increase in the aspect ratio during deformation. If trabajo_final is True, then
             delta_aspect_ratio = aspect_ratio_max - 1
         trabajo_final : bool
-            Flag to determine wether to use or not mechanism of the TFG.
+            If True, use instantaneous shape changes by setting
+            delta_aspect_ratio to aspect_ratio_max - 1.
+            Otherwise, use the supplied delta_aspect_ratio.
         initialization_mode: str
             String to determine the initial conditions to use.
         initial_positions: Optional[np.ndarray] = None
@@ -293,11 +293,10 @@ class Culture:
         cell_area : float
             The area of all cells in the culture.
         stabilization_time : int
-            The time we have to wait in order to start the deformation
+            The time we have to wait in order to start the deformation.
         overlap_threshold_ratio : float
-            A fraction (between 0 and 1) of the maximum allowed overlap between cells.
-        overlap_threshold_tfg : float
-            Overlap threshold used in the TFG.
+            Normalized overlap threshold used to identify interacting pairs
+            and reject elongation proposals. Defaults to exp(-1).
         delta_t : float
             The time interval used to move
         initial_apect_ratio : float
@@ -336,7 +335,6 @@ class Culture:
         self.movement = movement
         self.deformation = deformation
         self.overlap_threshold_ratio = overlap_threshold_ratio
-        self.overlap_threshold_tfg = overlap_threshold_tfg
         self.contraction_overlap_safety_ratio = contraction_overlap_safety_ratio
         self.delta_t = delta_t
         # Preserve the legacy behavior when None is provided: 

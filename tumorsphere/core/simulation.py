@@ -90,11 +90,10 @@ class Simulation:
     deformation : bool
         Whether the cells deforms or not.
     stabilization_time : int
-        The time we have to wait in order to start the deformation
+        The time we have to wait in order to start the deformation.
     overlap_threshold_ratio : float
-        A fraction (between 0 and 1) of the maximum allowed overlap between cells.
-    overlap_threshold_tfg : float
-        Overlap threshold used in the TFG.
+        Normalized overlap threshold used to identify interacting pairs
+        and reject elongation proposals. Defaults to exp(-1).
     delta_t : float
         The time interval used to move
     initial_apect_ratio : float
@@ -109,13 +108,10 @@ class Simulation:
         The bounds of the grid, by default None. If None, the space is
         unbouded. If provided, the space is bounded to the
         [0, culture_bounds)^3 cube.
-    grid_cube_size : int, optional
-        The size of the cubes in the grid, by default 2. This value comes
-        from considering that cells have usually radius 1, so a cube of
-        side $h=2r$ is enough to make sure that we only have to check
-        superpositions with cells on the same or first neighboring grid
-        cells. Enlarge if using larger cells.
-        For simulations with eliptical cells, use $h=2r_{max}$.
+    grid_cube_size : float, optional
+        Spatial-grid bucket size. If None, calculate a size sufficient
+        to cover the maximum interaction range. Explicit values must
+        provide at least the same coverage.
     grid_torus : bool, optional
         Whether the grid is a torus or not, only relevant when bounds are
         provided, True by default. If True, the grid is a torus, so the
@@ -124,7 +120,9 @@ class Simulation:
         defined to manage what happens when cells go out of the bounds of
         the simulation.
     trabajo_final : bool
-        Flag to determine wether to use or not mechanism of the TFG.
+        If True, use instantaneous shape changes by setting
+        delta_aspect_ratio to aspect_ratio_max - 1.
+        Otherwise, use the supplied delta_aspect_ratio.
     initialization_mode: str
         String to determine the initial conditions to use.
     deformation_warmup_steps : int
@@ -171,7 +169,7 @@ class Simulation:
         cell_max_def_attempts: int = 10,
         swap_probability: float = 0.5,
         culture_bounds: float = None,
-        grid_cube_size: Union[float, List[float]] = 2,
+        grid_cube_size: Optional[float] = None,
         grid_torus: bool = True,
         initial_number_of_cells: Optional[List[int]] = [400],
         initial_fraction_elongated: Optional[List[float]] = [0.0],
@@ -183,8 +181,7 @@ class Simulation:
         movement: bool = True,
         deformation: bool = True,
         stabilization_time: int = 120,
-        overlap_threshold_ratio: float = 0.35,
-        overlap_threshold_tfg: float = 0.61,
+        overlap_threshold_ratio: float = np.exp(-1),
         contraction_overlap_safety_ratio: Optional[float] = None,
         delta_t: float = 0.05,
         deformation_attempt_period: Optional[float] = None,
@@ -229,7 +226,6 @@ class Simulation:
         self.rng = np.random.default_rng(rng_seed)
         self.stabilization_time = stabilization_time
         self.overlap_threshold_ratio = overlap_threshold_ratio
-        self.overlap_threshold_tfg = overlap_threshold_tfg
         self.contraction_overlap_safety_ratio = contraction_overlap_safety_ratio
         self.delta_t = delta_t
         self.deformation_attempt_period = deformation_attempt_period
@@ -323,7 +319,18 @@ class Simulation:
 
         # attributes for the spatial hash grid
         self.culture_bounds = culture_bounds
-        self.grid_cube_size = grid_cube_size
+        # Cover the maximum interaction range when no size is supplied
+        if grid_cube_size is None:
+            grid_cube_size = (
+                2
+                * self.cell_radius
+                * np.sqrt(
+                    self.aspect_ratio_max
+                    * (-np.log(self.overlap_threshold_ratio))
+                )
+            )
+
+        self.grid_cube_size = float(grid_cube_size)
         self.grid_torus = grid_torus
 
     def calculate_culture_bounds_from_density(
@@ -1517,7 +1524,6 @@ def simulate_single_culture(
             deformation=sim.deformation,
             stabilization_time=effective_stabilization_time,
             overlap_threshold_ratio=sim.overlap_threshold_ratio,
-            overlap_threshold_tfg=sim.overlap_threshold_tfg,
             contraction_overlap_safety_ratio=sim.contraction_overlap_safety_ratio,
             delta_t=sim.delta_t,
             deformation_attempt_period=sim.deformation_attempt_period,
