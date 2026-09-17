@@ -415,6 +415,8 @@ class Anisotropic_Grosmann(Force):
                 "lambda_core must be between 0 and 1."
             )
         self.lambda_core = float(lambda_core)
+        # Cache mobilities for each area and aspect ratio
+        self._mobilities_cache = {}
 
     def name(self):
         """
@@ -478,6 +480,14 @@ class Anisotropic_Grosmann(Force):
         Calculate the longitudinal, transversal and rotational mobilities of
         the cell
         """
+        # Reuse mobilities whenever the cell geometry matches
+        cache_key = (area, cell.aspect_ratio)
+
+        cached_mobilities = self._mobilities_cache.get(cache_key)
+
+        if cached_mobilities is not None:
+            return cached_mobilities
+
         # longitudinal & transversal mobility
         if cell.is_round:
             mP = 1 / np.sqrt((area * cell.aspect_ratio) / np.pi)
@@ -521,7 +531,11 @@ class Anisotropic_Grosmann(Force):
             * mP
         )
 
-        return mP, mS, mR
+        # Store the result for subsequent calls with the same geometry
+        mobilities = (mP, mS, mR)
+        self._mobilities_cache[cache_key] = mobilities
+
+        return mobilities
     
     def calculate_noise(
         self,
