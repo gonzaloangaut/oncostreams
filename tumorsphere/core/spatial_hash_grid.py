@@ -90,6 +90,7 @@ class SpatialHashGrid:
         self.torus = torus
         self.bounds = bounds
         self.offsets = np.array(list(product(range(-1, 2), repeat=3)))
+        self._offset_cache = {1: self.offsets}
         self.hash_table = defaultdict(set)
 
         if not np.isfinite(cube_size) or cube_size <= 0:
@@ -203,36 +204,54 @@ class SpatialHashGrid:
             )
 
     # @profile
-    def find_neighbors(self, position: np.ndarray) -> Iterable:
-        """Returns set of cell indexes within a position's neighborhood.
-
-        This method considers cells in the same and adjacent cubes as
-        neighbors (3D Moore neighborhood). With this, the set of neighbors
-        is the set of indexes of existing cells that would neighbor a new cell
-        in the provided position. Note that acording to this, a cell is always
-        a neighbor of itself.
+    def find_neighbors(
+        self,
+        position: np.ndarray,
+        bucket_radius: int = 1,
+    ) -> Iterable:
+        """Return cell indexes in neighboring hash buckets.
 
         Parameters
         ----------
         position : np.ndarray
-            The position of the target cell in the grid.
+            Position of the target cell.
+        bucket_radius : int, optional
+            Number of hash buckets to inspect in each Cartesian direction.
+            ``bucket_radius=1`` reproduces the standard 3x3x3 Moore
+            neighborhood used by the dynamics. Larger values are useful for
+            observables whose range is deliberately larger than the force
+            interaction range (for example a +10% cluster graph).
 
-        Returns
-        -------
-        Iterable
-            An iterable of cell identifiers that are considered neighbors of a
-            new cell in the provided position.
+        Notes
+        -----
+        Periodic wrapping can map several requested buckets onto the same
+        physical bucket. Those duplicates are removed before cell indexes are
+        returned.
         """
-        # Find position bucket
+        if not isinstance(bucket_radius, (int, np.integer)) or bucket_radius < 0:
+            raise ValueError("bucket_radius must be a non-negative integer.")
+
+        bucket_radius = int(bucket_radius)
+
+        if bucket_radius not in self._offset_cache:
+            self._offset_cache[bucket_radius] = np.array(
+                list(
+                    product(
+                        range(-bucket_radius, bucket_radius + 1),
+                        repeat=3,
+                    )
+                ),
+                dtype=int,
+            )
+
         bucket = self.get_bucket_position(position)
+        adj_buckets = bucket + self._offset_cache[bucket_radius]
 
-        # Broadcasting addition to get adjacent buckets
-        adj_buckets = bucket + self.offsets
-
-        # Handle toroidal wrapping
         if self.bounds is not None and self.torus:
-            # adj_buckets = np.mod(adj_buckets, self.bounds)
             adj_buckets = np.mod(adj_buckets, self.number_of_buckets)
+            adj_buckets = np.unique(adj_buckets, axis=0)
+
         return chain.from_iterable(
-            map(lambda b: self.hash_table[b.tobytes()], adj_buckets)
+            self.hash_table[b.tobytes()] for b in adj_buckets
         )
+

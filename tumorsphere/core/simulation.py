@@ -194,6 +194,8 @@ class Simulation:
         deformation_warmup_steps: int = 5_000,
         deformation_probe_steps: int = 1_000,
         elongation_sleep_steps: int = 5_000,
+        cluster_range_factors=(1.0, 1.1),
+        cluster_alignment_angle_deg: float = 45.0,
     ):
         # main simulation attributes
         self.forces = forces
@@ -241,6 +243,16 @@ class Simulation:
         self.deformation_probe_steps = deformation_probe_steps
 
         self.elongation_sleep_steps = elongation_sleep_steps
+
+        # Cluster observables. These settings do not alter the dynamics;
+        # they only define the graphs recorded by dat_cluster_par.
+        self.cluster_range_factors = tuple(
+            float(value) for value in cluster_range_factors
+        )
+        self.cluster_alignment_angle_deg = float(
+            cluster_alignment_angle_deg
+        )
+
         # Initialization mode
         valid_initialization_modes = {
             "random",
@@ -785,6 +797,10 @@ class Simulation:
             rng_seed=seed.item(),
             swap_probability=self.swap_probability,
             trabajo_final=self.trabajo_final,
+            cluster_range_factors=self.cluster_range_factors,
+            cluster_alignment_angle_deg=(
+                self.cluster_alignment_angle_deg
+            ),
         )
         self.cultures[current_realization_name].simulate(
             self.num_of_steps_per_realization,
@@ -1218,6 +1234,8 @@ def simulate_single_culture(
         "deformation_warmup_steps",
         "deformation_probe_steps",
         "elongation_sleep_steps",
+        "cluster_range_factors",
+        "cluster_alignment_angle_deg",
     )
 
     expected_config = {
@@ -1431,6 +1449,10 @@ def simulate_single_culture(
             deformation_warmup_steps=(sim.deformation_warmup_steps),
             deformation_probe_steps=(sim.deformation_probe_steps),
             elongation_sleep_steps=(sim.elongation_sleep_steps),
+            cluster_range_factors=sim.cluster_range_factors,
+            cluster_alignment_angle_deg=(
+                sim.cluster_alignment_angle_deg
+            ),
         )
         # Persist the original configuration in every subsequent checkpoint
         sim.cultures[

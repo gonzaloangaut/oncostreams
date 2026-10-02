@@ -174,6 +174,8 @@ class Culture:
         deformation_probe_steps: int = 1_000,
         elongation_sleep_steps: int = 5_000,
         contraction_overlap_safety_ratio: Optional[float] = None,
+        cluster_range_factors: Tuple[float, ...] = (1.0, 1.1),
+        cluster_alignment_angle_deg: float = 45.0,
     ):
         """
         Initialize a new culture of cells.
@@ -255,6 +257,13 @@ class Culture:
         contraction_overlap_safety_ratio : float or None
             Maximum normalized overlap allowed after an instantaneous
             contraction. Set to None to disable the safety check.
+        cluster_range_factors : tuple of float
+            Multiplicative geometric ranges used for cluster observables.
+            The default ``(1.0, 1.1)`` corresponds to the interaction range
+            and a 10% enlarged range.
+        cluster_alignment_angle_deg : float
+            Angular tolerance used by polar and nematic cluster graphs.
+            Defaults to 45 degrees.
 
         Attributes
         ----------
@@ -335,6 +344,36 @@ class Culture:
         self.contraction_overlap_safety_ratio = (
             contraction_overlap_safety_ratio
         )
+
+        cluster_range_factors = tuple(
+            float(value) for value in cluster_range_factors
+        )
+        if (
+            not cluster_range_factors
+            or any(
+                (not np.isfinite(value)) or value < 1.0
+                for value in cluster_range_factors
+            )
+        ):
+            raise ValueError(
+                "cluster_range_factors must contain finite values >= 1."
+            )
+
+        if (
+            not np.isfinite(cluster_alignment_angle_deg)
+            or not 0.0 <= cluster_alignment_angle_deg <= 90.0
+        ):
+            raise ValueError(
+                "cluster_alignment_angle_deg must be between 0 and 90."
+            )
+
+        self.cluster_range_factors = tuple(
+            sorted(set(cluster_range_factors))
+        )
+        self.cluster_alignment_angle_deg = float(
+            cluster_alignment_angle_deg
+        )
+
         self.delta_t = delta_t
         # Preserve the legacy behavior when None is provided:
         # perform one deformation sweep per integration step.
@@ -423,8 +462,12 @@ class Culture:
         # Deformation events accumulated since the previous output
         self.reset_deformation_event_counts()
 
-        # Maximum normalized overlap evaluated during the current output interval
+        # Normalized-overlap statistics accumulated during the current
+        # output interval. The mean uses the same neighbor-overlap values
+        # examined by the interaction routine.
         self.max_normalized_overlap_interval = 0.0
+        self.normalized_overlap_sum_interval = 0.0
+        self.normalized_overlap_count_interval = 0
         self.overlap_interval_start_tic = 1
 
         # First timestep included in the current deformation interval
@@ -1451,11 +1494,19 @@ class Culture:
             dtype=float,
         )
 
-        # Accumulate the maximum before filtering interacting neighbors
+        # Accumulate overlap diagnostics before filtering interacting neighbors.
+        # The same pair can be encountered from both cells; this does not
+        # change the mean because both directions carry the same value.
         if update_overlap_diagnostic:
             self.max_normalized_overlap_interval = max(
                 self.max_normalized_overlap_interval,
                 float(np.max(normalized_overlaps)),
+            )
+            self.normalized_overlap_sum_interval += float(
+                np.sum(normalized_overlaps)
+            )
+            self.normalized_overlap_count_interval += int(
+                normalized_overlaps.size
             )
 
         significant_neighbors_mask = (
@@ -1515,108 +1566,183 @@ class Culture:
 
     def calculate_clusters(
         self,
-    ) -> dict[str, list[list[int]]]:
-        """
-        Calculate the connected clusters of round and elongated cells.
+    ) -> dict[tuple[str, str, float], list[list[int]]]:
+        """Calculate spatial, polar and nematic cluster graphs.
 
-        Two cells belong to the same cluster when:
+        Cluster definitions are based on the normalized Gaussian overlap.
+        ``range_factor=1`` uses the same threshold as the interaction network.
+        Larger range factors reproduce the geometric dilation used in the
+        analysis notebooks: the overlap threshold becomes
+        ``overlap_threshold_ratio ** range_factor**2``.
 
-        1. They interact significantly according to the same criterion
-        used by the dynamics.
-        2. They have the same phenotype: both are round or both are
-        elongated.
-
-        Connectivity is transitive. Therefore, if cell A interacts with B
-        and B interacts with C, all three cells belong to the same cluster,
-        even if A and C do not interact directly.
-
-        The complete cluster structure is recalculated independently for
-        every snapshot. No cluster labels or connections are preserved
-        between consecutive calls.
+        Round cells only have spatial clusters. Elongated cells have spatial,
+        polar and nematic clusters. Polar edges require
+        ``cos(delta_phi) >= cos(theta_c)``; nematic edges require
+        ``abs(cos(delta_phi)) >= cos(theta_c)``.
 
         Returns
         -------
-        clusters : dict[str, list[list[int]]]
-            Dictionary containing two entries:
-
-            - ``"round"``: clusters composed of round cells.
-            - ``"elongated"``: clusters composed of elongated cells.
-
-            Each cluster is represented by a list containing the indices
-            of its cells. Isolated cells appear as clusters of size one.
+        clusters : dict
+            Mapping ``(phenotype, alignment, range_factor)`` to a list of
+            connected components. Every component contains global cell indices;
+            isolated cells appear as clusters of size one.
         """
         number_of_cells = len(self.cells)
 
+        # Build the list of cluster graph specifications. Each specification is a
+        # tuple of (phenotype, alignment, range_factor).
+        graph_specs = []
+
+        for range_factor in self.cluster_range_factors:
+            graph_specs.append(("round", "spatial", range_factor))
+
+            for alignment in ("spatial", "polar", "nematic"):
+                graph_specs.append(("elongated", alignment, range_factor))
+
         if number_of_cells == 0:
-            return {
-                "round": [],
-                "elongated": [],
-            }
+            return {spec: [] for spec in graph_specs}
 
-        # Start from a completely new connectivity structure.
-        union_find = _UnionFind(number_of_cells)
+        # Initialize a union-find data structure for each cluster graph specification
+        union_finds = {
+            spec: _UnionFind(number_of_cells)
+            for spec in graph_specs
+        }
 
-        # Process the interaction network of the current snapshot.
+        thresholds = {
+            range_factor: self.overlap_threshold_ratio ** (range_factor**2)
+            for range_factor in self.cluster_range_factors
+        }
+
+        cos_threshold = np.cos(
+            np.deg2rad(self.cluster_alignment_angle_deg)
+        )
+
+        # The cluster observable can use a slightly longer range than the
+        # dynamics. Ask the hash grid for enough buckets to cover the largest
+        # requested geometric range.
+        base_search_radius = (
+            2.0
+            * self.cell_radius
+            * np.sqrt(
+                self.aspect_ratio_max
+                * (-np.log(self.overlap_threshold_ratio))
+            )
+        )
+
+        cluster_search_radius = (
+            base_search_radius * max(self.cluster_range_factors)
+        )
+
+        bucket_radius = max(
+            1,
+            int(np.ceil(cluster_search_radius / self.grid.cube_size)),
+        )
+
+        # Iterate over all cells and find their neighbors in the cluster search radius
         for cell_index in range(number_of_cells):
-            cell = self.cells[cell_index]
-
-            significant_neighbors = self._get_significant_neighbors(
-                cell_index=cell_index,
-                update_overlap_diagnostic=False,
+            candidate_neighbors = sorted(
+                {
+                    int(neighbor_index)
+                    for neighbor_index in self.grid.find_neighbors(
+                        position=self.cell_positions[cell_index],
+                        bucket_radius=bucket_radius,
+                    )
+                    if int(neighbor_index) > cell_index
+                }
             )
 
-            # In the current model, a cell is round when its aspect ratio
-            # is numerically equal to one. All other cells are elongated.
-            cell_is_round = cell.is_round
+            if not candidate_neighbors:
+                continue
 
-            for neighbor_index in significant_neighbors:
-                neighbor_index = int(neighbor_index)
-                neighbor = self.cells[neighbor_index]
+            candidate_neighbors = np.asarray(
+                candidate_neighbors,
+                dtype=int,
+            )
 
-                neighbor_is_round = neighbor.is_round
+            relative_positions = self.calculate_relative_positions(
+                self.cell_positions[cell_index],
+                self.cell_positions[candidate_neighbors],
+            )
 
-                same_phenotype = cell_is_round == neighbor_is_round
+            _, normalized_overlaps, _ = self.calculate_overlap_components(
+                cell_index=cell_index,
+                neighbor_indices=candidate_neighbors,
+                relative_positions=relative_positions,
+            )
 
-                # Only interacting cells of the same phenotype are joined.
-                if same_phenotype:
-                    union_find.union(
-                        cell_index,
-                        neighbor_index,
+            cell_is_round = self.cells[cell_index].is_round
+            phi_i = self.cell_phies[cell_index]
+
+            for neighbor_index, xi in zip(
+                candidate_neighbors,
+                normalized_overlaps,
+            ):
+                neighbor_is_round = self.cells[neighbor_index].is_round
+
+                if cell_is_round != neighbor_is_round:
+                    continue
+
+                phenotype = "round" if cell_is_round else "elongated"
+
+                if phenotype == "elongated":
+                    cos_delta = float(
+                        np.cos(phi_i - self.cell_phies[neighbor_index])
                     )
 
-            # The temporary cached data of the processed cell are no
-            # longer needed.
-            #
-            # Cached values stored in cells that have not yet been
-            # processed remain available and can be reused when those
-            # cells are visited.
-            cell.neighbors_relative_pos.clear()
-            cell.neighbors_overlap.clear()
-            cell.neighbors_normalized_overlap.clear()
+                    polar_aligned = cos_delta >= cos_threshold
+                    nematic_aligned = abs(cos_delta) >= cos_threshold
 
-        # Transform the internal Union-Find representation into explicit
-        # lists containing the indices of the cells in every cluster.
-        connected_components = union_find.groups()
+                for range_factor in self.cluster_range_factors:
+                    if xi <= thresholds[range_factor]:
+                        continue
 
-        round_clusters = []
-        elongated_clusters = []
+                    union_finds[
+                        (phenotype, "spatial", range_factor)
+                    ].union(
+                        cell_index,
+                        int(neighbor_index),
+                    )
 
-        for cluster_indices in connected_components.values():
-            # A component cannot contain both phenotypes because union()
-            # was only called between cells of the same phenotype.
-            representative_index = cluster_indices[0]
+                    if phenotype == "elongated":
+                        if polar_aligned:
+                            union_finds[
+                                (phenotype, "polar", range_factor)
+                            ].union(
+                                cell_index,
+                                int(neighbor_index),
+                            )
 
-            representative_is_round = self.cells[representative_index].is_round
+                        if nematic_aligned:
+                            union_finds[
+                                (phenotype, "nematic", range_factor)
+                            ].union(
+                                cell_index,
+                                int(neighbor_index),
+                            )
 
-            if representative_is_round:
-                round_clusters.append(list(cluster_indices))
-            else:
-                elongated_clusters.append(list(cluster_indices))
+        clusters = {}
 
-        return {
-            "round": round_clusters,
-            "elongated": elongated_clusters,
-        }
+        # Convert the union-find structures into lists of clusters for each specification
+        for spec, union_find in union_finds.items():
+            phenotype, _, _ = spec
+            groups = union_find.groups()
+
+            phenotype_clusters = []
+
+            for cluster_indices in groups.values():
+                representative = cluster_indices[0]
+                representative_phenotype = (
+                    "round"
+                    if self.cells[representative].is_round
+                    else "elongated"
+                )
+
+                if representative_phenotype == phenotype:
+                    phenotype_clusters.append(list(cluster_indices))
+
+            clusters[spec] = phenotype_clusters
+
+        return clusters
 
     def move(
         self,
@@ -1764,14 +1890,25 @@ class Culture:
         ):
             return
 
+        if self.normalized_overlap_count_interval > 0:
+            mean_normalized_overlap = (
+                self.normalized_overlap_sum_interval
+                / self.normalized_overlap_count_interval
+            )
+        else:
+            mean_normalized_overlap = np.nan
+
         self.output.record_overlap_parameters(
             tic_start=self.overlap_interval_start_tic,
             tic_end=tic,
             final_tic=final_tic,
             max_normalized_overlap=(self.max_normalized_overlap_interval),
+            mean_normalized_overlap=mean_normalized_overlap,
         )
 
         self.max_normalized_overlap_interval = 0.0
+        self.normalized_overlap_sum_interval = 0.0
+        self.normalized_overlap_count_interval = 0
 
         self.overlap_interval_start_tic = tic + 1
 
