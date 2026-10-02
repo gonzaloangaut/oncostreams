@@ -15,7 +15,10 @@ import os
 import pickle
 
 from tumorsphere.core.culture import Culture
-from tumorsphere.core.output import create_output_demux
+from tumorsphere.core.output import (
+    create_output_demux,
+    reconfigure_output_demux,
+)
 from tumorsphere.core.spatial_hash_grid import SpatialHashGrid
 from tumorsphere.core.forces import Force
 
@@ -126,15 +129,19 @@ class Simulation:
     initialization_mode: str
         String to determine the initial conditions to use.
     deformation_warmup_steps : int
-        Number of initial simulation steps during which elongation
-        attempts are always enabled.
+        Number of initial deformation sweeps during which elongation attempts
+        remain enabled before the optional adaptive sleep logic may start.
+        The default is 0 and it is ignored when
+        ``elongation_sleep_steps == 0``.
     deformation_probe_steps : int
-        Number of consecutive active steps without any successful
-        deformation required to temporarily disable elongation attempts.
+        Number of consecutive active deformation sweeps without any successful
+        deformation required before optional adaptive sleeping. The default is
+        0 and it is ignored when ``elongation_sleep_steps == 0``.
     elongation_sleep_steps : int
-        Number of steps during which elongation attempts are disabled.
-        Contractions remain active and immediately reactivate elongation
-        from the following timestep if one occurs.
+        Number of deformation sweeps during which elongation attempts are
+        disabled by the optional adaptive sleep optimization. The default is
+        0, which bypasses the mechanism entirely. Contractions remain active
+        when sleeping is explicitly enabled.
 
     Attributes
     ----------
@@ -191,9 +198,9 @@ class Simulation:
         delta_aspect_ratio: float = 0.1,
         trabajo_final: bool = False,
         initialization_mode: str = "random",
-        deformation_warmup_steps: int = 5_000,
-        deformation_probe_steps: int = 1_000,
-        elongation_sleep_steps: int = 5_000,
+        deformation_warmup_steps: int = 0,
+        deformation_probe_steps: int = 0,
+        elongation_sleep_steps: int = 0,
         cluster_range_factors=(1.0, 1.1),
         cluster_alignment_angle_deg: float = 45.0,
     ):
@@ -843,6 +850,14 @@ class Simulation:
 
         Several different output types are simultaneously available, and the
         data that is recorded is handled by the `TumorsphereOutput` classes.
+
+        When resuming from a checkpoint, output choices and recording intervals
+        may be changed because they do not alter the physical trajectory.
+        Existing stateful outputs are reused when possible. In particular, a
+        motion output that was already active preserves its unwrapped trajectory
+        and MSD reference. If motion output is enabled only after resuming, the
+        checkpoint state becomes the new ``msd_t0`` reference and a warning is
+        emitted. Model parameters that affect the dynamics remain strict.
         If `number_of_processes` is None (default), the number of processes is
         equal to the number of cores in the machine. Limitting the number of
         processes is useful when running the simulation in a cluster, where
@@ -1234,8 +1249,6 @@ def simulate_single_culture(
         "deformation_warmup_steps",
         "deformation_probe_steps",
         "elongation_sleep_steps",
-        "cluster_range_factors",
-        "cluster_alignment_angle_deg",
     )
 
     expected_config = {
@@ -1245,7 +1258,7 @@ def simulate_single_culture(
 
     # Record the effective values passed to this realization
     expected_config.update({
-        "checkpoint_config_version": 1,
+        "checkpoint_config_version": 2,
         "initial_number_of_cells": actual_number_of_cells,
         "initial_fraction_elongated": sim.initial_fraction_elongated[t],
         "prob_stem": sim.prob_stem[i],
@@ -1285,49 +1298,11 @@ def simulate_single_culture(
     ):
         expected_config[f"force.{name}"] = getattr(force, name, None)
 
-    # Output settings must remain unchanged when resuming
-    output_intervals = {
-        "dat_pos_ar": {
-            "save_step": save_step_dat_pos_ar,
-        },
-        "dat_order_par": {
-            "save_step": save_step_dat_order_par,
-        },
-        "dat_motion_par": {
-            "save_step": save_step_dat_motion_par,
-        },
-        "dat_cluster_par": {
-            "summary_save_step": save_step_dat_cluster_summary,
-            "raw_save_step": save_step_dat_cluster_raw,
-        },
-        "dat_deformation_par": {
-            "save_step": save_step_dat_deformation_par,
-        },
-        "dat_overlap_par": {
-            "save_step": save_step_dat_overlap_par,
-        },
-        "dat_local_order_par": {
-            "summary_save_step": save_step_dat_local_order_summary,
-            "raw_save_step": save_step_dat_local_order_raw,
-        },
-        "ovito": {
-            "save_step": save_step_ovito,
-        },
-    }
+    # Output settings are intentionally not part of checkpoint compatibility.
+    # They do not alter the physical trajectory, so enabled outputs and their
+    # recording intervals may be changed when resuming. Cluster graph settings
+    # are treated the same way: they only control diagnostics.
 
-    expected_config["output.directory"] = os.path.abspath(output_dir)
-    expected_config["output.enabled"] = tuple(sorted(outputs))
-
-    # Only compare recording intervals for enabled outputs
-    for output_name in sorted(set(outputs)):
-        for setting, value in output_intervals.get(
-            output_name,
-            {},
-        ).items():
-            expected_config[
-                f"output.{output_name}.{setting}"
-            ] = value
-            
     checkpoint_path_save = os.path.join(
         output_dir, "checkpoints", current_realization_name + ".pkl"
     )
@@ -1356,25 +1331,50 @@ def simulate_single_culture(
                 "Use a new output directory for a fresh simulation."
             )
 
+        # Older checkpoints also stored output-policy fields inside this
+        # dictionary. Ignore those fields when checking physical compatibility.
+        # Cluster graph settings are diagnostics rather than dynamical parameters.
+        ignored_checkpoint_keys = {
+            "checkpoint_config_version",
+            "cluster_range_factors",
+            "cluster_alignment_angle_deg",
+        }
+
+        def dynamic_config(config):
+            return {
+                key: value
+                for key, value in config.items()
+                if key not in ignored_checkpoint_keys
+                and not key.startswith("output.")
+            }
+
+        saved_dynamic_config = dynamic_config(saved_config)
+        expected_dynamic_config = dynamic_config(expected_config)
+
         differences = []
 
-        for key in sorted(set(saved_config) | set(expected_config)):
-            if key not in saved_config or key not in expected_config:
+        for key in sorted(
+            set(saved_dynamic_config) | set(expected_dynamic_config)
+        ):
+            if (
+                key not in saved_dynamic_config
+                or key not in expected_dynamic_config
+            ):
                 differences.append(
                     f"{key}: missing from one configuration"
                 )
-            elif saved_config[key] != expected_config[key]:
+            elif saved_dynamic_config[key] != expected_dynamic_config[key]:
                 differences.append(
-                    f"{key}: checkpoint={saved_config[key]!r}, "
-                    f"requested={expected_config[key]!r}"
+                    f"{key}: checkpoint={saved_dynamic_config[key]!r}, "
+                    f"requested={expected_dynamic_config[key]!r}"
                 )
 
         if differences:
             raise ValueError(
-                "Checkpoint configuration mismatch:\n"
+                "Checkpoint model configuration mismatch:\n"
                 + "\n".join(differences)
-                + "\nUse the original parameters to resume, "
-                "or a new output directory for a different simulation."
+                + "\nOnly output choices/intervals and cluster diagnostic "
+                "settings may be changed when resuming."
             )
 
         if sim.num_of_steps_per_realization < start_tic:
@@ -1384,8 +1384,69 @@ def simulate_single_culture(
                 f"the checkpoint step ({start_tic})."
             )
 
-        # Restore the saved RNG state without replacing the generator
+        # Restore the saved RNG state without replacing the generator.
         culture.rng.bit_generator.state = state
+
+        # Outputs are observational, so reconstruct the requested output policy
+        # at resume time. Existing output objects are reused when possible so
+        # stateful diagnostics (notably motion/MSD from t=0) keep their state.
+        requested_output = create_output_demux(
+            culture_name=current_realization_name,
+            requested_outputs=outputs,
+            output_dir=output_dir,
+            save_step_dat_pos_ar=save_step_dat_pos_ar,
+            save_step_dat_order_par=save_step_dat_order_par,
+            save_step_dat_motion_par=save_step_dat_motion_par,
+            save_step_dat_cluster_summary=save_step_dat_cluster_summary,
+            save_step_dat_cluster_raw=save_step_dat_cluster_raw,
+            save_step_dat_deformation_par=save_step_dat_deformation_par,
+            save_step_dat_overlap_par=save_step_dat_overlap_par,
+            save_step_dat_local_order_summary=(
+                save_step_dat_local_order_summary
+            ),
+            save_step_dat_local_order_raw=save_step_dat_local_order_raw,
+            save_step_ovito=save_step_ovito,
+        )
+
+        reconfigured_output, reconfiguration = reconfigure_output_demux(
+            existing_output=culture.output,
+            requested_output=requested_output,
+        )
+        culture.output = reconfigured_output
+
+        # Cluster definitions affect diagnostics only and may also be changed
+        # after a checkpoint.
+        culture.cluster_range_factors = tuple(
+            sorted(set(float(value) for value in sim.cluster_range_factors))
+        )
+        culture.cluster_alignment_angle_deg = float(
+            sim.cluster_alignment_angle_deg
+        )
+
+        # If an interval-based diagnostic is newly enabled or its save interval
+        # changes, start a clean interval immediately after the checkpoint.
+        if reconfiguration.get("dat_deformation_par", {}).get("changed"):
+            culture.reset_deformation_event_counts()
+            culture.deformation_interval_start_tic = start_tic + 1
+
+        if reconfiguration.get("dat_overlap_par", {}).get("changed"):
+            culture.max_normalized_overlap_interval = 0.0
+            culture.normalized_overlap_sum_interval = 0.0
+            culture.normalized_overlap_count_interval = 0
+            culture.overlap_interval_start_tic = start_tic + 1
+
+        if reconfiguration.get("dat_motion_par", {}).get("newly_enabled"):
+            # Motion has internal trajectory state. When enabled only after a
+            # checkpoint, the resumed checkpoint becomes its MSD reference.
+            motion_output = reconfiguration["dat_motion_par"]["object"]
+            motion_output.calculate_motion_parameters(
+                culture.cell_positions,
+                culture.side,
+            )
+            print(
+                "Warning: dat_motion_par was enabled only after resuming; "
+                f"msd_t0 now uses checkpoint step {start_tic} as its origin."
+            )
 
         sim.cultures[current_realization_name] = culture
     else:
@@ -1454,7 +1515,9 @@ def simulate_single_culture(
                 sim.cluster_alignment_angle_deg
             ),
         )
-        # Persist the original configuration in every subsequent checkpoint
+        # Persist only model/dynamical compatibility metadata. Output policy
+        # is intentionally reconstructed from the current simulate_parallel()
+        # call whenever a checkpoint is resumed.
         sim.cultures[
             current_realization_name
         ]._checkpoint_model_config = expected_config.copy()

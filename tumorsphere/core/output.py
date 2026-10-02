@@ -3024,6 +3024,105 @@ class DfOutput(TumorsphereOutput):
         df.to_csv(filename, index=False)
 
 
+
+def _output_key(output_object):
+    """Return the public output name associated with one output object."""
+    mapping = {
+        "SQLOutput": "sql",
+        "DatOutput": "dat",
+        "DatOutput_position_aspectratio": "dat_pos_ar",
+        "DatOutput_order_parameters": "dat_order_par",
+        "DatOutput_motion_parameters": "dat_motion_par",
+        "DatOutput_cluster_parameters": "dat_cluster_par",
+        "DatOutput_deformation_parameters": "dat_deformation_par",
+        "DatOutput_overlap_parameters": "dat_overlap_par",
+        "DatOutput_local_order_parameters": "dat_local_order_par",
+        "OvitoOutput": "ovito",
+        "DfOutput": "df",
+    }
+    return mapping.get(type(output_object).__name__)
+
+
+def _recording_settings(output_object):
+    """Return output-only settings relevant when resuming a checkpoint."""
+    settings = {}
+    for attribute in (
+        "save_step",
+        "summary_save_step",
+        "raw_save_step",
+        "output_dir",
+    ):
+        if hasattr(output_object, attribute):
+            settings[attribute] = getattr(output_object, attribute)
+    return settings
+
+
+def reconfigure_output_demux(existing_output, requested_output):
+    """Apply a new output policy to a resumed culture.
+
+    Checkpoints represent the physical simulation state, while output choices
+    are observational. This helper therefore allows outputs to be enabled,
+    disabled, or recorded at different intervals after resuming.
+
+    When an output type was already active, its object is reused and only its
+    recording settings are updated. This preserves stateful diagnostics such
+    as ``DatOutput_motion_parameters`` and its unwrapped trajectory/MSD origin.
+    Newly enabled outputs start from the resumed checkpoint.
+
+    Returns
+    -------
+    OutputDemux
+        Demultiplexer containing exactly the newly requested outputs.
+    dict
+        Per-output reconfiguration metadata used by the simulation to reset
+        interval accumulators only when needed.
+    """
+    existing_by_key = {
+        _output_key(result): result
+        for result in existing_output.result_list
+        if _output_key(result) is not None
+    }
+
+    reconfiguration = {}
+    merged_results = []
+
+    for requested in requested_output.result_list:
+        key = _output_key(requested)
+        existing = existing_by_key.get(key)
+        requested_settings = _recording_settings(requested)
+
+        if existing is None:
+            result = requested
+            old_settings = None
+            newly_enabled = True
+            changed = True
+        else:
+            result = existing
+            old_settings = _recording_settings(existing)
+
+            # Update only observational configuration. Internal state is kept.
+            for attribute, value in requested_settings.items():
+                setattr(result, attribute, value)
+            if hasattr(requested, "culture_name"):
+                result.culture_name = requested.culture_name
+
+            newly_enabled = False
+            changed = old_settings != requested_settings
+
+        merged_results.append(result)
+        reconfiguration[key] = {
+            "newly_enabled": newly_enabled,
+            "changed": changed,
+            "old_settings": old_settings,
+            "new_settings": requested_settings,
+            "object": result,
+        }
+
+    return (
+        OutputDemux(requested_output.culture_name, merged_results),
+        reconfiguration,
+    )
+
 def create_output_demux(
     culture_name: str,
     requested_outputs: list[str],

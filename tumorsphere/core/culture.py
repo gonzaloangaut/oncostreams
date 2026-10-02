@@ -170,9 +170,9 @@ class Culture:
         trabajo_final: bool = False,
         initialization_mode: str = "random",
         initial_positions: Optional[np.ndarray] = None,
-        deformation_warmup_steps: int = 5_000,
-        deformation_probe_steps: int = 1_000,
-        elongation_sleep_steps: int = 5_000,
+        deformation_warmup_steps: int = 0,
+        deformation_probe_steps: int = 0,
+        elongation_sleep_steps: int = 0,
         contraction_overlap_safety_ratio: Optional[float] = None,
         cluster_range_factors: Tuple[float, ...] = (1.0, 1.1),
         cluster_alignment_angle_deg: float = 45.0,
@@ -245,15 +245,20 @@ class Culture:
         initial_positions: Optional[np.ndarray] = None
             Initial positions for the case of triangular lattice.
         deformation_warmup_steps : int
-            Number of initial simulation steps during which elongation
-            attempts are always enabled.
+            Number of initial deformation sweeps during which elongation
+            attempts remain enabled before the optional adaptive sleep logic
+            may start. The default is 0. Ignored when
+            ``elongation_sleep_steps == 0``.
         deformation_probe_steps : int
-            Number of consecutive active steps without any successful
-            deformation required to temporarily disable elongation attempts.
+            Number of consecutive active deformation sweeps without any
+            successful deformation required before the optional adaptive sleep
+            logic temporarily disables elongation. The default is 0. Ignored
+            when ``elongation_sleep_steps == 0``.
         elongation_sleep_steps : int
-            Number of steps during which elongation attempts are disabled.
-            Contractions remain active and immediately reactivate elongation
-            from the following timestep if one occurs.
+            Number of deformation sweeps during which elongation attempts are
+            disabled by the optional adaptive sleep optimization. The default
+            is 0, which bypasses the adaptive sleep mechanism entirely.
+            Contractions remain active when sleeping is explicitly enabled.
         contraction_overlap_safety_ratio : float or None
             Maximum normalized overlap allowed after an instantaneous
             contraction. Set to None to disable the safety check.
@@ -2201,29 +2206,32 @@ class Culture:
                                         "elliptical_elongation_successes"
                                     ] += 1
 
-                    # Adaptive elongation starts only after the initial warmup
-                    if self.deformation_attempt_count > (
-                        self.deformation_warmup_steps
+                    # Adaptive elongation sleeping is an optional optimization.
+                    # With the default ``elongation_sleep_steps == 0`` this
+                    # whole mechanism is bypassed, so elongation is attempted
+                    # at every scheduled deformation sweep.
+                    if (
+                        self.elongation_sleep_steps > 0
+                        and self.deformation_attempt_count
+                        > self.deformation_warmup_steps
                     ):
-
                         if elongation_is_sleeping:
                             # A contraction changes the geometry, so elongation
-                            # is reactivated from the next timestep
+                            # is reactivated from the next deformation sweep.
                             if deformation_occurred:
                                 self.elongation_sleep_remaining = 0
                                 self.steps_without_deformation = 0
-
                             else:
                                 self.elongation_sleep_remaining -= 1
 
                         else:
-                            # In the non sleeping phase, we see if there is
-                            # a deformation
+                            # While elongation is active, count consecutive
+                            # deformation sweeps without a successful change.
                             if deformation_occurred:
                                 self.steps_without_deformation = 0
                             else:
                                 self.steps_without_deformation += 1
-                            # Deactivation of deformation
+
                             if (
                                 self.steps_without_deformation
                                 >= self.deformation_probe_steps
@@ -2231,7 +2239,6 @@ class Culture:
                                 self.elongation_sleep_remaining = (
                                     self.elongation_sleep_steps
                                 )
-
                                 self.steps_without_deformation = 0
 
                 # We initialize the change in the position and angle of all cells
