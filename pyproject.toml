@@ -30,8 +30,8 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "oncostream-tfg"
-version = "0.0.4"
+name = "oncostreams"
+version = "0.0.1"
 dependencies = [
     "click",
     "matplotlib",
