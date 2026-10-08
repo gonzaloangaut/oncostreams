@@ -1966,7 +1966,11 @@ class Culture:
     # ---------------------------------------------------------
 
     def simulate(
-        self, num_times: int, start_tic: int, checkpoint_path: str
+        self,
+        num_times: int,
+        start_tic: int,
+        checkpoint_path: str,
+        checkpoint_period: float = 10.0,
     ) -> None:
         """Simulate culture growth for a specified number of time steps.
 
@@ -1977,7 +1981,26 @@ class Culture:
         ----------
         num_times : int
             The number of time steps to simulate the cellular automaton.
+        start_tic : int
+            The time step to start the simulation from. This is useful for
+            resuming from a checkpoint.
+        checkpoint_path : str
+            The path to save the checkpoint file. If None, no checkpoint will be saved.
+        checkpoint_period : float, optional
+            The time interval (in simulation time units) between checkpoints.
+            Default is 10.0. Must be a positive finite value.
         """
+        # Validate the checkpoint period
+        if not np.isfinite(checkpoint_period) or checkpoint_period <= 0:
+            raise ValueError(
+                "checkpoint_period must be a positive finite value."
+            )
+        # Determine the number of steps between checkpoints
+        checkpoint_interval_steps = max(
+            1,
+            int(round(checkpoint_period / self.delta_t)),
+        )
+
         # if the culture is brand-new, we create the tables of the DB and the
         # first cell
         if len(self.cells) == 0 and start_tic == 0:
@@ -2308,7 +2331,7 @@ class Culture:
 
             # Save periodically and at the final integration step
             if checkpoint_path and (
-                i % 100 == 0
+                i % checkpoint_interval_steps == 0
                 or i == num_times
             ):
                 self.save_checkpoint(
