@@ -48,6 +48,7 @@ class SpatialHashGrid:
         bounds: float = None,
         cube_size: float = 2,
         torus: bool = True,
+        spatial_dimension: int = 3,
     ) -> None:
         """
         Initialize the Spatial Hashing of a Culture.
@@ -86,10 +87,23 @@ class SpatialHashGrid:
             size of the grid should  wrap around to match the system bounds,
             ensuring periodic boundary conditions.
         """
+        if (
+            not isinstance(spatial_dimension, (int, np.integer))
+            or isinstance(spatial_dimension, bool)
+            or spatial_dimension not in (2, 3)
+        ):
+            raise ValueError("spatial_dimension must be 2 or 3.")
+
+        self.spatial_dimension = int(spatial_dimension)
+
         self.culture = culture
         self.torus = torus
         self.bounds = bounds
-        self.offsets = np.array(list(product(range(-1, 2), repeat=3)))
+
+        self.offsets = np.array(
+            list(product(range(-1, 2), repeat=self.spatial_dimension))
+        )
+
         self._offset_cache = {1: self.offsets}
         self.hash_table = defaultdict(set)
         self._neighbor_bucket_cache = {}
@@ -129,13 +143,27 @@ class SpatialHashGrid:
     def __setstate__(self, state):
         """Restore the grid with an empty neighbor cache."""
         self.__dict__.update(state)
+
+        # Checkpoints created before spatial_dimension existed
+        # correspond to the original 3D grid.
+        self.spatial_dimension = state.get("spatial_dimension", 3)
+
         self._neighbor_bucket_cache = {}
 
     def get_bucket_position(
         self,
         position: np.ndarray,
     ) -> np.ndarray:
-        """Get the hash key of a position."""
+        """Get the spatial bucket coordinates of a position."""
+
+        if self.spatial_dimension == 2:
+            if len(position) == 3 and position[2] != 0:
+                raise ValueError(
+                    "A 2D spatial grid requires z=0."
+                )
+
+            position = position[:2]
+
         return np.floor(position / self.cube_size).astype(int)
 
     def get_hash_key(self, position: np.ndarray) -> bytes:
@@ -250,7 +278,7 @@ class SpatialHashGrid:
                 list(
                     product(
                         range(-bucket_radius, bucket_radius + 1),
-                        repeat=3,
+                        repeat=self.spatial_dimension,
                     )
                 ),
                 dtype=int,

@@ -143,3 +143,107 @@ def test_neighbor_cache_checkpoint_compatibility():
 
     assert old_grid._neighbor_bucket_cache == {}
     assert list(old_grid.find_neighbors(position)) == [10]
+
+
+@pytest.mark.parametrize("n", [3, 4, 8])
+@pytest.mark.parametrize("radius", [0, 1, 2, 3])
+def test_2d_grid_matches_3d_for_planar_cells(n, radius):
+    """2D and 3D grids must find the same neighbors when z=0."""
+
+    cube_size = 2.0
+    bounds = n * cube_size
+
+    grid_2d = SpatialHashGrid(
+        bounds=bounds,
+        cube_size=cube_size,
+        torus=True,
+        spatial_dimension=2,
+    )
+
+    grid_3d = SpatialHashGrid(
+        bounds=bounds,
+        cube_size=cube_size,
+        torus=True,
+        spatial_dimension=3,
+    )
+
+    # Place one cell in each XY bucket, always with z=0.
+    for index, (i, j) in enumerate(
+        product(range(n), repeat=2)
+    ):
+        position = np.array([
+            cube_size * (i + 0.5),
+            cube_size * (j + 0.5),
+            0.0,
+        ])
+
+        grid_2d.add_cell_to_hash_table(index, position)
+        grid_3d.add_cell_to_hash_table(index, position)
+
+    positions = [
+        np.array([0.01, 0.01, 0.0]),
+        np.array([bounds - 1e-6, 0.01, 0.0]),
+        np.array([bounds - 1e-6, bounds - 1e-6, 0.0]),
+        np.array([1.2, 3.4, 0.0]),
+    ]
+
+    for position in positions:
+        neighbors_2d = list(
+            grid_2d.find_neighbors(position, bucket_radius=radius)
+        )
+
+        neighbors_3d = list(
+            grid_3d.find_neighbors(position, bucket_radius=radius)
+        )
+
+        assert neighbors_2d == neighbors_3d
+
+
+def test_spatial_grid_dimension():
+    """Check that the grid uses the requested spatial dimension."""
+
+    position = np.array([5.0, 7.0, 0.0])
+
+    grid_2d = SpatialHashGrid(
+        spatial_dimension=2
+    )
+
+    grid_3d = SpatialHashGrid(
+        spatial_dimension=3
+    )
+
+    assert grid_2d.get_bucket_position(position).shape == (2,)
+    assert grid_3d.get_bucket_position(position).shape == (3,)
+
+    assert len(grid_2d.offsets) == 9
+    assert len(grid_3d.offsets) == 27
+
+
+def test_2d_grid_rejects_nonzero_z():
+    """A planar grid must not silently ignore a nonzero z."""
+
+    grid = SpatialHashGrid(
+        spatial_dimension=2
+    )
+
+    position = np.array([1.0, 2.0, 0.5])
+
+    with pytest.raises(ValueError, match="z=0"):
+        grid.get_bucket_position(position)
+
+
+def test_legacy_grid_defaults_to_3d():
+    """Old checkpoints without dimension metadata must remain 3D."""
+
+    grid = SpatialHashGrid(
+        spatial_dimension=3
+    )
+
+    old_state = grid.__dict__.copy()
+    old_state.pop("spatial_dimension")
+
+    restored = SpatialHashGrid.__new__(SpatialHashGrid)
+    restored.__setstate__(old_state)
+
+    assert restored.spatial_dimension == 3
+    assert len(restored.offsets) == 27
