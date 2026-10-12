@@ -11,8 +11,9 @@ from tumorsphere.core.spatial_hash_grid import SpatialHashGrid
 
 @pytest.mark.parametrize("seed", [17, 42])
 @pytest.mark.parametrize("initial_elongated", [0.0, 0.5])
+@pytest.mark.parametrize("attempts", [1, 5, 10])
 def test_2d_and_3d_grids_produce_identical_dynamics(
-    tmp_path, seed, initial_elongated
+    tmp_path, seed, initial_elongated, attempts
 ):
     """Changing only the grid dimension must preserve the trajectory."""
 
@@ -70,7 +71,7 @@ def test_2d_and_3d_grids_produce_identical_dynamics(
             initial_aspect_ratio=1.0,
             aspect_ratio_max=aspect_max,
             cell_speed_max=1.0,
-            cell_max_def_attempts=1,
+            cell_max_def_attempts=attempts,
             trabajo_final=True,
             initialization_mode="random",
         )

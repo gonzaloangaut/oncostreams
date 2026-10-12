@@ -331,6 +331,10 @@ class Culture:
         active_cells : list[Cell]
             List of all active cells in the culture.
         """
+        # Experimental overlap backend. The NumPy path stays the default;
+        # only opt-in Culture instances use Numba.
+        self.overlap_backend = "numpy"
+
         # cell attributes
         self.force = force
         self.cell_max_repro_attempts = cell_max_repro_attempts
@@ -809,6 +813,30 @@ class Culture:
         eps_i = cell.anisotropy
         eps_j = np.array([neighbor.anisotropy for neighbor in neighbors])
 
+        # Optional Numba path. Keep NumPy import/behavior unchanged by default.
+        backend = getattr(self, "overlap_backend", "numpy")
+        if backend == "numba":
+            from tumorsphere.core.overlap_numba import calculate_overlap_numba
+
+            q_i = self.nematic_tensors[cell_index]
+            q_j = self.nematic_tensors[neighbor_indices]
+            return calculate_overlap_numba(
+                float(d_i),
+                np.asarray(d_j, dtype=np.float64),
+                float(eps_i),
+                np.asarray(eps_j, dtype=np.float64),
+                float(phi_i),
+                np.asarray(phi_j, dtype=np.float64),
+                float(q_i[0, 0]),
+                float(q_i[0, 1]),
+                np.asarray(q_j[:, 0, 0], dtype=np.float64),
+                np.asarray(q_j[:, 0, 1], dtype=np.float64),
+                np.asarray(relative_positions, dtype=np.float64),
+                float(self.cell_area),
+            )
+        if backend != "numpy":
+            raise ValueError(f"Unknown overlap backend: {backend!r}")
+
         cos_phi_diff = np.cos(phi_i - phi_j)
 
         beta = (
@@ -817,29 +845,40 @@ class Culture:
             - 4 * d_i * d_j * eps_i * eps_j * (cos_phi_diff**2)
         )
 
-        # get Q matrices
-        Q_i = self.nematic_tensors[cell_index]  # shape (3,3)
-        Q_j = self.nematic_tensors[neighbor_indices]  # shape (N,3,3)
+        # Exploit the structure of the nematic tensors:
+        # Q_yy = -Q_xx, Q_xy = Q_yx, and all z components vanish.
+        # This avoids constructing and multiplying 3x3 matrices.
 
-        # matrix M
-        M = (d_i * eps_i * Q_i + (d_j * eps_j)[:, None, None] * Q_j) / (
-            d_i + d_j
-        )[:, None, None]
+        weight_i = d_i * eps_i
+        weight_j = d_j * eps_j
+        diagonal_sum = d_i + d_j
 
-        I = np.eye(3)
-        diff_matrix = I - M  # shape (N,3,3)
+        m_xx = (
+            weight_i * self.nematic_tensors[cell_index, 0, 0]
+            + weight_j * self.nematic_tensors[neighbor_indices, 0, 0]
+        ) / diagonal_sum
 
-        # calculate i_0
-        i_0 = 4 * self.cell_area**2 / (np.pi * np.sqrt(beta))  # shape (N,)
+        m_xy = (
+            weight_i * self.nematic_tensors[cell_index, 0, 1]
+            + weight_j * self.nematic_tensors[neighbor_indices, 0, 1]
+        ) / diagonal_sum
 
-        # quadratic form: rᵀ (I - M) r, vectorized
-        r = np.array(relative_positions)  # shape (N,3)
-        r_T = r[:, :, None]  # shape (N,3,1)
-        r_b = r[:, None, :]  # shape (N,1,3)
+        # Quadratic form r.T @ (I - M) @ r.
+        # The z contribution remains valid for nonplanar positions.
+        r = np.asarray(relative_positions)
 
-        quad = np.matmul(r_b, np.matmul(diff_matrix, r_T)).reshape(
-            -1
-        )  # shape (N,)
+        rx = r[:, 0]
+        ry = r[:, 1]
+        rz = r[:, 2]
+
+        quad = (
+            (1.0 - m_xx) * rx**2
+            + (1.0 + m_xx) * ry**2
+            - 2.0 * m_xy * rx * ry
+            + rz**2
+        )
+
+        i_0 = 4 * self.cell_area**2 / (np.pi * np.sqrt(beta))
 
         # Evaluate the normalized overlap directly
         exponent = (d_i + d_j) / beta * quad
