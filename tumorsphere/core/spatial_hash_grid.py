@@ -249,8 +249,17 @@ class SpatialHashGrid:
 
         if self.bounds is not None and self.torus:
             adj_buckets = np.mod(adj_buckets, self.number_of_buckets)
-            adj_buckets = np.unique(adj_buckets, axis=0)
 
+            if self.number_of_buckets >= 2 * bucket_radius + 1:
+                # No duplicate buckets are possible.
+                # Preserve the lexicographic order produced by np.unique.
+                adj_buckets = adj_buckets[
+                    np.lexsort(adj_buckets.T[::-1])
+                ]
+            else:
+                # Periodic wrapping may produce duplicate buckets.
+                adj_buckets = np.unique(adj_buckets, axis=0)
+        
         return chain.from_iterable(
             self.hash_table[b.tobytes()] for b in adj_buckets
         )
