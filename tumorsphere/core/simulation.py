@@ -126,6 +126,9 @@ class Simulation:
         If True, use instantaneous shape changes by setting
         delta_aspect_ratio to aspect_ratio_max - 1.
         Otherwise, use the supplied delta_aspect_ratio.
+    overlap_backend : str, optional
+        Overlap evaluation implementation: "numpy" (default) or "numba".
+        This setting must match the one stored in a checkpoint.
     initialization_mode: str
         String to determine the initial conditions to use.
     deformation_warmup_steps : int
@@ -204,6 +207,7 @@ class Simulation:
         cluster_range_factors=(1.0, 1.1),
         cluster_alignment_angle_deg: float = 45.0,
         spatial_dimension: int = 3,
+        overlap_backend: str = "numpy",
     ):
         # main simulation attributes
         self.forces = forces
@@ -352,6 +356,12 @@ class Simulation:
             )
 
         self.spatial_dimension = int(spatial_dimension)
+
+        if overlap_backend not in ("numpy", "numba"):
+            raise ValueError(
+                "overlap_backend must be 'numpy' or 'numba'."
+            )
+        self.overlap_backend = overlap_backend
 
     def calculate_culture_bounds_from_density(
         self,
@@ -825,6 +835,9 @@ class Simulation:
                 self.cluster_alignment_angle_deg
             ),
         )
+        self.cultures[current_realization_name].overlap_backend = (
+            self.overlap_backend
+        )
         self.cultures[current_realization_name].simulate(
             self.num_of_steps_per_realization,
         )
@@ -1255,6 +1268,7 @@ def simulate_single_culture(
         "movement",
         "deformation",
         "overlap_threshold_ratio",
+        "overlap_backend",
         "contraction_overlap_safety_ratio",
         "delta_t",
         "initial_aspect_ratio",
@@ -1374,6 +1388,18 @@ def simulate_single_culture(
             getattr(culture.grid, "spatial_dimension", 3),
         )
 
+        # Older checkpoints did not declare an overlap backend.
+        # Use the serialized Culture value if present, else NumPy.
+        stored_backend = getattr(culture, "overlap_backend", "numpy")
+        saved_dynamic_config.setdefault(
+            "overlap_backend", stored_backend
+        )
+        if saved_dynamic_config["overlap_backend"] != stored_backend:
+            raise ValueError(
+                "Checkpoint overlap_backend metadata disagrees with "
+                "the serialized Culture backend."
+            )
+
         differences = []
 
         for key in sorted(
@@ -1406,6 +1432,11 @@ def simulate_single_culture(
                 f"({sim.num_of_steps_per_realization}) precedes "
                 f"the checkpoint step ({start_tic})."
             )
+
+        # Make the validated choice explicit for legacy checkpoints,
+        # then persist it in subsequent checkpoint metadata.
+        culture.overlap_backend = sim.overlap_backend
+        culture._checkpoint_model_config = expected_config.copy()
 
         # Restore the saved RNG state without replacing the generator.
         culture.rng.bit_generator.state = state
@@ -1538,6 +1569,9 @@ def simulate_single_culture(
             cluster_alignment_angle_deg=(
                 sim.cluster_alignment_angle_deg
             ),
+        )
+        sim.cultures[current_realization_name].overlap_backend = (
+            sim.overlap_backend
         )
         # Persist only model/dynamical compatibility metadata. Output policy
         # is intentionally reconstructed from the current simulate_parallel()
