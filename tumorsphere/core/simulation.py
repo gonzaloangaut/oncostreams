@@ -203,6 +203,7 @@ class Simulation:
         elongation_sleep_steps: int = 0,
         cluster_range_factors=(1.0, 1.1),
         cluster_alignment_angle_deg: float = 45.0,
+        spatial_dimension: int = 3,
     ):
         # main simulation attributes
         self.forces = forces
@@ -337,6 +338,20 @@ class Simulation:
 
         self.grid_cube_size = float(grid_cube_size)
         self.grid_torus = grid_torus
+
+        if (
+            not isinstance(spatial_dimension, (int, np.integer))
+            or isinstance(spatial_dimension, bool)
+            or spatial_dimension not in (2, 3)
+        ):
+            raise ValueError("spatial_dimension must be 2 or 3.")
+
+        if spatial_dimension == 2 and self.reproduction:
+            raise ValueError(
+                "spatial_dimension=2 is not supported with reproduction."
+            )
+
+        self.spatial_dimension = int(spatial_dimension)
 
     def calculate_culture_bounds_from_density(
         self,
@@ -788,6 +803,7 @@ class Simulation:
             bounds=self.culture_bounds,
             cube_size=self.grid_cube_size,
             torus=self.grid_torus,
+            spatial_dimension=self.spatial_dimension,
         )
 
         # We create the culture object and simulate it
@@ -1268,6 +1284,7 @@ def simulate_single_culture(
         "culture_bounds": culture_bounds,
         "grid_cube_size": grid_cube_size,
         "grid_torus": grid_torus,
+        "grid_spatial_dimension": sim.spatial_dimension,
         "deformation_attempt_period": (
             sim.delta_t
             if sim.deformation_attempt_period is None
@@ -1350,6 +1367,12 @@ def simulate_single_culture(
 
         saved_dynamic_config = dynamic_config(saved_config)
         expected_dynamic_config = dynamic_config(expected_config)
+
+        # Checkpoints predating spatial_dimension used a 3D grid.
+        saved_dynamic_config.setdefault(
+            "grid_spatial_dimension",
+            getattr(culture.grid, "spatial_dimension", 3),
+        )
 
         differences = []
 
@@ -1474,6 +1497,7 @@ def simulate_single_culture(
             bounds=culture_bounds,
             cube_size=grid_cube_size,
             torus=grid_torus,
+            spatial_dimension=sim.spatial_dimension,
         )
 
         # We create the culture object and simulate it
