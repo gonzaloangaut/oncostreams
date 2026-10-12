@@ -1,5 +1,6 @@
 """Regression tests for spatial neighbor searches."""
 
+import pickle
 from itertools import chain, product
 
 import numpy as np
@@ -63,3 +64,82 @@ def test_periodic_neighbors_match_original(n, radius):
         )
 
         assert obtained == expected
+
+
+def test_neighbor_cache_tracks_moving_cells():
+    """Cached buckets must reflect changes in cell positions."""
+
+    grid = SpatialHashGrid(
+        bounds=12.0,
+        cube_size=2.0,
+        torus=True,
+    )
+
+    # Add a cell to the grid and query for neighbors.
+    query = np.array([0.5, 0.5, 0.5])
+    near = np.array([2.5, 0.5, 0.5])
+    far = np.array([6.5, 0.5, 0.5])
+
+    grid.add_cell_to_hash_table(10, near)
+
+    # First query populates the cache.
+    assert list(grid.find_neighbors(query)) == [10]
+    assert len(grid._neighbor_bucket_cache) == 1
+
+    cached_keys = next(
+        iter(grid._neighbor_bucket_cache.values())
+    )
+
+    # Repeated query reuses the same cached keys.
+    assert list(grid.find_neighbors(query)) == [10]
+    assert next(
+        iter(grid._neighbor_bucket_cache.values())
+    ) is cached_keys
+
+    # Move the cell outside the queried neighborhood.
+    grid.remove_cell_from_hash_table(10, near)
+    grid.add_cell_to_hash_table(10, far)
+
+    assert list(grid.find_neighbors(query)) == []
+
+    # Add another cell inside the neighborhood.
+    grid.add_cell_to_hash_table(11, near)
+
+    assert list(grid.find_neighbors(query)) == [11]
+
+    # No new cache entry should have been necessary.
+    assert len(grid._neighbor_bucket_cache) == 1
+
+
+def test_neighbor_cache_checkpoint_compatibility():
+    """The cache must be reconstructed after deserialization."""
+
+    grid = SpatialHashGrid(
+        bounds=12.0,
+        cube_size=2.0,
+        torus=True,
+    )
+
+    position = np.array([0.5, 0.5, 0.5])
+
+    grid.add_cell_to_hash_table(10, position)
+
+    # Populate the cache.
+    assert list(grid.find_neighbors(position)) == [10]
+    assert len(grid._neighbor_bucket_cache) == 1
+
+    # Serialize and restore the grid.
+    restored = pickle.loads(pickle.dumps(grid))
+
+    assert restored._neighbor_bucket_cache == {}
+    assert list(restored.find_neighbors(position)) == [10]
+
+    # Simulate restoring the state of an older checkpoint.
+    old_state = grid.__dict__.copy()
+    old_state.pop("_neighbor_bucket_cache")
+
+    old_grid = SpatialHashGrid.__new__(SpatialHashGrid)
+    old_grid.__setstate__(old_state)
+
+    assert old_grid._neighbor_bucket_cache == {}
+    assert list(old_grid.find_neighbors(position)) == [10]

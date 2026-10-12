@@ -92,6 +92,7 @@ class SpatialHashGrid:
         self.offsets = np.array(list(product(range(-1, 2), repeat=3)))
         self._offset_cache = {1: self.offsets}
         self.hash_table = defaultdict(set)
+        self._neighbor_bucket_cache = {}
 
         if not np.isfinite(cube_size) or cube_size <= 0:
             raise ValueError("cube_size must be finite and positive.")
@@ -118,6 +119,17 @@ class SpatialHashGrid:
 
         else:
             self.cube_size = cube_size
+
+    def __getstate__(self):
+        """Exclude the neighbor cache from checkpoints."""
+        state = self.__dict__.copy()
+        state.pop("_neighbor_bucket_cache", None)
+        return state
+
+    def __setstate__(self, state):
+        """Restore the grid with an empty neighbor cache."""
+        self.__dict__.update(state)
+        self._neighbor_bucket_cache = {}
 
     def get_bucket_position(
         self,
@@ -245,22 +257,43 @@ class SpatialHashGrid:
             )
 
         bucket = self.get_bucket_position(position)
-        adj_buckets = bucket + self._offset_cache[bucket_radius]
 
         if self.bounds is not None and self.torus:
-            adj_buckets = np.mod(adj_buckets, self.number_of_buckets)
+            # Cache key: central bucket and neighborhood radius.
+            cache_key = (bucket.tobytes(), bucket_radius)
 
-            if self.number_of_buckets >= 2 * bucket_radius + 1:
-                # No duplicate buckets are possible.
-                # Preserve the lexicographic order produced by np.unique.
-                adj_buckets = adj_buckets[
-                    np.lexsort(adj_buckets.T[::-1])
-                ]
-            else:
-                # Periodic wrapping may produce duplicate buckets.
-                adj_buckets = np.unique(adj_buckets, axis=0)
-        
+            neighbor_keys = self._neighbor_bucket_cache.get(cache_key)
+
+            if neighbor_keys is None:
+                # Compute neighboring buckets only on a cache miss.
+                adj_buckets = np.mod(
+                    bucket + self._offset_cache[bucket_radius],
+                    self.number_of_buckets,
+                )
+
+                if self.number_of_buckets >= 2 * bucket_radius + 1:
+                    # Preserve the lexicographic order of np.unique.
+                    adj_buckets = adj_buckets[
+                        np.lexsort(adj_buckets.T[::-1])
+                    ]
+                else:
+                    # Remove duplicates when periodic wrapping requires it.
+                    adj_buckets = np.unique(adj_buckets, axis=0)
+
+                # Cache bucket keys, never their cell contents.
+                neighbor_keys = tuple(
+                    b.tobytes() for b in adj_buckets
+                )
+
+                self._neighbor_bucket_cache[cache_key] = neighbor_keys
+
+            return chain.from_iterable(
+                self.hash_table[key] for key in neighbor_keys
+            )
+
+        # Preserve the original behavior for non-periodic grids.
+        adj_buckets = bucket + self._offset_cache[bucket_radius]
+
         return chain.from_iterable(
             self.hash_table[b.tobytes()] for b in adj_buckets
         )
-
