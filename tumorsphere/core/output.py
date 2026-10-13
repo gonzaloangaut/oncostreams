@@ -822,8 +822,7 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
                 datfile.write(
                     "position_x,position_y,position_z,orientation,aspect_ratio\n"
                 )
-            for cell in cells:
-                with open(filename, "a") as datfile:
+                for cell in cells:
                     # we save the positions and the aspect ratio to the file
                     datfile.write(
                         f"{cell_positions[cell._index][0]}, {cell_positions[cell._index][1]}, {cell_positions[cell._index][2]}, {cell_phies[cell._index]}, {cell.aspect_ratio} \n"
@@ -979,7 +978,7 @@ class DatOutput_motion_parameters(TumorsphereOutput):
         """We do not record the individual deactivations."""
         pass
 
-    def calculate_motion_parameters(self, cell_positions, side):
+    def calculate_motion_parameters(self, cell_positions, side, *, compute_statistics=True):
         """
         Calculate motion observables using unwrapped trajectories.
 
@@ -1008,6 +1007,12 @@ class DatOutput_motion_parameters(TumorsphereOutput):
 
         # Update unwrapped positions
         self.unwrapped_positions += delta_positions
+
+        # Update unwrapped trajectories every step; compute reductions only
+        # when this step is recorded. The default preserves direct callers.
+        if not compute_statistics:
+            self.previous_wrapped_positions = current_wrapped_positions.copy()
+            return 0.0, 0.0, 0.0, 0.0, 0.0
 
         # Magnitude of the displacement of each cell
         step_displacements = np.linalg.norm(
@@ -1059,6 +1064,7 @@ class DatOutput_motion_parameters(TumorsphereOutput):
         side,
         cell_area,
     ):
+        should_save = np.mod(tic, self.save_step) == 0
         (
             mean_step_displacement,
             mean_squared_step_displacement,
@@ -1068,9 +1074,10 @@ class DatOutput_motion_parameters(TumorsphereOutput):
         ) = self.calculate_motion_parameters(
             cell_positions,
             side,
+            compute_statistics=should_save,
         )
 
-        if np.mod(tic, self.save_step) != 0:
+        if not should_save:
             return
 
         os.makedirs(
