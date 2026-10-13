@@ -443,6 +443,8 @@ class Anisotropic_Grosmann(Force):
         if not np.isfinite(lambda_core) or not 0 <= lambda_core <= 1:
             raise ValueError("lambda_core must be between 0 and 1.")
         self.lambda_core = float(lambda_core)
+        # Optional force backend (NumPy remains the default).
+        self.force_backend = "numpy"
         # Cache mobilities for each area and aspect ratio
         self._mobilities_cache = {}
 
@@ -648,6 +650,20 @@ class Anisotropic_Grosmann(Force):
         neighbors_indexes,
         nematic_tensors,
     ):
+        force_backend = getattr(self, "force_backend", "numpy")
+        if force_backend == "numba":
+            from tumorsphere.core.forces_numba import (
+                calculate_interaction_numba,
+            )
+            return calculate_interaction_numba(
+                self, cells, phies, cell_index, delta_t, area,
+                neighbors_indexes, nematic_tensors,
+            )
+        if force_backend != "numpy":
+            raise ValueError(
+                f"Unknown force backend: {force_backend!r}"
+            )
+
         # First of all we are going to calculate the force and torque and then
         # we see how these change the velocity and orientation
         cell = cells[cell_index]

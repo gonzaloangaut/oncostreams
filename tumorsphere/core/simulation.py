@@ -20,7 +20,7 @@ from tumorsphere.core.output import (
     reconfigure_output_demux,
 )
 from tumorsphere.core.spatial_hash_grid import SpatialHashGrid
-from tumorsphere.core.forces import Force
+from tumorsphere.core.forces import Force, Anisotropic_Grosmann
 
 
 class Simulation:
@@ -129,6 +129,9 @@ class Simulation:
     overlap_backend : str, optional
         Overlap evaluation implementation: "numpy" (default) or "numba".
         This setting must match the one stored in a checkpoint.
+    force_backend : str, optional
+        Implementation for Anisotropic_Grosmann interactions: "numpy"
+        (default) or "numba". Must match the checkpoint setting.
     initialization_mode: str
         String to determine the initial conditions to use.
     deformation_warmup_steps : int
@@ -208,6 +211,7 @@ class Simulation:
         cluster_alignment_angle_deg: float = 45.0,
         spatial_dimension: int = 3,
         overlap_backend: str = "numpy",
+        force_backend: str = "numpy",
     ):
         # main simulation attributes
         self.forces = forces
@@ -362,6 +366,21 @@ class Simulation:
                 "overlap_backend must be 'numpy' or 'numba'."
             )
         self.overlap_backend = overlap_backend
+
+        if force_backend not in ("numpy", "numba"):
+            raise ValueError(
+                "force_backend must be 'numpy' or 'numba'."
+            )
+        if force_backend == "numba" and forces is not None:
+            if any(
+                not isinstance(force, Anisotropic_Grosmann)
+                for force in forces
+            ):
+                raise ValueError(
+                    "force_backend='numba' only supports "
+                    "Anisotropic_Grosmann forces."
+                )
+        self.force_backend = force_backend
 
     def calculate_culture_bounds_from_density(
         self,
@@ -838,6 +857,13 @@ class Simulation:
         self.cultures[current_realization_name].overlap_backend = (
             self.overlap_backend
         )
+        if isinstance(
+            self.cultures[current_realization_name].force,
+            Anisotropic_Grosmann,
+        ):
+            self.cultures[current_realization_name].force.force_backend = (
+                self.force_backend
+            )
         self.cultures[current_realization_name].simulate(
             self.num_of_steps_per_realization,
         )
@@ -1269,6 +1295,7 @@ def simulate_single_culture(
         "deformation",
         "overlap_threshold_ratio",
         "overlap_backend",
+        "force_backend",
         "contraction_overlap_safety_ratio",
         "delta_t",
         "initial_aspect_ratio",
@@ -1400,6 +1427,20 @@ def simulate_single_culture(
                 "the serialized Culture backend."
             )
 
+        # Older checkpoints used NumPy for forces; prefer the stored
+        # force attribute if available (including intermediate versions).
+        stored_force_backend = getattr(
+            culture.force, "force_backend", "numpy"
+        )
+        saved_dynamic_config.setdefault(
+            "force_backend", stored_force_backend
+        )
+        if saved_dynamic_config["force_backend"] != stored_force_backend:
+            raise ValueError(
+                "Checkpoint force_backend metadata disagrees with "
+                "the serialized Force backend."
+            )
+
         differences = []
 
         for key in sorted(
@@ -1436,6 +1477,8 @@ def simulate_single_culture(
         # Make the validated choice explicit for legacy checkpoints,
         # then persist it in subsequent checkpoint metadata.
         culture.overlap_backend = sim.overlap_backend
+        if isinstance(culture.force, Anisotropic_Grosmann):
+            culture.force.force_backend = sim.force_backend
         culture._checkpoint_model_config = expected_config.copy()
 
         # Restore the saved RNG state without replacing the generator.
@@ -1573,6 +1616,13 @@ def simulate_single_culture(
         sim.cultures[current_realization_name].overlap_backend = (
             sim.overlap_backend
         )
+        if isinstance(
+            sim.cultures[current_realization_name].force,
+            Anisotropic_Grosmann,
+        ):
+            sim.cultures[current_realization_name].force.force_backend = (
+                sim.force_backend
+            )
         # Persist only model/dynamical compatibility metadata. Output policy
         # is intentionally reconstructed from the current simulate_parallel()
         # call whenever a checkpoint is resumed.
