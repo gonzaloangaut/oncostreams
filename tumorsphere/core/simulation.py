@@ -212,6 +212,7 @@ class Simulation:
         spatial_dimension: int = 3,
         overlap_backend: str = "numpy",
         force_backend: str = "numpy",
+        relative_positions_backend: str = "numpy",
     ):
         # main simulation attributes
         self.forces = forces
@@ -381,6 +382,12 @@ class Simulation:
                     "Anisotropic_Grosmann forces."
                 )
         self.force_backend = force_backend
+
+        if relative_positions_backend not in ("numpy", "numba"):
+            raise ValueError(
+                "relative_positions_backend must be 'numpy' or 'numba'."
+            )
+        self.relative_positions_backend = relative_positions_backend
 
     def calculate_culture_bounds_from_density(
         self,
@@ -1296,6 +1303,7 @@ def simulate_single_culture(
         "overlap_threshold_ratio",
         "overlap_backend",
         "force_backend",
+        "relative_positions_backend",
         "contraction_overlap_safety_ratio",
         "delta_t",
         "initial_aspect_ratio",
@@ -1441,6 +1449,23 @@ def simulate_single_culture(
                 "the serialized Force backend."
             )
 
+        # Older checkpoints used NumPy for periodic relative positions.
+        # Verify both serialized Culture state and metadata when present.
+        stored_relative_backend = getattr(
+            culture, "relative_positions_backend", "numpy"
+        )
+        saved_dynamic_config.setdefault(
+            "relative_positions_backend", stored_relative_backend
+        )
+        if (
+            saved_dynamic_config["relative_positions_backend"]
+            != stored_relative_backend
+        ):
+            raise ValueError(
+                "Checkpoint relative_positions_backend metadata disagrees "
+                "with the serialized Culture backend."
+            )
+
         differences = []
 
         for key in sorted(
@@ -1477,6 +1502,7 @@ def simulate_single_culture(
         # Make the validated choice explicit for legacy checkpoints,
         # then persist it in subsequent checkpoint metadata.
         culture.overlap_backend = sim.overlap_backend
+        culture.relative_positions_backend = sim.relative_positions_backend
         if isinstance(culture.force, Anisotropic_Grosmann):
             culture.force.force_backend = sim.force_backend
         culture._checkpoint_model_config = expected_config.copy()
@@ -1615,6 +1641,9 @@ def simulate_single_culture(
         )
         sim.cultures[current_realization_name].overlap_backend = (
             sim.overlap_backend
+        )
+        sim.cultures[current_realization_name].relative_positions_backend = (
+            sim.relative_positions_backend
         )
         if isinstance(
             sim.cultures[current_realization_name].force,

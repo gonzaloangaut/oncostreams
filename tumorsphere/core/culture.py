@@ -334,6 +334,8 @@ class Culture:
         # Experimental overlap backend. The NumPy path stays the default;
         # only opt-in Culture instances use Numba.
         self.overlap_backend = "numpy"
+        # Default preserves the historical x/y periodic displacement path.
+        self.relative_positions_backend = "numpy"
 
         # cell attributes
         self.force = force
@@ -748,6 +750,20 @@ class Culture:
         relative_pos : np.ndarray
             The relative position of the cell with every neighbor.
         """
+
+        # Optional compiled implementation of the SAME minimum-image rule.
+        backend = getattr(self, "relative_positions_backend", "numpy")
+        if backend == "numba":
+            from tumorsphere.core.relative_positions_numba import (
+                periodic_relative_positions_numba,
+            )
+            return periodic_relative_positions_numba(
+                cell_position, neighbor_positions, float(self.side)
+            )
+        if backend != "numpy":
+            raise ValueError(
+                f"Unknown relative_positions_backend: {backend!r}"
+            )
 
         # Calculate the relative positions between all the neighbors and the cell
         relative_positions = cell_position - neighbor_positions
