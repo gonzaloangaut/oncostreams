@@ -205,6 +205,15 @@ class OutputDemux(TumorsphereOutput):
     ):
         self.culture_name = culture_name
         self.result_list = result_list
+        # Determine this once, not once per cell/step. A custom output that
+        # overrides the recording predicate conservatively collects overlaps.
+        # The demux is rebuilt when outputs are reconfigured on checkpoint
+        # resume, so enabling dat_overlap_par later is safe.
+        self.collect_overlap_statistics = any(
+            type(result).should_record_overlap_parameters
+            is not TumorsphereOutput.should_record_overlap_parameters
+            for result in result_list
+        )
         # result_list's elements are other TumorsphereOutput objects
 
     def begin_culture(

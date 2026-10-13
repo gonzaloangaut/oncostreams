@@ -1603,7 +1603,11 @@ class Culture:
 
         significant_neighbors_indexes = self._get_significant_neighbors(
             cell_index=cell_index,
-            update_overlap_diagnostic=True,
+            # OutputDemux computes this once per output configuration.
+            # Fall back to the original True for unknown/legacy outputs.
+            update_overlap_diagnostic=getattr(
+                self.output, "collect_overlap_statistics", True
+            ),
         )
         # Calculate interaction with final neighbors
         dif_position, dif_phi = self.force.calculate_interaction(
