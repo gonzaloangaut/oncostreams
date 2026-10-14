@@ -214,6 +214,7 @@ class Simulation:
         force_backend: str = "numpy",
         relative_positions_backend: str = "numpy",
         interaction_backend: str = "cached",
+        elongation_backend: str = "standard",
     ):
         # main simulation attributes
         self.forces = forces
@@ -402,6 +403,14 @@ class Simulation:
                                      for force in forces):
                 raise ValueError("direct_numba supports only Anisotropic_Grosmann forces")
         self.interaction_backend = interaction_backend
+        if elongation_backend not in ("standard", "fast_numba"):
+            raise ValueError("elongation_backend must be standard or fast_numba")
+        if elongation_backend == "fast_numba":
+            if overlap_backend != "numba":
+                raise ValueError("fast_numba elongation requires overlap_backend=numba")
+            if reproduction:
+                raise ValueError("fast_numba elongation requires fixed cell count")
+        self.elongation_backend = elongation_backend
 
     def calculate_culture_bounds_from_density(
         self,
@@ -1319,6 +1328,7 @@ def simulate_single_culture(
         "force_backend",
         "relative_positions_backend",
         "interaction_backend",
+        "elongation_backend",
         "contraction_overlap_safety_ratio",
         "delta_t",
         "initial_aspect_ratio",
@@ -1487,6 +1497,11 @@ def simulate_single_culture(
         if saved_dynamic_config["interaction_backend"] != stored_interaction_backend:
             raise ValueError("Checkpoint interaction backend disagrees with serialized Culture")
 
+        stored_elongation_backend = getattr(culture, "elongation_backend", "standard")
+        saved_dynamic_config.setdefault("elongation_backend", stored_elongation_backend)
+        if saved_dynamic_config["elongation_backend"] != stored_elongation_backend:
+            raise ValueError("Checkpoint elongation backend disagrees with serialized Culture")
+
         differences = []
 
         for key in sorted(
@@ -1525,6 +1540,7 @@ def simulate_single_culture(
         culture.overlap_backend = sim.overlap_backend
         culture.relative_positions_backend = sim.relative_positions_backend
         culture.interaction_backend = sim.interaction_backend
+        culture.elongation_backend = sim.elongation_backend
         if isinstance(culture.force, Anisotropic_Grosmann):
             culture.force.force_backend = sim.force_backend
         culture._checkpoint_model_config = expected_config.copy()
@@ -1661,6 +1677,7 @@ def simulate_single_culture(
                 sim.cluster_alignment_angle_deg
             ),
             interaction_backend=sim.interaction_backend,
+            elongation_backend=sim.elongation_backend,
         )
         sim.cultures[current_realization_name].overlap_backend = (
             sim.overlap_backend

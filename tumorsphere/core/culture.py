@@ -177,6 +177,7 @@ class Culture:
         cluster_range_factors: Tuple[float, ...] = (1.0, 1.1),
         cluster_alignment_angle_deg: float = 45.0,
         interaction_backend: str = "cached",
+        elongation_backend: str = "standard",
     ):
         """
         Initialize a new culture of cells.
@@ -340,6 +341,11 @@ class Culture:
         if interaction_backend not in ("cached", "direct_numba"):
             raise ValueError("interaction_backend must be cached or direct_numba")
         self.interaction_backend = interaction_backend
+        if elongation_backend not in ("standard", "fast_numba"):
+            raise ValueError("elongation_backend must be standard or fast_numba")
+        if elongation_backend == "fast_numba" and reproduction:
+            raise ValueError("fast_numba elongation requires fixed cell count")
+        self.elongation_backend = elongation_backend
 
         # cell attributes
         self.force = force
@@ -1093,6 +1099,13 @@ class Culture:
         All proposals start from the original position and use the same
         proposed aspect ratio. Exact ties are resolved randomly.
         """
+        backend = getattr(self, "elongation_backend", "standard")
+        if backend == "fast_numba":
+            from tumorsphere.core.elongation_numba import elongate_from_round_fast
+            return elongate_from_round_fast(self, cell_index)
+        if backend != "standard":
+            raise ValueError(f"Unknown elongation_backend: {backend!r}")
+
         cell = self.cells[cell_index]
         n_attempts = self.cell_max_def_attempts
 
