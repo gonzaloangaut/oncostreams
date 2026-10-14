@@ -338,8 +338,8 @@ class Culture:
         self.overlap_backend = "numpy"
         # Default preserves the historical x/y periodic displacement path.
         self.relative_positions_backend = "numpy"
-        if interaction_backend not in ("cached", "direct_numba", "batch_numba"):
-            raise ValueError("interaction_backend must be cached, direct_numba or batch_numba")
+        if interaction_backend not in ("cached", "direct_numba", "batch_numba", "batch_cached_numba"):
+            raise ValueError("interaction_backend must be cached, direct_numba, batch_numba or batch_cached_numba")
         self.interaction_backend = interaction_backend
         if elongation_backend not in ("standard", "fast_numba"):
             raise ValueError("elongation_backend must be standard or fast_numba")
@@ -1620,8 +1620,8 @@ class Culture:
         if backend == "direct_numba":
             from tumorsphere.core.interaction_direct_numba import direct_interaction
             return direct_interaction(self, cell_index, delta_t)
-        if backend == "batch_numba":
-            raise RuntimeError("batch_numba processes a full sweep; call Culture.simulate()")
+        if backend in ("batch_numba", "batch_cached_numba"):
+            raise RuntimeError("Batch backends process full sweeps; call Culture.simulate()")
         if backend != "cached":
             raise ValueError(f"Unknown interaction_backend: {backend!r}")
 
@@ -2349,7 +2349,7 @@ class Culture:
                                 )
                                 self.steps_without_deformation = 0
 
-                if getattr(self, "interaction_backend", "cached") == "batch_numba":
+                if getattr(self, "interaction_backend", "cached") in ("batch_numba", "batch_cached_numba"):
                     # Evaluate all ordered pairs in one compiled sweep. The
                     # returned arrays are ordinary state increments: no cache
                     # is stored on Culture or serialized into checkpoints.

@@ -148,7 +148,7 @@ def batch_interaction_step(self, delta_t):
     from tumorsphere.core.forces_numba import XI_POWER_MAX
     if (not isinstance(self.force, Anisotropic_Grosmann)
             or getattr(self.force, 'force_backend', None) != 'numba'
-            or getattr(self, 'interaction_backend', None) != 'batch_numba'
+            or getattr(self, 'interaction_backend', None) not in ('batch_numba', 'batch_cached_numba')
             or not self.movement or self.reproduction):
         raise RuntimeError('batch_numba requires fixed-N Grosmann force_backend=numba')
     if list(self.active_cell_indexes) != list(range(len(self.cells))):
@@ -161,15 +161,26 @@ def batch_interaction_step(self, delta_t):
     n = len(self.cells)
     ptr = [0]
     neighbors = []
-    for i in range(n):
-        # EXACT same order as direct_interaction, including OrderedIndexSet iteration.
-        candidates = [int(j) for j in self.grid.find_neighbors(
-            position=self.cell_positions[i]) if int(j) != i]
-        earlier = sorted(j for j in candidates if j < i)
-        later = [j for j in candidates if j > i]
-        neighbors.extend(earlier)
-        neighbors.extend(later)
-        ptr.append(len(neighbors))
+    if getattr(self, 'interaction_backend', None) == 'batch_cached_numba':
+        from tumorsphere.core.neighbor_candidate_cache import OrderedNeighborCache
+        cache = getattr(self.grid, '_batch_neighbor_cache', None)
+        if cache is None:
+            cache = OrderedNeighborCache()
+            self.grid._batch_neighbor_cache = cache
+        for i in range(n):
+            neighbors.extend(cache.candidates(self.grid, i, self.cell_positions[i]))
+            ptr.append(len(neighbors))
+    else:
+        # Preserve the original batch_numba path without changing its algebra.
+        for i in range(n):
+            # EXACT same order as direct_interaction, including OrderedIndexSet iteration.
+            candidates = [int(j) for j in self.grid.find_neighbors(
+                position=self.cell_positions[i]) if int(j) != i]
+            earlier = sorted(j for j in candidates if j < i)
+            later = [j for j in candidates if j > i]
+            neighbors.extend(earlier)
+            neighbors.extend(later)
+            ptr.append(len(neighbors))
     geometry_d = np.asarray([c.squared_diagonal for c in self.cells], dtype=np.float64)
     geometry_e = np.asarray([c.anisotropy for c in self.cells], dtype=np.float64)
     qxx = np.ascontiguousarray(self.nematic_tensors[:, 0, 0])
