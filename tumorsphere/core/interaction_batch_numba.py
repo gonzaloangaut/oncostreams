@@ -185,6 +185,8 @@ def batch_interaction_step(self, delta_t):
     )
     dif_positions = np.empty((n, 3), dtype=np.float64)
     dif_phies = np.empty(n, dtype=np.float64)
+    # The identity matrix is independent of the cell index.
+    identity = np.identity(3)
     collect = getattr(self.output, 'collect_overlap_statistics', True)
     # Must update statistics and call noise/shrink in *original index order*.
     for i in range(n):
@@ -196,13 +198,14 @@ def batch_interaction_step(self, delta_t):
             self.normalized_overlap_count_interval += int(xi.size)
         cell = self.cells[i]
         mP, mS, mR = self.force.calculate_mobilities(cell, self.cell_area)
-        identity = np.identity(3)
         # Deliberately retain the original NumPy matmul arithmetic.
         dif_velocity = np.matmul(
             ((mP + mS) / 2) * identity + ((mP - mS) / 2)
             * self.nematic_tensors[i], f[i],
         )
-        dif_position = (cell.velocity() + dif_velocity) * delta_t
+        # Reuse the same computed intrinsic velocity for displacement and shrink.
+        intrinsic_velocity = cell.velocity()
+        dif_position = (intrinsic_velocity + dif_velocity) * delta_t
         dif_phi = mR * t[i] * delta_t
         if self.force.translational_noise_enabled or self.force.rotational_noise_enabled:
             translational_noise, rotational_noise = self.force.calculate_noise(
@@ -210,7 +213,14 @@ def batch_interaction_step(self, delta_t):
             dif_position += translational_noise
             dif_phi += rotational_noise
         if self.force.shrinking is True:
-            self.force.check_shrink_condition(cell, dif_velocity)
+            # Keep NumPy norm, dot and scalar operation order identical to the
+            # reference shrink condition; avoid repeating cell.velocity().
+            speed = np.linalg.norm(intrinsic_velocity)
+            if speed > 0:
+                dif_velocity_project = np.dot(dif_velocity, intrinsic_velocity) / speed
+            else:
+                dif_velocity_project = 0
+            cell.shrink = not cell.is_round and speed + dif_velocity_project <= 0
         dif_positions[i] = dif_position
         dif_phies[i] = dif_phi
     return dif_positions, dif_phies
