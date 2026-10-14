@@ -1,12 +1,49 @@
 """Module that defines the SpatialHashGrid class."""
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, MutableSet
+import warnings
 from itertools import chain, product
 
 import numpy as np
 
 # from line_profiler import profile
+
+
+class OrderedIndexSet(MutableSet):
+    """Set-like collection with stable iteration order after pickle.
+
+    Dictionary insertion order survives serialization. Membership, addition
+    and removal retain expected average-case constant-time behavior.
+    Iteration order is *insertion order*, unlike Python's builtin set; this
+    numerical ordering change applies equally to cached and direct backends.
+    """
+
+    __slots__ = ("_members",)
+
+    def __init__(self, iterable=()):
+        self._members = dict.fromkeys(iterable)
+
+    def __contains__(self, value):
+        return value in self._members
+
+    def __iter__(self):
+        return iter(self._members)
+
+    def __len__(self):
+        return len(self._members)
+
+    def add(self, value):
+        self._members[value] = None
+
+    def discard(self, value):
+        self._members.pop(value, None)
+
+    def remove(self, value):
+        del self._members[value]
+
+    def __repr__(self):
+        return f"OrderedIndexSet({list(self._members)!r})"
 
 
 class SpatialHashGrid:
@@ -105,7 +142,7 @@ class SpatialHashGrid:
         )
 
         self._offset_cache = {1: self.offsets}
-        self.hash_table = defaultdict(set)
+        self.hash_table = defaultdict(OrderedIndexSet)
         self._neighbor_bucket_cache = {}
 
         if not np.isfinite(cube_size) or cube_size <= 0:
@@ -147,6 +184,31 @@ class SpatialHashGrid:
         # Checkpoints created before spatial_dimension existed
         # correspond to the original 3D grid.
         self.spatial_dimension = state.get("spatial_dimension", 3)
+
+        # Existing checkpoints may contain defaultdict(set). The set iteration
+        # order in those files was not guaranteed to match the live process.
+        # Convert their *restored* order once, so future checkpoints are stable.
+        # Exact continuation relative to a live pre-migration run is not
+        # guaranteed for those legacy checkpoints.
+        if (
+            getattr(self.hash_table, "default_factory", None) is not OrderedIndexSet
+            or any(
+                not isinstance(bucket, OrderedIndexSet)
+                for bucket in self.hash_table.values()
+            )
+        ):
+            old_table = self.hash_table
+            stable_table = defaultdict(OrderedIndexSet)
+            for key, bucket in old_table.items():
+                stable_table[key] = OrderedIndexSet(bucket)
+            self.hash_table = stable_table
+            warnings.warn(
+                "Legacy SpatialHashGrid checkpoint migrated from builtin sets "
+                "to ordered buckets. Its previous exact iteration order cannot "
+                "be guaranteed; use new runs for bitwise checkpoint tests.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
         self._neighbor_bucket_cache = {}
 
