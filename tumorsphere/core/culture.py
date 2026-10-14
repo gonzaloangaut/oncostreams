@@ -338,8 +338,8 @@ class Culture:
         self.overlap_backend = "numpy"
         # Default preserves the historical x/y periodic displacement path.
         self.relative_positions_backend = "numpy"
-        if interaction_backend not in ("cached", "direct_numba"):
-            raise ValueError("interaction_backend must be cached or direct_numba")
+        if interaction_backend not in ("cached", "direct_numba", "batch_numba"):
+            raise ValueError("interaction_backend must be cached, direct_numba or batch_numba")
         self.interaction_backend = interaction_backend
         if elongation_backend not in ("standard", "fast_numba"):
             raise ValueError("elongation_backend must be standard or fast_numba")
@@ -1620,6 +1620,8 @@ class Culture:
         if backend == "direct_numba":
             from tumorsphere.core.interaction_direct_numba import direct_interaction
             return direct_interaction(self, cell_index, delta_t)
+        if backend == "batch_numba":
+            raise RuntimeError("batch_numba processes a full sweep; call Culture.simulate()")
         if backend != "cached":
             raise ValueError(f"Unknown interaction_backend: {backend!r}")
 
@@ -2347,26 +2349,35 @@ class Culture:
                                 )
                                 self.steps_without_deformation = 0
 
-                # We initialize the change in the position and angle of all cells
-                dif_positions = np.zeros(
-                    (len(self.cells), 3),
-                    dtype=float,
-                )
-
-                dif_phies = np.zeros(
-                    len(self.cells),
-                    dtype=float,
-                )
-                # Calculate the interaction for every cell
-                for index in self.active_cell_indexes:
-                    dif_position, dif_phi = self.interaction(
-                        cell_index=index,
-                        delta_t=self.delta_t,
+                if getattr(self, "interaction_backend", "cached") == "batch_numba":
+                    # Evaluate all ordered pairs in one compiled sweep. The
+                    # returned arrays are ordinary state increments: no cache
+                    # is stored on Culture or serialized into checkpoints.
+                    from tumorsphere.core.interaction_batch_numba import (
+                        batch_interaction_step,
                     )
-                    # add the change in position to the matrix
-                    dif_positions[index] = dif_position
-                    # add the change in angle to the matrix
-                    dif_phies[index] = dif_phi
+
+                    dif_positions, dif_phies = batch_interaction_step(
+                        self, self.delta_t,
+                    )
+                else:
+                    # Reference per-cell path remains unchanged.
+                    dif_positions = np.zeros(
+                        (len(self.cells), 3),
+                        dtype=float,
+                    )
+
+                    dif_phies = np.zeros(
+                        len(self.cells),
+                        dtype=float,
+                    )
+                    for index in self.active_cell_indexes:
+                        dif_position, dif_phi = self.interaction(
+                            cell_index=index,
+                            delta_t=self.delta_t,
+                        )
+                        dif_positions[index] = dif_position
+                        dif_phies[index] = dif_phi
 
                 # Instantaneous resultant velocities
                 self.cell_instantaneous_velocities = (

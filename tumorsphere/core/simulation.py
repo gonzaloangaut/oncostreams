@@ -391,17 +391,17 @@ class Simulation:
             )
         self.relative_positions_backend = relative_positions_backend
 
-        if interaction_backend not in ("cached", "direct_numba"):
-            raise ValueError("interaction_backend must be cached or direct_numba")
-        if interaction_backend == "direct_numba":
+        if interaction_backend not in ("cached", "direct_numba", "batch_numba"):
+            raise ValueError("interaction_backend must be cached, direct_numba or batch_numba")
+        if interaction_backend in ("direct_numba", "batch_numba"):
             if (force_backend != "numba" or overlap_backend != "numba"
                     or relative_positions_backend != "numba"):
-                raise ValueError("direct_numba interaction requires all three Numba backends")
+                raise ValueError("direct_numba/batch_numba interaction requires all three Numba backends")
             if reproduction or not movement:
-                raise ValueError("direct_numba interaction requires fixed-N movement")
+                raise ValueError("direct_numba/batch_numba interaction requires fixed-N movement")
             if forces is None or any(not isinstance(force, Anisotropic_Grosmann)
                                      for force in forces):
-                raise ValueError("direct_numba supports only Anisotropic_Grosmann forces")
+                raise ValueError("direct_numba/batch_numba supports only Anisotropic_Grosmann forces")
         self.interaction_backend = interaction_backend
         if elongation_backend not in ("standard", "fast_numba"):
             raise ValueError("elongation_backend must be standard or fast_numba")
