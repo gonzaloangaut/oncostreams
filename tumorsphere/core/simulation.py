@@ -213,6 +213,7 @@ class Simulation:
         overlap_backend: str = "numpy",
         force_backend: str = "numpy",
         relative_positions_backend: str = "numpy",
+        interaction_backend: str = "cached",
     ):
         # main simulation attributes
         self.forces = forces
@@ -388,6 +389,19 @@ class Simulation:
                 "relative_positions_backend must be 'numpy' or 'numba'."
             )
         self.relative_positions_backend = relative_positions_backend
+
+        if interaction_backend not in ("cached", "direct_numba"):
+            raise ValueError("interaction_backend must be cached or direct_numba")
+        if interaction_backend == "direct_numba":
+            if (force_backend != "numba" or overlap_backend != "numba"
+                    or relative_positions_backend != "numba"):
+                raise ValueError("direct_numba interaction requires all three Numba backends")
+            if reproduction or not movement:
+                raise ValueError("direct_numba interaction requires fixed-N movement")
+            if forces is None or any(not isinstance(force, Anisotropic_Grosmann)
+                                     for force in forces):
+                raise ValueError("direct_numba supports only Anisotropic_Grosmann forces")
+        self.interaction_backend = interaction_backend
 
     def calculate_culture_bounds_from_density(
         self,
@@ -1304,6 +1318,7 @@ def simulate_single_culture(
         "overlap_backend",
         "force_backend",
         "relative_positions_backend",
+        "interaction_backend",
         "contraction_overlap_safety_ratio",
         "delta_t",
         "initial_aspect_ratio",
@@ -1466,6 +1481,12 @@ def simulate_single_culture(
                 "with the serialized Culture backend."
             )
 
+        # Checkpoint compatibility for old cultures without a direct backend.
+        stored_interaction_backend = getattr(culture, "interaction_backend", "cached")
+        saved_dynamic_config.setdefault("interaction_backend", stored_interaction_backend)
+        if saved_dynamic_config["interaction_backend"] != stored_interaction_backend:
+            raise ValueError("Checkpoint interaction backend disagrees with serialized Culture")
+
         differences = []
 
         for key in sorted(
@@ -1503,6 +1524,7 @@ def simulate_single_culture(
         # then persist it in subsequent checkpoint metadata.
         culture.overlap_backend = sim.overlap_backend
         culture.relative_positions_backend = sim.relative_positions_backend
+        culture.interaction_backend = sim.interaction_backend
         if isinstance(culture.force, Anisotropic_Grosmann):
             culture.force.force_backend = sim.force_backend
         culture._checkpoint_model_config = expected_config.copy()
@@ -1638,6 +1660,7 @@ def simulate_single_culture(
             cluster_alignment_angle_deg=(
                 sim.cluster_alignment_angle_deg
             ),
+            interaction_backend=sim.interaction_backend,
         )
         sim.cultures[current_realization_name].overlap_backend = (
             sim.overlap_backend

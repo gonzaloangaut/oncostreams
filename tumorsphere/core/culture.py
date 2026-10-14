@@ -176,6 +176,7 @@ class Culture:
         contraction_overlap_safety_ratio: Optional[float] = None,
         cluster_range_factors: Tuple[float, ...] = (1.0, 1.1),
         cluster_alignment_angle_deg: float = 45.0,
+        interaction_backend: str = "cached",
     ):
         """
         Initialize a new culture of cells.
@@ -336,6 +337,9 @@ class Culture:
         self.overlap_backend = "numpy"
         # Default preserves the historical x/y periodic displacement path.
         self.relative_positions_backend = "numpy"
+        if interaction_backend not in ("cached", "direct_numba"):
+            raise ValueError("interaction_backend must be cached or direct_numba")
+        self.interaction_backend = interaction_backend
 
         # cell attributes
         self.force = force
@@ -1599,6 +1603,13 @@ class Culture:
             The change in the angle phi of the cell.
         -----
         """
+        backend = getattr(self, "interaction_backend", "cached")
+        if backend == "direct_numba":
+            from tumorsphere.core.interaction_direct_numba import direct_interaction
+            return direct_interaction(self, cell_index, delta_t)
+        if backend != "cached":
+            raise ValueError(f"Unknown interaction_backend: {backend!r}")
+
         cell = self.cells[cell_index]
 
         significant_neighbors_indexes = self._get_significant_neighbors(
