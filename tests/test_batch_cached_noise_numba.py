@@ -146,6 +146,9 @@ def test_synthetic_noise_algebra_and_rng_order():
     (None, 0.13),
     (0.033, 0.13),
     (None, None),
+    (0.0, None),
+    (None, 0.0),
+    (0.0, 0.0),
 ])
 def test_bitwise_trajectory_each_step(dimension, eta, d_phi):
     base = make_culture(BASELINE, dimension=dimension, eta=eta, d_phi=d_phi)

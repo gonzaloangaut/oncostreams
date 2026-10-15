@@ -255,24 +255,26 @@ def batch_interaction_step(self, delta_t):
         float(self.force.bExp), float(self.force.lambda_core),
         XI_POWER_MAX,
     )
-    # New opt-in path: collect the already-cached mobilities in the
-    # reference cell order, then advance NumPy's RNG once for the sweep.
-    # No RNG is consumed between these draws in the original mechanical loop.
+    # The compiled-noise batch backend also uses vectorized postprocessing
+    # when noise is disabled. No RNG draws occur in this case.
     use_compiled_noise = (
         getattr(self, 'interaction_backend', None) == 'batch_cached_noise_numba'
         and (self.force.translational_noise_enabled
              or self.force.rotational_noise_enabled)
     )
-    if use_compiled_noise:
-        from tumorsphere.core.interaction_noise_numba import compiled_noise_for_sweep
+    if getattr(self, 'interaction_backend', None) == 'batch_cached_noise_numba':
         mobilities = np.empty((n, 3), dtype=np.float64)
         for i in range(n):
             mobilities[i] = self.force.calculate_mobilities(
                 self.cells[i], self.cell_area,
             )
-        translation, rotation = compiled_noise_for_sweep(
-            self, mobilities, delta_t,
-        )
+        if use_compiled_noise:
+            from tumorsphere.core.interaction_noise_numba import compiled_noise_for_sweep
+            translation, rotation = compiled_noise_for_sweep(
+                self, mobilities, delta_t,
+            )
+        else:
+            translation = rotation = None
         return _vectorized_compiled_noise_postprocess(
             self, delta_t, f, t, mobilities, translation, rotation, xis,
         )
