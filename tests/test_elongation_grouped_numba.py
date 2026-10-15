@@ -185,3 +185,43 @@ def test_grouped_bulk_angle_rng_preserves_full_trajectory(attempts):
         run(reference, tic - 1, tic)
         run(optimized, tic - 1, tic)
         compare_bitwise(reference, optimized)
+
+
+@pytest.mark.parametrize('attempts', [1, 5, 10, 127])
+def test_compiled_proposal_geometry_is_bitwise_identical(attempts):
+    """Proposals preserve scalar NumPy results, including periodic crossings."""
+    from tumorsphere.core.elongation_grouped_numba import compiled_proposals
+
+    rng = np.random.default_rng(10834 + attempts)
+    for side in (5.5, 38.4, 121.9):
+        for displacement_length in (0.0, 0.015, 0.25):
+            for old_position in (
+                np.array([0.0, 0.0, 0.0]),
+                np.array([side - 1e-12, 2e-12, 0.0]),
+                np.array([side / 2, side / 4, 0.0]),
+            ):
+                phis = rng.uniform(0.0, 2 * np.pi, size=attempts)
+                expected_positions = np.empty((attempts, 3))
+                expected_qxx = np.empty(attempts)
+                expected_qxy = np.empty(attempts)
+                for k, phi in enumerate(phis):
+                    expected_positions[k] = np.mod(
+                        old_position + np.array([
+                            displacement_length * np.cos(phi),
+                            displacement_length * np.sin(phi),
+                            0.0,
+                        ]), side,
+                    )
+                    expected_qxx[k] = np.cos(2 * phi)
+                    expected_qxy[k] = np.sin(2 * phi)
+                positions, qxx, qxy = compiled_proposals(
+                    old_position, displacement_length, phis, side,
+                )
+                for expected, actual in (
+                    (expected_positions, positions),
+                    (expected_qxx, qxx),
+                    (expected_qxy, qxy),
+                ):
+                    assert expected.dtype == actual.dtype
+                    assert expected.shape == actual.shape
+                    assert expected.tobytes() == actual.tobytes()

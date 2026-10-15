@@ -2,7 +2,7 @@
 
 This implementation is based on the experimentally validated ``combined``
 mode from ``oncostreams_elongation_probe.py``. It preserves, for each cell:
-  * scalar NumPy RNG calls and per-proposal position/orientation arithmetic;
+  * the NumPy RNG sequence and per-proposal position/orientation arithmetic;
   * all attempted orientations, including rejected ones;
   * the best-valid-score selection and the final tie-breaking RNG draw;
   * sequential deformation processing in the caller-defined cell order;
@@ -18,6 +18,32 @@ from __future__ import annotations
 
 import numpy as np
 from numba import njit
+
+
+@njit(cache=True, fastmath=False)
+def compiled_proposals(old_position, displacement_length, phis, side):
+    """Build proposed centers and nematic components in the original order.
+
+    The NumPy per-proposal arithmetic (including 3D modulus) is retained to
+    preserve exact trajectories on the validated NumPy/Numba platforms.
+    RNG draws stay in Python and are performed before calling this function.
+    """
+    count = len(phis)
+    positions = np.empty((count, 3), dtype=np.float64)
+    qxx = np.empty(count, dtype=np.float64)
+    qxy = np.empty(count, dtype=np.float64)
+    for a in range(count):
+        phi = phis[a]
+        positions[a] = np.mod(
+            old_position + np.array([
+                displacement_length * np.cos(phi),
+                displacement_length * np.sin(phi),
+                0.0,
+            ]), side,
+        )
+        qxx[a] = np.cos(2 * phi)
+        qxy[a] = np.sin(2 * phi)
+    return positions, qxx, qxy
 
 @njit(cache=True, fastmath=False)
 def grouped_proposal_scores(
@@ -110,11 +136,7 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
 
     # Bulk draws preserve the scalar NumPy RNG sequence and generator state.
     # Keep the scalar path for a single attempt to avoid an unnecessary array.
-    # Proposal trigonometry and the original 3D np.mod remain unchanged.
-    phis = np.empty(n_attempts, dtype=np.float64)
-    positions = np.empty((n_attempts, 3), dtype=np.float64)
-    proposed_qxx = np.empty(n_attempts, dtype=np.float64)
-    proposed_qxy = np.empty(n_attempts, dtype=np.float64)
+    # The compiled helper keeps trigonometry and 3D np.mod in original order.
     trial_buckets = np.empty(n_attempts, dtype=np.intp)
     bucket_ids = {}
     ptr = [0]
@@ -123,19 +145,12 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
         new_phis = (self.rng.uniform(low=0, high=2 * np.pi),)
     else:
         new_phis = self.rng.uniform(low=0, high=2 * np.pi, size=n_attempts)
+    phis = np.asarray(new_phis, dtype=np.float64)
+    positions, proposed_qxx, proposed_qxy = compiled_proposals(
+        old_position, displacement_length, phis, float(self.side),
+    )
     for a in range(n_attempts):
-        new_phi = new_phis[a]
-        new_position = np.mod(
-            old_position + np.array([
-                displacement_length * np.cos(new_phi),
-                displacement_length * np.sin(new_phi),
-                0.0,
-            ]), self.side,
-        )
-        phis[a] = new_phi
-        positions[a] = new_position
-        proposed_qxx[a] = np.cos(2 * new_phi)
-        proposed_qxy[a] = np.sin(2 * new_phi)
+        new_position = positions[a]
         key = self.grid.get_hash_key(new_position)
         bi = bucket_ids.get(key)
         if bi is None:
