@@ -26,8 +26,7 @@ CANDIDATE = 'batch_cached_noise_numba'
 
 
 def make_culture(backend, *, seed=17, dimension=3, n=64,
-                 eta=0.033, d_phi=None, out=None):
-    rho = 0.84
+                 eta=0.033, d_phi=None, out=None, rho=0.84):
     threshold = math.exp(-1)
     ar_max = 2.7
     side = math.sqrt(n * math.pi / rho)
@@ -155,6 +154,21 @@ def test_bitwise_trajectory_each_step(dimension, eta, d_phi):
         run(base, tic - 1, tic)
         run(new, tic - 1, tic)
         assert_same(base, new)
+
+
+@pytest.mark.parametrize('rho', [0.30, 0.84, 0.90])
+@pytest.mark.parametrize('eta,d_phi', [
+    (0.033, None), (None, 0.13), (0.033, 0.13),
+])
+def test_vectorized_postprocessing_varied_conditions(rho, eta, d_phi):
+    """Extended comparison against the existing per-cell batch postprocessing."""
+    baseline = make_culture(BASELINE, seed=29, n=96, rho=rho,
+                            eta=eta, d_phi=d_phi)
+    candidate = make_culture(CANDIDATE, seed=29, n=96, rho=rho,
+                             eta=eta, d_phi=d_phi)
+    run(baseline, 0, 75)
+    run(candidate, 0, 75)
+    assert_same(baseline, candidate)
 
 
 @pytest.mark.parametrize('eta,d_phi', [

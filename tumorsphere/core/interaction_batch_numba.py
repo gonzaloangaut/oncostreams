@@ -142,6 +142,67 @@ def _batch_pair_forces(positions, phies, diagonals, anisotropies, qxx, qxy,
     return f, t, xis
 
 
+def _vectorized_compiled_noise_postprocess(self, delta_t, f, t, mobilities,
+                                           translation, rotation, xis):
+    """Vectorized fixed-N postprocessing of the compiled-noise sweep.
+
+    The ordered force/torque kernel and NumPy RNG generation are unchanged.
+    Array arithmetic is algebraically equivalent to the scalar cell loop;
+    it is not promised to be bitwise identical on every NumPy/BLAS version.
+    """
+    n = len(self.cells)
+    if getattr(self.output, 'collect_overlap_statistics', True) and xis.size:
+        self.max_normalized_overlap_interval = max(
+            self.max_normalized_overlap_interval, float(np.max(xis)))
+        self.normalized_overlap_sum_interval += float(np.sum(xis))
+        self.normalized_overlap_count_interval += int(xis.size)
+
+    mP = mobilities[:, 0]
+    mS = mobilities[:, 1]
+    mR = mobilities[:, 2]
+    a = (mP + mS) / 2
+    b = (mP - mS) / 2
+    matrix = (a[:, None, None] * np.eye(3)
+              + b[:, None, None] * self.nematic_tensors)
+    dif_velocity = np.matmul(matrix, f[:, :, None])[:, :, 0]
+
+    aspect_ratios = np.fromiter(
+        (cell.aspect_ratio for cell in self.cells),
+        dtype=np.float64, count=n,
+    )
+    intrinsic_speeds = (self.cell_speed_max * (aspect_ratios - 1)
+                        / (self.aspect_ratio_max - 1))
+    direction = np.empty((n, 3), dtype=np.float64)
+    direction[:, 0] = np.cos(self.cell_phies)
+    direction[:, 1] = np.sin(self.cell_phies)
+    direction[:, 2] = 0.0
+    intrinsic_velocity = intrinsic_speeds[:, None] * direction
+
+    dif_positions = (intrinsic_velocity + dif_velocity) * delta_t
+    dif_phies = mR * t * delta_t
+    if self.force.translational_noise_enabled:
+        dif_positions += translation
+    if self.force.rotational_noise_enabled:
+        dif_phies += rotation
+
+    if self.force.shrinking is True:
+        speed_norms = np.linalg.norm(intrinsic_velocity, axis=1)
+        projections = np.einsum('ij,ij->i', dif_velocity, intrinsic_velocity)
+        # The scalar reference assigns projection=0 for zero-speed cells.
+        # Avoid dividing by zero, including for round cells.
+        np.divide(projections, speed_norms, out=projections,
+                  where=speed_norms > 0)
+        projections[speed_norms == 0] = 0.0
+        not_round = np.fromiter(
+            (not cell.is_round for cell in self.cells),
+            dtype=bool, count=n,
+        )
+        shrinking_flags = not_round & (speed_norms + projections <= 0)
+        for i, cell in enumerate(self.cells):
+            cell.shrink = bool(shrinking_flags[i])
+    return dif_positions, dif_phies
+
+
 def batch_interaction_step(self, delta_t):
     """Return all step displacements, preserving the original per-cell RNG order."""
     from tumorsphere.core.forces import Anisotropic_Grosmann
@@ -211,6 +272,9 @@ def batch_interaction_step(self, delta_t):
             )
         translation, rotation = compiled_noise_for_sweep(
             self, mobilities, delta_t,
+        )
+        return _vectorized_compiled_noise_postprocess(
+            self, delta_t, f, t, mobilities, translation, rotation, xis,
         )
     dif_positions = np.empty((n, 3), dtype=np.float64)
     dif_phies = np.empty(n, dtype=np.float64)
