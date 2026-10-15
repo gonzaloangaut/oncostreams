@@ -145,6 +145,9 @@ class SpatialHashGrid:
         self.hash_table = defaultdict(OrderedIndexSet)
         self._neighbor_bucket_cache = {}
         self._batch_neighbor_cache = None
+        # Both elongation caches are disposable, fixed-N accelerators.
+        self._elongation_geometry_cache = None
+        self._elongation_bucket_cache = None
 
         if not np.isfinite(cube_size) or cube_size <= 0:
             raise ValueError("cube_size must be finite and positive.")
@@ -177,6 +180,8 @@ class SpatialHashGrid:
         state = self.__dict__.copy()
         state.pop("_neighbor_bucket_cache", None)
         state.pop("_batch_neighbor_cache", None)
+        state.pop("_elongation_geometry_cache", None)
+        state.pop("_elongation_bucket_cache", None)
         return state
 
     def __setstate__(self, state):
@@ -215,6 +220,9 @@ class SpatialHashGrid:
         self._neighbor_bucket_cache = {}
         # Candidate indices are rebuilt lazily after checkpoint restoration.
         self._batch_neighbor_cache = None
+        # Both elongation caches are disposable, fixed-N accelerators.
+        self._elongation_geometry_cache = None
+        self._elongation_bucket_cache = None
 
     def get_bucket_position(
         self,
@@ -246,6 +254,9 @@ class SpatialHashGrid:
         cache = getattr(self, "_batch_neighbor_cache", None)
         if cache is not None:
             cache.modified_bucket(self, position)
+        elongation_cache = getattr(self, "_elongation_bucket_cache", None)
+        if elongation_cache is not None:
+            elongation_cache.clear()
 
     def remove_cell_from_hash_table(
         self,
@@ -257,6 +268,9 @@ class SpatialHashGrid:
         cache = getattr(self, "_batch_neighbor_cache", None)
         if cache is not None:
             cache.modified_bucket(self, position)
+        elongation_cache = getattr(self, "_elongation_bucket_cache", None)
+        if elongation_cache is not None:
+            elongation_cache.clear()
 
     def is_position_in_bounds(
         self,

@@ -212,6 +212,18 @@ class Cell:
             ar + 1 / ar
         )
 
+        # If a grouped elongation cache exists, update it for ANY shape
+        # change: accepted elongation, contraction, or temporary proposal.
+        # During Cell.__init__ the cell has no index yet; in that case a
+        # subsequent cache access will rebuild arrays if N has changed.
+        grid = getattr(self.culture, "grid", None)
+        cache = (getattr(grid, "_elongation_geometry_cache", None)
+                 if grid is not None else None)
+        if (cache is not None and hasattr(self, "_index")
+                and self._index < len(cache[0])):
+            cache[0][self._index] = self.squared_diagonal
+            cache[1][self._index] = self.anisotropy
+
     def set_aspect_ratio(self, new_ar) -> None:
         """
         Sets the aspect ratio and updates the shape parameters accordingly.

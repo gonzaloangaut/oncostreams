@@ -20,6 +20,42 @@ import numpy as np
 from numba import njit
 
 
+def _shared_elongation_geometry(culture):
+    """Lazy shape arrays, kept current by Cell.update_shape_parameters.
+
+    Owned by the grid so it can be excluded from checkpoints alongside
+    the existing interaction candidate cache.
+    """
+    grid = culture.grid
+    cached = getattr(grid, '_elongation_geometry_cache', None)
+    if cached is None or len(cached[0]) != len(culture.cells):
+        cached = (
+            np.array([cell.squared_diagonal for cell in culture.cells],
+                     dtype=np.float64),
+            np.array([cell.anisotropy for cell in culture.cells],
+                     dtype=np.float64),
+        )
+        grid._elongation_geometry_cache = cached
+    return cached
+
+
+def _cached_elongation_neighbors(grid, bucket_key, position):
+    """Return the ORIGINAL ordered candidate list for one occupied bucket.
+
+    Membership (and insertion order) is unchanged until an add/remove call.
+    SpatialHashGrid clears this cache after every such mutation.
+    """
+    cache = getattr(grid, '_elongation_bucket_cache', None)
+    if cache is None:
+        cache = {}
+        grid._elongation_bucket_cache = cache
+    result = cache.get(bucket_key)
+    if result is None:
+        result = tuple(grid.find_neighbors(position=position))
+        cache[bucket_key] = result
+    return result
+
+
 @njit(cache=True, fastmath=False)
 def compiled_proposals(old_position, displacement_length, phis, side):
     """Build proposed centers and nematic components in the original order.
@@ -156,8 +192,8 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
         if bi is None:
             bi = len(bucket_ids)
             bucket_ids[key] = bi
-            idx = [int(j) for j in self.grid.find_neighbors(position=new_position)
-                   if int(j) != cell_index]
+            idx = [int(j) for j in _cached_elongation_neighbors(
+                self.grid, key, new_position) if int(j) != cell_index]
             flat_neighbors.extend(idx)
             ptr.append(len(flat_neighbors))
         trial_buckets[a] = bi
@@ -165,11 +201,7 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
     # Gather each neighbor's geometry ONCE per cell instead of per proposal.
     # Global arrays avoid packing repeated per-neighbor geometry for each bucket.
     indices = np.asarray(flat_neighbors, dtype=np.intp)
-    diag = np.empty(len(self.cells), dtype=np.float64)
-    eps = np.empty(len(self.cells), dtype=np.float64)
-    for j in set(flat_neighbors):
-        diag[j] = self.cells[j].squared_diagonal
-        eps[j] = self.cells[j].anisotropy
+    diag, eps = _shared_elongation_geometry(self)
     qs = self.nematic_tensors
     scores, _, _, _ = grouped_proposal_scores(
         positions, phis, proposed_qxx, proposed_qxy,
