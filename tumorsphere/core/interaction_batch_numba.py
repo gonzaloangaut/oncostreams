@@ -217,14 +217,17 @@ def batch_interaction_step(self, delta_t):
     # The identity matrix is independent of the cell index.
     identity = np.identity(3)
     collect = getattr(self.output, 'collect_overlap_statistics', True)
-    # Must update statistics and call noise/shrink in *original index order*.
+    # xi contains the overlaps of every directed candidate pair in cell order.
+    # Collect identical statistics with a single NumPy reduction per sweep,
+    # avoiding two small-array NumPy calls for each cell. The sum may differ
+    # in its final floating-point bits because the reduction order changes.
+    if collect and xis.size:
+        self.max_normalized_overlap_interval = max(
+            self.max_normalized_overlap_interval, float(np.max(xis)))
+        self.normalized_overlap_sum_interval += float(np.sum(xis))
+        self.normalized_overlap_count_interval += int(xis.size)
+    # Keep noise and shrink calls in the original cell order.
     for i in range(n):
-        if collect and ptr[i] != ptr[i + 1]:
-            xi = xis[ptr[i]:ptr[i + 1]]
-            self.max_normalized_overlap_interval = max(
-                self.max_normalized_overlap_interval, float(np.max(xi)))
-            self.normalized_overlap_sum_interval += float(np.sum(xi))
-            self.normalized_overlap_count_interval += int(xi.size)
         cell = self.cells[i]
         if use_compiled_noise:
             mP, mS, mR = mobilities[i]
