@@ -1870,12 +1870,26 @@ class Culture:
         # Enforcing boundary condition
         self.cell_positions = np.mod(self.cell_positions, self.side)
 
-        # Remove the cells from their old place in grid and add them to their
-        # new place
+        # Vectorize bucket comparison; keep sequential grid mutations in the
+        # original active-cell order to preserve neighbor order and cache
+        # invalidation (including after checkpoint restoration).
+        dimension = self.grid.spatial_dimension
+        if dimension == 2 and (
+            np.any(old_positions[:, 2] != 0)
+            or np.any(self.cell_positions[:, 2] != 0)
+        ):
+            raise ValueError("A 2D spatial grid requires z=0.")
+
+        old_buckets = np.floor(
+            old_positions[:, :dimension] / self.grid.cube_size
+        ).astype(int)
+        new_buckets = np.floor(
+            self.cell_positions[:, :dimension] / self.grid.cube_size
+        ).astype(int)
+        bucket_changed = np.any(old_buckets != new_buckets, axis=1)
+
         for cell_index in self.active_cell_indexes:
-            old_key = self.grid.get_hash_key(old_positions[cell_index])
-            new_key = self.grid.get_hash_key(self.cell_positions[cell_index])
-            if old_key != new_key:
+            if bucket_changed[cell_index]:
                 self.grid.remove_cell_from_hash_table(
                     cell_index, old_positions[cell_index]
                 )
