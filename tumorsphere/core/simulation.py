@@ -403,13 +403,13 @@ class Simulation:
                                      for force in forces):
                 raise ValueError("direct_numba/batch_numba supports only Anisotropic_Grosmann forces")
         self.interaction_backend = interaction_backend
-        if elongation_backend not in ("standard", "fast_numba"):
-            raise ValueError("elongation_backend must be standard or fast_numba")
-        if elongation_backend == "fast_numba":
+        if elongation_backend not in ("standard", "fast_numba", "grouped_early_numba"):
+            raise ValueError("elongation_backend must be standard, fast_numba or grouped_early_numba")
+        if elongation_backend in ("fast_numba", "grouped_early_numba"):
             if overlap_backend != "numba":
-                raise ValueError("fast_numba elongation requires overlap_backend=numba")
+                raise ValueError("Numba elongation requires overlap_backend=numba")
             if reproduction:
-                raise ValueError("fast_numba elongation requires fixed cell count")
+                raise ValueError("Numba elongation requires fixed cell count")
         self.elongation_backend = elongation_backend
 
     def calculate_culture_bounds_from_density(

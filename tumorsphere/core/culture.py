@@ -341,9 +341,9 @@ class Culture:
         if interaction_backend not in ("cached", "direct_numba", "batch_numba", "batch_cached_numba", "batch_cached_noise_numba"):
             raise ValueError("interaction_backend must be cached, direct_numba, batch_numba, batch_cached_numba or batch_cached_noise_numba")
         self.interaction_backend = interaction_backend
-        if elongation_backend not in ("standard", "fast_numba"):
-            raise ValueError("elongation_backend must be standard or fast_numba")
-        if elongation_backend == "fast_numba" and reproduction:
+        if elongation_backend not in ("standard", "fast_numba", "grouped_early_numba"):
+            raise ValueError("elongation_backend must be standard, fast_numba or grouped_early_numba")
+        if elongation_backend in ("fast_numba", "grouped_early_numba") and reproduction:
             raise ValueError("fast_numba elongation requires fixed cell count")
         self.elongation_backend = elongation_backend
 
@@ -1103,6 +1103,11 @@ class Culture:
         if backend == "fast_numba":
             from tumorsphere.core.elongation_numba import elongate_from_round_fast
             return elongate_from_round_fast(self, cell_index)
+        if backend == "grouped_early_numba":
+            from tumorsphere.core.elongation_grouped_numba import (
+                elongate_from_round_grouped,
+            )
+            return elongate_from_round_grouped(self, cell_index)
         if backend != "standard":
             raise ValueError(f"Unknown elongation_backend: {backend!r}")
 
