@@ -220,19 +220,17 @@ def batch_interaction_step(self, delta_t):
     if np.any(self.cell_positions[:, 2] != 0.0):
         raise RuntimeError('batch_numba requires planar positions (z=0)')
     n = len(self.cells)
-    ptr = [0]
-    neighbors = []
     if getattr(self, 'interaction_backend', None) in ('batch_cached_numba', 'batch_cached_noise_numba'):
         from tumorsphere.core.neighbor_candidate_cache import OrderedNeighborCache
         cache = getattr(self.grid, '_batch_neighbor_cache', None)
         if cache is None:
             cache = OrderedNeighborCache()
             self.grid._batch_neighbor_cache = cache
-        for i in range(n):
-            neighbors.extend(cache.candidates(self.grid, i, self.cell_positions[i]))
-            ptr.append(len(neighbors))
+        ptr, neighbors = cache.ordered_csr(self.grid, self.cell_positions)
     else:
         # Preserve the original batch_numba path without changing its algebra.
+        ptr = [0]
+        neighbors = []
         for i in range(n):
             # EXACT same order as direct_interaction, including OrderedIndexSet iteration.
             candidates = [int(j) for j in self.grid.find_neighbors(

@@ -11,6 +11,8 @@ The owning SpatialHashGrid excludes this cache from pickle/checkpoints.
 """
 from __future__ import annotations
 
+import numpy as np
+
 
 class OrderedNeighborCache:
     """Lazy ordered candidate lists invalidated by spatial-grid mutations."""
@@ -22,17 +24,8 @@ class OrderedNeighborCache:
         self.hits = 0
         self.misses = 0
 
-    def candidates(self, grid, index: int, position):
-        """Return candidates in precisely the batch_numba reference order."""
-        center = grid.get_hash_key(position)
-        version = self._versions.get(center, 0)
-        saved = self._entries.get(index)
-        if saved is not None and saved[0] == center and saved[1] == version:
-            self.hits += 1
-            return saved[2]
-
-        # Retain the original *two-part* ordering: lower indices first in
-        # ascending order, then higher indices in grid insertion order.
+    def _refresh(self, grid, index, position, center, version):
+        """Rebuild a stale entry while preserving reference neighbor order."""
         raw = [int(j) for j in grid.find_neighbors(position=position)
                if int(j) != index]
         earlier = sorted(j for j in raw if j < index)
@@ -41,6 +34,42 @@ class OrderedNeighborCache:
         self._entries[index] = (center, version, ordered)
         self.misses += 1
         return ordered
+
+    def candidates(self, grid, index: int, position):
+        """Return candidates in precisely the batch_numba reference order."""
+        center = grid.get_hash_key(position)
+        version = self._versions.get(center, 0)
+        saved = self._entries.get(index)
+        if saved is not None and saved[0] == center and saved[1] == version:
+            self.hits += 1
+            return saved[2]
+        return self._refresh(grid, index, position, center, version)
+
+    def ordered_csr(self, grid, positions):
+        """Build ordered batch candidate lists, hashing positions in one array.
+
+        Returns the same pointer and index lists as repeated ``candidates``
+        calls. Entries, hit/miss counters, and invalidation remain identical.
+        """
+        buckets = np.floor(
+            positions[:, :grid.spatial_dimension] / grid.cube_size
+        ).astype(int)
+        ptr = [0]
+        neighbors = []
+        for index, bucket in enumerate(buckets):
+            center = bucket.tobytes()
+            version = self._versions.get(center, 0)
+            saved = self._entries.get(index)
+            if saved is not None and saved[0] == center and saved[1] == version:
+                self.hits += 1
+                ordered = saved[2]
+            else:
+                ordered = self._refresh(
+                    grid, index, positions[index], center, version,
+                )
+            neighbors.extend(ordered)
+            ptr.append(len(neighbors))
+        return ptr, neighbors
 
     def modified_bucket(self, grid, position) -> None:
         """Invalidate centers affected by a successful bucket add/remove."""
