@@ -391,9 +391,9 @@ class Simulation:
             )
         self.relative_positions_backend = relative_positions_backend
 
-        if interaction_backend not in ("cached", "direct_numba", "batch_numba", "batch_cached_numba"):
-            raise ValueError("interaction_backend must be cached, direct_numba, batch_numba or batch_cached_numba")
-        if interaction_backend in ("direct_numba", "batch_numba", "batch_cached_numba"):
+        if interaction_backend not in ("cached", "direct_numba", "batch_numba", "batch_cached_numba", "batch_cached_noise_numba"):
+            raise ValueError("interaction_backend must be cached, direct_numba, batch_numba, batch_cached_numba or batch_cached_noise_numba")
+        if interaction_backend in ("direct_numba", "batch_numba", "batch_cached_numba", "batch_cached_noise_numba"):
             if (force_backend != "numba" or overlap_backend != "numba"
                     or relative_positions_backend != "numba"):
                 raise ValueError("direct_numba/batch_numba interaction requires all three Numba backends")

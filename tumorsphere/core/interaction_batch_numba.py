@@ -148,7 +148,7 @@ def batch_interaction_step(self, delta_t):
     from tumorsphere.core.forces_numba import XI_POWER_MAX
     if (not isinstance(self.force, Anisotropic_Grosmann)
             or getattr(self.force, 'force_backend', None) != 'numba'
-            or getattr(self, 'interaction_backend', None) not in ('batch_numba', 'batch_cached_numba')
+            or getattr(self, 'interaction_backend', None) not in ('batch_numba', 'batch_cached_numba', 'batch_cached_noise_numba')
             or not self.movement or self.reproduction):
         raise RuntimeError('batch_numba requires fixed-N Grosmann force_backend=numba')
     if list(self.active_cell_indexes) != list(range(len(self.cells))):
@@ -161,7 +161,7 @@ def batch_interaction_step(self, delta_t):
     n = len(self.cells)
     ptr = [0]
     neighbors = []
-    if getattr(self, 'interaction_backend', None) == 'batch_cached_numba':
+    if getattr(self, 'interaction_backend', None) in ('batch_cached_numba', 'batch_cached_noise_numba'):
         from tumorsphere.core.neighbor_candidate_cache import OrderedNeighborCache
         cache = getattr(self.grid, '_batch_neighbor_cache', None)
         if cache is None:
@@ -194,6 +194,24 @@ def batch_interaction_step(self, delta_t):
         float(self.force.bExp), float(self.force.lambda_core),
         XI_POWER_MAX,
     )
+    # New opt-in path: collect the already-cached mobilities in the
+    # reference cell order, then advance NumPy's RNG once for the sweep.
+    # No RNG is consumed between these draws in the original mechanical loop.
+    use_compiled_noise = (
+        getattr(self, 'interaction_backend', None) == 'batch_cached_noise_numba'
+        and (self.force.translational_noise_enabled
+             or self.force.rotational_noise_enabled)
+    )
+    if use_compiled_noise:
+        from tumorsphere.core.interaction_noise_numba import compiled_noise_for_sweep
+        mobilities = np.empty((n, 3), dtype=np.float64)
+        for i in range(n):
+            mobilities[i] = self.force.calculate_mobilities(
+                self.cells[i], self.cell_area,
+            )
+        translation, rotation = compiled_noise_for_sweep(
+            self, mobilities, delta_t,
+        )
     dif_positions = np.empty((n, 3), dtype=np.float64)
     dif_phies = np.empty(n, dtype=np.float64)
     # The identity matrix is independent of the cell index.
@@ -208,7 +226,10 @@ def batch_interaction_step(self, delta_t):
             self.normalized_overlap_sum_interval += float(np.sum(xi))
             self.normalized_overlap_count_interval += int(xi.size)
         cell = self.cells[i]
-        mP, mS, mR = self.force.calculate_mobilities(cell, self.cell_area)
+        if use_compiled_noise:
+            mP, mS, mR = mobilities[i]
+        else:
+            mP, mS, mR = self.force.calculate_mobilities(cell, self.cell_area)
         # Deliberately retain the original NumPy matmul arithmetic.
         dif_velocity = np.matmul(
             ((mP + mS) / 2) * identity + ((mP - mS) / 2)
@@ -219,10 +240,14 @@ def batch_interaction_step(self, delta_t):
         dif_position = (intrinsic_velocity + dif_velocity) * delta_t
         dif_phi = mR * t[i] * delta_t
         if self.force.translational_noise_enabled or self.force.rotational_noise_enabled:
-            translational_noise, rotational_noise = self.force.calculate_noise(
-                self.cells, self.cell_phies, i, self.cell_area, delta_t, mP, mS, mR)
-            dif_position += translational_noise
-            dif_phi += rotational_noise
+            if use_compiled_noise:
+                dif_position += translation[i] if self.force.translational_noise_enabled else 0
+                dif_phi += rotation[i] if self.force.rotational_noise_enabled else 0
+            else:
+                translational_noise, rotational_noise = self.force.calculate_noise(
+                    self.cells, self.cell_phies, i, self.cell_area, delta_t, mP, mS, mR)
+                dif_position += translational_noise
+                dif_phi += rotational_noise
         if self.force.shrinking is True:
             # Keep NumPy norm, dot and scalar operation order identical to the
             # reference shrink condition; avoid repeating cell.velocity().
