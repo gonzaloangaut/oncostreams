@@ -160,3 +160,28 @@ def test_zero_attempts_does_not_consume_rng():
     run(a, 0, 3)
     run(b, 0, 3)
     compare_bitwise(a, b)
+
+@pytest.mark.parametrize('seed', [17, 42])
+@pytest.mark.parametrize('attempts', [1, 5, 10])
+def test_proposal_angles_bulk_rng_matches_scalar(seed, attempts):
+    """One sweep consumes the same random values and leaves identical RNG state."""
+    scalar = np.random.default_rng(seed)
+    bulk = np.random.default_rng(seed)
+    expected = np.array([
+        scalar.uniform(low=0, high=2 * np.pi) for _ in range(attempts)
+    ])
+    actual = bulk.uniform(low=0, high=2 * np.pi, size=attempts)
+    np.testing.assert_array_equal(actual, expected)
+    assert repr(scalar.bit_generator.state) == repr(bulk.bit_generator.state)
+
+
+@pytest.mark.parametrize('attempts', [1, 5, 10])
+def test_grouped_bulk_angle_rng_preserves_full_trajectory(attempts):
+    """The optimized grouped path agrees bitwise with scalar-RNG fast_numba."""
+    reference = build_culture('fast_numba', attempts=attempts, n=64, rho=0.84)
+    optimized = build_culture('grouped_early_numba', attempts=attempts,
+                              n=64, rho=0.84)
+    for tic in range(1, 17):
+        run(reference, tic - 1, tic)
+        run(optimized, tic - 1, tic)
+        compare_bitwise(reference, optimized)

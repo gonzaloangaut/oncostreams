@@ -108,8 +108,9 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
     )
     eps_i = (new_aspect_ratio ** 2 - 1) / (new_aspect_ratio ** 2 + 1)
 
-    # Proposals deliberately match the reference's individual scalar RNG calls
-    # and scalar NumPy trigonometry, including the original 3D np.mod.
+    # Bulk draws preserve the scalar NumPy RNG sequence and generator state.
+    # Keep the scalar path for a single attempt to avoid an unnecessary array.
+    # Proposal trigonometry and the original 3D np.mod remain unchanged.
     phis = np.empty(n_attempts, dtype=np.float64)
     positions = np.empty((n_attempts, 3), dtype=np.float64)
     proposed_qxx = np.empty(n_attempts, dtype=np.float64)
@@ -118,8 +119,12 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
     bucket_ids = {}
     ptr = [0]
     flat_neighbors = []
+    if n_attempts == 1:
+        new_phis = (self.rng.uniform(low=0, high=2 * np.pi),)
+    else:
+        new_phis = self.rng.uniform(low=0, high=2 * np.pi, size=n_attempts)
     for a in range(n_attempts):
-        new_phi = self.rng.uniform(low=0, high=2 * np.pi)
+        new_phi = new_phis[a]
         new_position = np.mod(
             old_position + np.array([
                 displacement_length * np.cos(new_phi),
