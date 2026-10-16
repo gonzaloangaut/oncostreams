@@ -95,15 +95,11 @@ def grouped_proposal_scores(
     Only minimum-image displacements and overlap evaluation are fused.
     """
     out = np.empty(len(proposed_phies), dtype=np.float64)
-    evaluated = 0
-    possible = 0
-    rejected_early = 0
     half_side = 0.5 * side
     for a in range(len(proposed_phies)):
         bi = trial_buckets[a]
         left = ptr[bi]
         right = ptr[bi + 1]
-        possible += right - left
         maximum = 0.0
         for k in range(left, right):
             j = neighbor_indices[k]
@@ -135,17 +131,15 @@ def grouped_proposal_scores(
                     - 2.0 * mxy * dx * dy + dz ** 2)
             imax = 4.0 * area ** 2 / (np.pi * np.sqrt(beta))
             norm = np.exp(-(ds / beta) * quad)
-            evaluated += 1
             if np.isnan(norm):
                 maximum = np.nan
                 break
             if norm > maximum:
                 maximum = norm
             if early and norm > threshold:
-                rejected_early += 1
                 break
         out[a] = maximum
-    return out, evaluated, possible, rejected_early
+    return out
 
 
 def elongate_from_round_grouped(self, cell_index: int) -> bool:
@@ -203,7 +197,7 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
     indices = np.asarray(flat_neighbors, dtype=np.intp)
     diag, eps = _shared_elongation_geometry(self)
     qs = self.nematic_tensors
-    scores, _, _, _ = grouped_proposal_scores(
+    scores = grouped_proposal_scores(
         positions, phis, proposed_qxx, proposed_qxy,
         trial_buckets, np.asarray(ptr, dtype=np.intp), indices,
         self.cell_positions, self.cell_phies, diag, eps,
