@@ -767,42 +767,6 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
         """We do not record the individual deactivations."""
         pass
 
-    def calculate_order_parameters(self, cells, cell_phies):
-        """
-        Calculate the order parameters for all cells in the current step
-        """
-
-        # List of elongated cells
-        elongated_cells = [cell._index for cell in cells if not cell.is_round]
-        # Calculation of the number of elongated cells and cells
-        num_elongated = len(elongated_cells)
-        num_cells = len(cells)
-
-        # Calculate sin(phi), cos(phi), sin(2phi), cos(2phi) for every elongated cell
-        sin = np.sin(cell_phies[elongated_cells])
-        cos = np.cos(cell_phies[elongated_cells])
-        sin_2 = np.sin(2 * cell_phies[elongated_cells])
-        cos_2 = np.cos(2 * cell_phies[elongated_cells])
-        # Add them
-        sum_sin = sin.sum()
-        sum_cos = cos.sum()
-        sum_sin_2 = sin_2.sum()
-        sum_cos_2 = cos_2.sum()
-        # Calculate the parameters
-        if num_elongated != 0:
-            nematic = np.sqrt(sum_sin_2**2 + sum_cos_2**2) / num_elongated
-            polar = np.sqrt(sum_sin**2 + sum_cos**2) / num_elongated
-            nematic_2 = np.sqrt(sum_sin_2**2 + sum_cos_2**2) / num_cells
-            polar_2 = np.sqrt(sum_sin**2 + sum_cos**2) / num_cells
-        else:
-            nematic = 0
-            polar = 0
-            nematic_2 = 0
-            polar_2 = 0
-        fraction_elongated = num_cells / num_elongated
-
-        return nematic, polar, nematic_2, polar_2, fraction_elongated
-
     def record_culture_state(
         self,
         tic,
