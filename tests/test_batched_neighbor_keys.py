@@ -4,7 +4,7 @@ from copy import deepcopy
 import numpy as np
 import pytest
 
-from tests.test_batch_cached_noise_numba import make_culture, run
+from tests._helpers import make_batch_culture as make_culture, run_steps as run
 
 
 @pytest.mark.parametrize("dimension", [2, 3])

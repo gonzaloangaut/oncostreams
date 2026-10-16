@@ -4,8 +4,10 @@ import pickle
 import numpy as np
 import pytest
 
-from tests.test_elongation_grouped_numba import (
-    build_culture, compare_bitwise, run,
+from tests._helpers import (
+    make_elongation_culture as build_culture,
+    assert_cultures_bitwise_equal as compare_bitwise,
+    run_steps as run,
 )
 from tumorsphere.core.elongation_grouped_numba import (
     _cached_elongation_neighbors, _shared_elongation_geometry,

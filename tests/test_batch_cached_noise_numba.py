@@ -4,20 +4,16 @@ Run: python -m pytest -q tests/test_batch_cached_noise_numba.py
 """
 from __future__ import annotations
 
-import math
 import pickle
 
 import numpy as np
 import pytest
 
-from tumorsphere.core.culture import Culture
-from tumorsphere.core.forces import Anisotropic_Grosmann
-from tumorsphere.core.output import (
-    DatOutput_order_parameters,
-    DatOutput_position_aspectratio,
-    OutputDemux,
+from tests._helpers import (
+    assert_cultures_bitwise_equal,
+    make_batch_culture,
+    run_steps,
 )
-from tumorsphere.core.spatial_hash_grid import SpatialHashGrid
 from tumorsphere.core.interaction_noise_numba import _numba_noise_all
 
 
@@ -25,75 +21,10 @@ BASELINE = 'batch_cached_numba'
 CANDIDATE = 'batch_cached_noise_numba'
 
 
-def make_culture(backend, *, seed=17, dimension=3, n=64,
-                 eta=0.033, d_phi=None, out=None, rho=0.84):
-    threshold = math.exp(-1)
-    ar_max = 2.7
-    side = math.sqrt(n * math.pi / rho)
-    grid = SpatialHashGrid(
-        culture=None, bounds=side,
-        cube_size=2 * math.sqrt(ar_max * (-math.log(threshold))),
-        torus=True, spatial_dimension=dimension,
-    )
-    force = Anisotropic_Grosmann(
-        kRep=2.5, bExp=3, noise_eta=eta, d_phi=d_phi,
-        shrinking=True, lambda_core=1.0,
-    )
-    force.force_backend = 'numba'
-    outputs = [] if out is None else [
-        DatOutput_order_parameters('identical', str(out), save_step=4),
-        DatOutput_position_aspectratio('identical', str(out), save_step=4),
-    ]
-    c = Culture(
-        output=OutputDemux('identical', outputs),
-        force=force,
-        grid=grid,
-        rng_seed=seed,
-        initial_number_of_cells=n,
-        initial_fraction_elongated=0.5,
-        reproduction=False,
-        movement=True,
-        deformation=True,
-        stabilization_time=0,
-        overlap_threshold_ratio=threshold,
-        delta_t=0.005,
-        deformation_attempt_period=0.01,
-        aspect_ratio_max=ar_max,
-        trabajo_final=True,
-        cell_max_def_attempts=1,
-        interaction_backend=backend,
-        elongation_backend='fast_numba',
-    )
-    c.overlap_backend = 'numba'
-    c.relative_positions_backend = 'numba'
-    return c
-
-
-def run(c, first, last):
-    c.simulate(num_times=last, start_tic=first, checkpoint_path=None)
-
-
-def assert_same(a, b):
-    for attr in ('cell_positions', 'cell_phies', 'nematic_tensors',
-                 'cell_instantaneous_velocities'):
-        x = getattr(a, attr)
-        y = getattr(b, attr)
-        assert x.shape == y.shape and x.dtype == y.dtype
-        assert x.tobytes() == y.tobytes(), attr
-    for attr in ('aspect_ratio', 'anisotropy', 'squared_diagonal',
-                 'is_round', 'shrink'):
-        assert [getattr(c, attr) for c in a.cells] == [
-            getattr(c, attr) for c in b.cells
-        ], attr
-    assert repr(a.rng.bit_generator.state) == repr(b.rng.bit_generator.state)
-    assert a.deformation_event_counts == b.deformation_event_counts
-    assert [(k, list(v)) for k, v in a.grid.hash_table.items()] == [
-        (k, list(v)) for k, v in b.grid.hash_table.items()
-    ]
-    for attr in ('max_normalized_overlap_interval',
-                 'normalized_overlap_sum_interval',
-                 'normalized_overlap_count_interval'):
-        assert getattr(a, attr) == getattr(b, attr), attr
+# Keep names used by existing tests; construction and assertions are shared.
+make_culture = make_batch_culture
+run = run_steps
+assert_same = assert_cultures_bitwise_equal
 
 
 def test_synthetic_noise_algebra_and_rng_order():
