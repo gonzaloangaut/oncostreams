@@ -86,7 +86,7 @@ def grouped_proposal_scores(
     proposed_positions, proposed_phies, proposed_qxx, proposed_qxy,
     trial_buckets, ptr, neighbor_indices,
     positions, phies, diagonals, anisotropies, qxx, qxy,
-    d_i, eps_i, side, area, threshold, early,
+    d_i, eps_i, side, threshold,
 ):
     """Compute all independent proposals of ONE cell within one Numba call.
 
@@ -129,14 +129,13 @@ def grouped_proposal_scores(
             mxy = (wi * proposed_qxy[a] + wj * qxy[j]) / ds
             quad = ((1.0 - mxx) * dx ** 2 + (1.0 + mxx) * dy ** 2
                     - 2.0 * mxy * dx * dy + dz ** 2)
-            imax = 4.0 * area ** 2 / (np.pi * np.sqrt(beta))
             norm = np.exp(-(ds / beta) * quad)
             if np.isnan(norm):
                 maximum = np.nan
                 break
             if norm > maximum:
                 maximum = norm
-            if early and norm > threshold:
+            if norm > threshold:
                 break
         out[a] = maximum
     return out
@@ -203,8 +202,8 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
         self.cell_positions, self.cell_phies, diag, eps,
         np.ascontiguousarray(qs[:, 0, 0]),
         np.ascontiguousarray(qs[:, 0, 1]),
-        float(d_i), float(eps_i), float(self.side), float(self.cell_area),
-        float(self.overlap_threshold_ratio), True,
+        float(d_i), float(eps_i), float(self.side),
+        float(self.overlap_threshold_ratio),
     )
 
     best_score = np.inf
