@@ -338,13 +338,20 @@ class Culture:
         self.overlap_backend = "numpy"
         # Default preserves the historical x/y periodic displacement path.
         self.relative_positions_backend = "numpy"
-        if interaction_backend not in ("cached", "direct_numba", "batch_numba", "batch_cached_numba", "batch_cached_noise_numba"):
-            raise ValueError("interaction_backend must be cached, direct_numba, batch_numba, batch_cached_numba or batch_cached_noise_numba")
+        if interaction_backend not in ("cached", "batch_cached_noise_numba"):
+            raise ValueError(
+                "interaction_backend must be 'cached' or "
+                "'batch_cached_noise_numba'. Historical Numba backends "
+                "require the pre-cleanup branch."
+            )
         self.interaction_backend = interaction_backend
-        if elongation_backend not in ("standard", "fast_numba", "grouped_early_numba"):
-            raise ValueError("elongation_backend must be standard, fast_numba or grouped_early_numba")
-        if elongation_backend in ("fast_numba", "grouped_early_numba") and reproduction:
-            raise ValueError("fast_numba elongation requires fixed cell count")
+        if elongation_backend not in ("standard", "grouped_early_numba"):
+            raise ValueError(
+                "elongation_backend must be 'standard' or 'grouped_early_numba'. "
+                "Historical Numba backends require the pre-cleanup branch."
+            )
+        if elongation_backend == "grouped_early_numba" and reproduction:
+            raise ValueError("grouped_early_numba requires fixed cell count")
         self.elongation_backend = elongation_backend
 
         # cell attributes
@@ -1100,9 +1107,6 @@ class Culture:
         proposed aspect ratio. Exact ties are resolved randomly.
         """
         backend = getattr(self, "elongation_backend", "standard")
-        if backend == "fast_numba":
-            from tumorsphere.core.elongation_numba import elongate_from_round_fast
-            return elongate_from_round_fast(self, cell_index)
         if backend == "grouped_early_numba":
             from tumorsphere.core.elongation_grouped_numba import (
                 elongate_from_round_grouped,
@@ -1622,10 +1626,7 @@ class Culture:
         -----
         """
         backend = getattr(self, "interaction_backend", "cached")
-        if backend == "direct_numba":
-            from tumorsphere.core.interaction_direct_numba import direct_interaction
-            return direct_interaction(self, cell_index, delta_t)
-        if backend in ("batch_numba", "batch_cached_numba", "batch_cached_noise_numba"):
+        if backend == "batch_cached_noise_numba":
             raise RuntimeError("Batch backends process full sweeps; call Culture.simulate()")
         if backend != "cached":
             raise ValueError(f"Unknown interaction_backend: {backend!r}")
@@ -2368,7 +2369,7 @@ class Culture:
                                 )
                                 self.steps_without_deformation = 0
 
-                if getattr(self, "interaction_backend", "cached") in ("batch_numba", "batch_cached_numba", "batch_cached_noise_numba"):
+                if getattr(self, "interaction_backend", "cached") == "batch_cached_noise_numba":
                     # Evaluate all ordered pairs in one compiled sweep. The
                     # returned arrays are ordinary state increments: no cache
                     # is stored on Culture or serialized into checkpoints.

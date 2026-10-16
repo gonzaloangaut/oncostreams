@@ -1,27 +1,19 @@
-"""Frozen fixed-N dynamics regressions independent of retired fast backends.
+"""Frozen fixed-N dynamics regressions independent of retired backends.
 
-Generate the fixture ONCE, before removing the old backends:
-
-    python -m tests.test_golden_dynamics --write --verify-legacy
-    python -m pytest -q tests/test_golden_dynamics.py
-
-Commit the resulting ``tests/data/fixed_n_dynamics_v1.npz``. Pytest never
-regenerates it. Replacing a fixture requires explicit scientific review.
+The committed ``tests/data/fixed_n_dynamics_v1.npz`` was generated and
+verified before backend retirement. Do not regenerate the fixture in normal
+testing; changes require separate scientific review on the historical branch.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import platform
-import subprocess
-import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from tests._helpers import (
-    assert_cultures_bitwise_equal,
     fixed_n_grosmann_culture,
     run_steps,
 )
@@ -62,22 +54,17 @@ OVERLAP_FIELDS = (
 )
 
 
-def _culture(settings, *, legacy=False):
-    """The legacy path exists only while generating/verifying the fixture."""
+def _culture(settings):
+    """Construct the production configuration recorded in the fixture."""
     return fixed_n_grosmann_culture(
-        interaction_backend=(
-            "batch_cached_numba" if legacy else "batch_cached_noise_numba"
-        ),
-        elongation_backend=(
-            "fast_numba" if legacy else "grouped_early_numba"
-        ),
+        interaction_backend="batch_cached_noise_numba",
+        elongation_backend="grouped_early_numba",
         seed=settings["seed"], n=64, rho=settings["rho"],
         dimension=settings["dimension"],
         eta=settings["eta"], d_phi=settings["d_phi"],
         attempts=settings["attempts"], deformation_period=0.005,
         output_dir=None,
     )
-
 
 def _state(culture):
     """Copy continuous variables and extract discrete bookkeeping separately."""
@@ -107,82 +94,6 @@ def _state(culture):
     return arrays, metadata
 
 
-def _git_commit():
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            text=True, stderr=subprocess.DEVNULL,
-        ).strip()
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
-
-
-def _json_numpy_scalar(value):
-    """Serialize NumPy scalar values in the frozen JSON manifest."""
-    if isinstance(value, np.generic):
-        return value.item()
-    raise TypeError(f"Cannot JSON serialize {type(value).__name__}")
-
-
-def write_fixture(*, verify_legacy=False, overwrite=False):
-    if FIXTURE.exists() and not overwrite:
-        raise SystemExit(
-            f"Refusing to replace existing reference {FIXTURE}. "
-            "Use --overwrite only after reviewing the change."
-        )
-
-    import numba
-
-    manifest = {
-        "schema": 1,
-        "git_commit": _git_commit(),
-        "python": platform.python_version(),
-        "numpy": np.__version__,
-        "numba": numba.__version__,
-        "platform": platform.machine(),
-        "steps": list(STEPS),
-        "cases": CASES,
-        "legacy_verified": bool(verify_legacy),
-        "snapshots": {},
-    }
-    payload = {}
-    for name, settings in CASES.items():
-        current = _culture(settings)
-        old = _culture(settings, legacy=True) if verify_legacy else None
-        for step in range(1, STEPS[-1] + 1):
-            run_steps(current, step - 1, step)
-            if old is not None:
-                run_steps(old, step - 1, step)
-                assert_cultures_bitwise_equal(current, old)
-            if step not in STEPS:
-                continue
-            arrays, metadata = _state(current)
-            label = f"{name}_step_{step}"
-            for attr, array in arrays.items():
-                payload[f"{label}__{attr}"] = array
-            manifest["snapshots"][label] = metadata
-        print(f"Captured {name} (legacy comparison: {bool(verify_legacy)})")
-
-    FIXTURE.parent.mkdir(parents=True, exist_ok=True)
-    payload["manifest"] = np.asarray(
-        json.dumps(manifest, sort_keys=True, default=_json_numpy_scalar)
-    )
-    np.savez_compressed(FIXTURE, **payload)
-    print(f"Saved {FIXTURE} from {manifest['git_commit']}")
-
-
-def test_numpy_scalars_can_be_serialized_in_manifest():
-    """Grid indices and statistics may use NumPy scalar types."""
-    values = {
-        "index": np.int64(42),
-        "count": np.uint32(3),
-        "overlap": np.float32(0.25),
-        "flag": np.bool_(True),
-    }
-    encoded = json.dumps(values, sort_keys=True, default=_json_numpy_scalar)
-    assert json.loads(encoded) == {
-        "index": 42, "count": 3, "overlap": 0.25, "flag": True,
-    }
 
 
 @pytest.fixture(scope="module")
@@ -190,8 +101,7 @@ def golden():
     if not FIXTURE.exists():
         pytest.fail(
             f"Missing frozen regression fixture: {FIXTURE}. "
-            "Generate it before removing the legacy backends with "
-            "`python -m tests.test_golden_dynamics --write --verify-legacy`."
+            "Restore the committed fixture from the pre-cleanup branch."
         )
     with np.load(FIXTURE, allow_pickle=False) as archive:
         manifest = json.loads(str(archive["manifest"].item()))
@@ -257,19 +167,3 @@ def test_frozen_dynamics(case_name, golden):
                 assert got == value, (label, key)
             else:
                 assert np.isclose(got, value, rtol=1e-12, atol=1e-12), (label, key)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--write", action="store_true",
-                        help="Explicitly create a frozen regression fixture.")
-    parser.add_argument("--verify-legacy", action="store_true",
-                        help="Compare every generated step with old backends.")
-    parser.add_argument("--overwrite", action="store_true",
-                        help="Explicitly replace an existing golden fixture.")
-    args = parser.parse_args()
-    if not args.write:
-        parser.error("Pass --write to create the fixture; pytest only reads it.")
-    if not args.verify_legacy:
-        parser.error("First fixture must be generated with --verify-legacy.")
-    write_fixture(verify_legacy=args.verify_legacy, overwrite=args.overwrite)

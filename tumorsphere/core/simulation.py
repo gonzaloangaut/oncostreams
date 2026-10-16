@@ -391,21 +391,36 @@ class Simulation:
             )
         self.relative_positions_backend = relative_positions_backend
 
-        if interaction_backend not in ("cached", "direct_numba", "batch_numba", "batch_cached_numba", "batch_cached_noise_numba"):
-            raise ValueError("interaction_backend must be cached, direct_numba, batch_numba, batch_cached_numba or batch_cached_noise_numba")
-        if interaction_backend in ("direct_numba", "batch_numba", "batch_cached_numba", "batch_cached_noise_numba"):
+        if interaction_backend not in ("cached", "batch_cached_noise_numba"):
+            raise ValueError(
+                "interaction_backend must be 'cached' or "
+                "'batch_cached_noise_numba'. Historical Numba backends "
+                "require the pre-cleanup branch."
+            )
+        if interaction_backend == "batch_cached_noise_numba":
             if (force_backend != "numba" or overlap_backend != "numba"
                     or relative_positions_backend != "numba"):
-                raise ValueError("direct_numba/batch_numba interaction requires all three Numba backends")
+                raise ValueError(
+                    "batch_cached_noise_numba requires all three Numba backends"
+                )
             if reproduction or not movement:
-                raise ValueError("direct_numba/batch_numba interaction requires fixed-N movement")
-            if forces is None or any(not isinstance(force, Anisotropic_Grosmann)
-                                     for force in forces):
-                raise ValueError("direct_numba/batch_numba supports only Anisotropic_Grosmann forces")
+                raise ValueError(
+                    "batch_cached_noise_numba requires fixed-N movement"
+                )
+            if forces is None or any(
+                not isinstance(force, Anisotropic_Grosmann)
+                for force in forces
+            ):
+                raise ValueError(
+                    "batch_cached_noise_numba only supports Anisotropic_Grosmann"
+                )
         self.interaction_backend = interaction_backend
-        if elongation_backend not in ("standard", "fast_numba", "grouped_early_numba"):
-            raise ValueError("elongation_backend must be standard, fast_numba or grouped_early_numba")
-        if elongation_backend in ("fast_numba", "grouped_early_numba"):
+        if elongation_backend not in ("standard", "grouped_early_numba"):
+            raise ValueError(
+                "elongation_backend must be 'standard' or 'grouped_early_numba'. "
+                "Historical Numba backends require the pre-cleanup branch."
+            )
+        if elongation_backend == "grouped_early_numba":
             if overlap_backend != "numba":
                 raise ValueError("Numba elongation requires overlap_backend=numba")
             if reproduction:

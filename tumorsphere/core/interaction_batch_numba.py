@@ -1,13 +1,7 @@
-"""Optional fixed-N batch interaction backend for Grosmann dynamics.
+"""Fixed-N, order-preserving, cached and vectorized Grosmann interactions.
 
-Design constraints:
-* does not alter Culture state except the same physical updates as direct_numba;
-* identical neighbor order to direct_numba, including sorted lower-index neighbors;
-* identical scalar algebra in overlap_canonical/grosmann_force_torque_kernel;
-* same NumPy post-force mobility, noise and shrink updates in ascending cell order;
-* no fastmath, parallel reductions or changes in RNG draws.
-
-This backend is opt-in. Use interaction_backend="batch_numba" in Culture or Simulation.
+Implements interaction_backend="batch_cached_noise_numba", with or without
+translational/rotational noise. Pair-force arithmetic is unchanged by cleanup.
 """
 from __future__ import annotations
 
@@ -209,37 +203,23 @@ def batch_interaction_step(self, delta_t):
     from tumorsphere.core.forces_numba import XI_POWER_MAX
     if (not isinstance(self.force, Anisotropic_Grosmann)
             or getattr(self.force, 'force_backend', None) != 'numba'
-            or getattr(self, 'interaction_backend', None) not in ('batch_numba', 'batch_cached_numba', 'batch_cached_noise_numba')
+            or getattr(self, 'interaction_backend', None) != 'batch_cached_noise_numba'
             or not self.movement or self.reproduction):
-        raise RuntimeError('batch_numba requires fixed-N Grosmann force_backend=numba')
+        raise RuntimeError('batch_cached_noise_numba requires fixed-N Grosmann force_backend=numba')
     if list(self.active_cell_indexes) != list(range(len(self.cells))):
         raise RuntimeError('Requires cells active in ascending index order')
     if self.relative_positions_backend != 'numba' or self.overlap_backend != 'numba':
         raise RuntimeError('Requires Numba relative positions and overlap backends')
     # The validated canonical pair semantics assume planar cells.
     if np.any(self.cell_positions[:, 2] != 0.0):
-        raise RuntimeError('batch_numba requires planar positions (z=0)')
+        raise RuntimeError('batch_cached_noise_numba requires planar positions (z=0)')
     n = len(self.cells)
-    if getattr(self, 'interaction_backend', None) in ('batch_cached_numba', 'batch_cached_noise_numba'):
-        from tumorsphere.core.neighbor_candidate_cache import OrderedNeighborCache
-        cache = getattr(self.grid, '_batch_neighbor_cache', None)
-        if cache is None:
-            cache = OrderedNeighborCache()
-            self.grid._batch_neighbor_cache = cache
-        ptr, neighbors = cache.ordered_csr(self.grid, self.cell_positions)
-    else:
-        # Preserve the original batch_numba path without changing its algebra.
-        ptr = [0]
-        neighbors = []
-        for i in range(n):
-            # EXACT same order as direct_interaction, including OrderedIndexSet iteration.
-            candidates = [int(j) for j in self.grid.find_neighbors(
-                position=self.cell_positions[i]) if int(j) != i]
-            earlier = sorted(j for j in candidates if j < i)
-            later = [j for j in candidates if j > i]
-            neighbors.extend(earlier)
-            neighbors.extend(later)
-            ptr.append(len(neighbors))
+    from tumorsphere.core.neighbor_candidate_cache import OrderedNeighborCache
+    cache = getattr(self.grid, '_batch_neighbor_cache', None)
+    if cache is None:
+        cache = OrderedNeighborCache()
+        self.grid._batch_neighbor_cache = cache
+    ptr, neighbors = cache.ordered_csr(self.grid, self.cell_positions)
     geometry_d = np.asarray([c.squared_diagonal for c in self.cells], dtype=np.float64)
     geometry_e = np.asarray([c.anisotropy for c in self.cells], dtype=np.float64)
     qxx = np.ascontiguousarray(self.nematic_tensors[:, 0, 0])
@@ -253,77 +233,20 @@ def batch_interaction_step(self, delta_t):
         float(self.force.bExp), float(self.force.lambda_core),
         XI_POWER_MAX,
     )
-    # The compiled-noise batch backend also uses vectorized postprocessing
-    # when noise is disabled. No RNG draws occur in this case.
-    use_compiled_noise = (
-        getattr(self, 'interaction_backend', None) == 'batch_cached_noise_numba'
-        and (self.force.translational_noise_enabled
-             or self.force.rotational_noise_enabled)
-    )
-    if getattr(self, 'interaction_backend', None) == 'batch_cached_noise_numba':
-        mobilities = np.empty((n, 3), dtype=np.float64)
-        for i in range(n):
-            mobilities[i] = self.force.calculate_mobilities(
-                self.cells[i], self.cell_area,
-            )
-        if use_compiled_noise:
-            from tumorsphere.core.interaction_noise_numba import compiled_noise_for_sweep
-            translation, rotation = compiled_noise_for_sweep(
-                self, mobilities, delta_t,
-            )
-        else:
-            translation = rotation = None
-        return _vectorized_compiled_noise_postprocess(
-            self, delta_t, f, t, mobilities, translation, rotation, xis,
-        )
-    dif_positions = np.empty((n, 3), dtype=np.float64)
-    dif_phies = np.empty(n, dtype=np.float64)
-    # The identity matrix is independent of the cell index.
-    identity = np.identity(3)
-    collect = getattr(self.output, 'collect_overlap_statistics', True)
-    # xi contains the overlaps of every directed candidate pair in cell order.
-    # Collect identical statistics with a single NumPy reduction per sweep,
-    # avoiding two small-array NumPy calls for each cell. The sum may differ
-    # in its final floating-point bits because the reduction order changes.
-    if collect and xis.size:
-        self.max_normalized_overlap_interval = max(
-            self.max_normalized_overlap_interval, float(np.max(xis)))
-        self.normalized_overlap_sum_interval += float(np.sum(xis))
-        self.normalized_overlap_count_interval += int(xis.size)
-    # Keep noise and shrink calls in the original cell order.
+    # Vectorized postprocessing is used both with and without noise.
+    # Zero-noise sweeps do not consume any random numbers.
+    mobilities = np.empty((n, 3), dtype=np.float64)
     for i in range(n):
-        cell = self.cells[i]
-        if use_compiled_noise:
-            mP, mS, mR = mobilities[i]
-        else:
-            mP, mS, mR = self.force.calculate_mobilities(cell, self.cell_area)
-        # Deliberately retain the original NumPy matmul arithmetic.
-        dif_velocity = np.matmul(
-            ((mP + mS) / 2) * identity + ((mP - mS) / 2)
-            * self.nematic_tensors[i], f[i],
+        mobilities[i] = self.force.calculate_mobilities(
+            self.cells[i], self.cell_area,
         )
-        # Reuse the same computed intrinsic velocity for displacement and shrink.
-        intrinsic_velocity = cell.velocity()
-        dif_position = (intrinsic_velocity + dif_velocity) * delta_t
-        dif_phi = mR * t[i] * delta_t
-        if self.force.translational_noise_enabled or self.force.rotational_noise_enabled:
-            if use_compiled_noise:
-                dif_position += translation[i] if self.force.translational_noise_enabled else 0
-                dif_phi += rotation[i] if self.force.rotational_noise_enabled else 0
-            else:
-                translational_noise, rotational_noise = self.force.calculate_noise(
-                    self.cells, self.cell_phies, i, self.cell_area, delta_t, mP, mS, mR)
-                dif_position += translational_noise
-                dif_phi += rotational_noise
-        if self.force.shrinking is True:
-            # Keep NumPy norm, dot and scalar operation order identical to the
-            # reference shrink condition; avoid repeating cell.velocity().
-            speed = np.linalg.norm(intrinsic_velocity)
-            if speed > 0:
-                dif_velocity_project = np.dot(dif_velocity, intrinsic_velocity) / speed
-            else:
-                dif_velocity_project = 0
-            cell.shrink = not cell.is_round and speed + dif_velocity_project <= 0
-        dif_positions[i] = dif_position
-        dif_phies[i] = dif_phi
-    return dif_positions, dif_phies
+    if self.force.translational_noise_enabled or self.force.rotational_noise_enabled:
+        from tumorsphere.core.interaction_noise_numba import compiled_noise_for_sweep
+        translation, rotation = compiled_noise_for_sweep(
+            self, mobilities, delta_t,
+        )
+    else:
+        translation = rotation = None
+    return _vectorized_compiled_noise_postprocess(
+        self, delta_t, f, t, mobilities, translation, rotation, xis,
+    )

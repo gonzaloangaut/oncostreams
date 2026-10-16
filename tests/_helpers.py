@@ -69,9 +69,9 @@ def make_batch_culture(
     backend, *, seed=17, dimension=3, n=64, eta=0.033,
     d_phi=None, out=None, rho=0.84,
 ):
-    """Preserve the existing batch-interaction test defaults."""
+    """Use the final grouped-elongation implementation in interaction tests."""
     return fixed_n_grosmann_culture(
-        interaction_backend=backend, elongation_backend='fast_numba',
+        interaction_backend=backend, elongation_backend='grouped_early_numba',
         seed=seed, n=n, rho=rho, dimension=dimension,
         eta=eta, d_phi=d_phi, attempts=1,
         deformation_period=0.01, output_dir=out,

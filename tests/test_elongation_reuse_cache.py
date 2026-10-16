@@ -40,15 +40,18 @@ def assert_bucket_cache_current(culture):
 @pytest.mark.parametrize('attempts', [1, 5, 10])
 @pytest.mark.parametrize('dimension', [2, 3])
 def test_grouped_caches_preserve_bitwise_steps(rho, attempts, dimension):
-    # fast_numba does not use the grouped path or the new caches.
-    baseline = build_culture('fast_numba', n=64, rho=rho,
-                             attempts=attempts, dimension=dimension)
+    # Compare persistent caches against a run that deliberately rebuilds
+    # elongation caches every step. The optimized physics must not change.
+    rebuilt = build_culture('grouped_early_numba', n=64, rho=rho,
+                            attempts=attempts, dimension=dimension)
     optimized = build_culture('grouped_early_numba', n=64, rho=rho,
                               attempts=attempts, dimension=dimension)
     for tic in range(1, 21):
-        run(baseline, tic - 1, tic)
+        rebuilt.grid._elongation_geometry_cache = None
+        rebuilt.grid._elongation_bucket_cache = None
+        run(rebuilt, tic - 1, tic)
         run(optimized, tic - 1, tic)
-        compare_bitwise(baseline, optimized)
+        compare_bitwise(rebuilt, optimized)
         assert_geometry_cache_current(optimized)
         assert_bucket_cache_current(optimized)
 

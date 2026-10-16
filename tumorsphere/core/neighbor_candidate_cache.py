@@ -36,7 +36,7 @@ class OrderedNeighborCache:
         return ordered
 
     def candidates(self, grid, index: int, position):
-        """Return candidates in precisely the batch_numba reference order."""
+        """Return candidates in the validated ordered reference sequence."""
         center = grid.get_hash_key(position)
         version = self._versions.get(center, 0)
         saved = self._entries.get(index)
@@ -74,7 +74,7 @@ class OrderedNeighborCache:
     def modified_bucket(self, grid, position) -> None:
         """Invalidate centers affected by a successful bucket add/remove."""
         if not (grid.torus and grid.bounds is not None):
-            raise RuntimeError('batch_cached_numba requires a periodic bounded grid')
+            raise RuntimeError('Optimized batch interaction requires a periodic bounded grid')
 
         changed = grid.get_bucket_position(position)
         # grid.offsets contains all Moore-neighborhood offsets in 2D or 3D.
