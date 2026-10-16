@@ -96,12 +96,8 @@ def run_steps(culture, start, end):
     culture.simulate(num_times=end, start_tic=start, checkpoint_path=None)
 
 
-def assert_cultures_bitwise_equal(a, b, *, check_overlap_statistics=True):
-    """Compare physical state, cell state, ordered grid, and RNG exactly.
-
-    check_overlap_statistics=False retains the narrower contract of the
-    original test_batch_cached_numba._equal_state helper.
-    """
+def assert_cultures_bitwise_equal(a, b):
+    """Compare physical state, cell state, ordered grid, and RNG exactly."""
     for attr in (
         'cell_positions', 'cell_phies', 'nematic_tensors',
         'cell_instantaneous_velocities',
@@ -121,10 +117,9 @@ def assert_cultures_bitwise_equal(a, b, *, check_overlap_statistics=True):
     assert [(key, list(bucket)) for key, bucket in a.grid.hash_table.items()] == [
         (key, list(bucket)) for key, bucket in b.grid.hash_table.items()
     ]
-    if check_overlap_statistics:
-        for attr in (
-            'max_normalized_overlap_interval',
-            'normalized_overlap_sum_interval',
-            'normalized_overlap_count_interval',
-        ):
-            assert getattr(a, attr) == getattr(b, attr), attr
+    for attr in (
+        'max_normalized_overlap_interval',
+        'normalized_overlap_sum_interval',
+        'normalized_overlap_count_interval',
+    ):
+        assert getattr(a, attr) == getattr(b, attr), attr
