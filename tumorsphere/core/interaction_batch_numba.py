@@ -8,6 +8,9 @@ from __future__ import annotations
 import numpy as np
 from numba import njit
 
+# Saturation used by the NumPy reference for core amplification.
+XI_POWER_MAX = float(np.nextafter(1.0, 0.0))
+
 
 @njit(cache=True, fastmath=False)
 def _batch_pair_forces(positions, phies, diagonals, anisotropies, qxx, qxy,
@@ -199,7 +202,6 @@ def _vectorized_compiled_noise_postprocess(self, delta_t, f, t, mobilities,
 def batch_interaction_step(self, delta_t):
     """Return all step displacements, preserving the original per-cell RNG order."""
     from tumorsphere.core.forces import Anisotropic_Grosmann
-    from tumorsphere.core.forces_numba import XI_POWER_MAX
     if (not isinstance(self.force, Anisotropic_Grosmann)
             or getattr(self.force, 'force_backend', None) != 'numba'
             or getattr(self, 'interaction_backend', None) != 'batch_cached_noise_numba'
