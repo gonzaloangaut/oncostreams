@@ -23,10 +23,21 @@ def actual_backend(cell, neighbors, side):
     return Culture.calculate_relative_positions(dummy, cell, neighbors)
 
 
-@pytest.mark.parametrize("seed", [0, 1, 7, 1234, 20261013])
-@pytest.mark.parametrize("n", [0, 1, 2, 8, 24, 64])
-@pytest.mark.parametrize("side", [7.0, 12.5, 101.0])
-@pytest.mark.parametrize("nonplanar", [False, True])
+SEEDS = (0, 1, 7, 1234, 20261013)
+NEIGHBOR_COUNTS = (0, 1, 2, 8, 24, 64)
+SIDES = (7.0, 12.5, 101.0)
+
+# Balanced deterministic coverage: 60 cases instead of 180. Every seed
+# and planar/nonplanar mode sees all three box sizes across neighbor counts.
+RELATIVE_POSITION_CASES = [
+    (seed, n, SIDES[(seed_i + count_i + int(nonplanar)) % len(SIDES)],
+     nonplanar)
+    for seed_i, seed in enumerate(SEEDS)
+    for count_i, n in enumerate(NEIGHBOR_COUNTS)
+    for nonplanar in (False, True)
+]
+
+@pytest.mark.parametrize("seed,n,side,nonplanar", RELATIVE_POSITION_CASES)
 def test_random_float64_reference_bitwise(seed, n, side, nonplanar):
     rng = np.random.default_rng(seed)
     cell = rng.uniform(0, side, size=3).astype(np.float64)

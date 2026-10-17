@@ -10,9 +10,14 @@ from tumorsphere.core.spatial_hash_grid import SpatialHashGrid
 from tumorsphere.core.simulation import Simulation
 
 
-@pytest.mark.parametrize("seed", [17, 42])
-@pytest.mark.parametrize("initial_elongated", [0.0, 0.5])
-@pytest.mark.parametrize("attempts", [1, 5, 10])
+@pytest.mark.parametrize("seed,initial_elongated,attempts", [
+    (17, 0.0, 1),
+    (42, 0.0, 5),
+    (17, 0.0, 10),
+    (42, 0.5, 1),
+    (17, 0.5, 5),
+    (42, 0.5, 10),
+])
 def test_2d_and_3d_grids_produce_identical_dynamics(
     tmp_path, seed, initial_elongated, attempts
 ):

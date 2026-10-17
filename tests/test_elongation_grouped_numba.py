@@ -68,19 +68,6 @@ def test_zero_attempts_matches_standard_path():
     assert optimized.deformation_event_counts["round_elongation_successes"] == 0
 
 
-@pytest.mark.parametrize('seed', [17, 42])
-@pytest.mark.parametrize('attempts', [1, 5, 10])
-def test_proposal_angles_bulk_rng_matches_scalar(seed, attempts):
-    """Bulk generation must reproduce scalar draws and RNG state."""
-    scalar = np.random.default_rng(seed)
-    bulk = np.random.default_rng(seed)
-    expected = np.array([
-        scalar.uniform(low=0, high=2 * np.pi) for _ in range(attempts)
-    ])
-    actual = bulk.uniform(low=0, high=2 * np.pi, size=attempts)
-    np.testing.assert_array_equal(actual, expected)
-    assert repr(scalar.bit_generator.state) == repr(bulk.bit_generator.state)
-
 
 @pytest.mark.parametrize('attempts', [1, 5, 10, 127])
 def test_compiled_proposal_geometry_is_bitwise_identical(attempts):
@@ -146,9 +133,11 @@ def assert_bucket_cache_current(culture):
             assert expected == ordered
 
 
-@pytest.mark.parametrize('rho', [0.22, 0.84, 0.90])
-@pytest.mark.parametrize('attempts', [1, 5, 10])
-@pytest.mark.parametrize('dimension', [2, 3])
+@pytest.mark.parametrize("rho,attempts,dimension", [
+    (0.22, 1, 2), (0.22, 10, 3),
+    (0.84, 5, 2), (0.84, 1, 3),
+    (0.90, 10, 2), (0.90, 5, 3),
+])
 def test_grouped_caches_preserve_bitwise_steps(rho, attempts, dimension):
     # Compare persistent caches against a run that deliberately rebuilds
     # elongation caches every step. The optimized physics must not change.

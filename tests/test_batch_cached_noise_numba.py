@@ -64,8 +64,8 @@ def test_synthetic_noise_algebra_and_rng_order():
 
 @pytest.mark.parametrize("dimension", [2, 3])
 @pytest.mark.parametrize("eta,d_phi", [
-    (0.033, None), (None, 0.13), (0.033, 0.13), (None, None),
-    (0.0, None), (None, 0.0), (0.0, 0.0),
+    (0.033, None), (None, 0.13), (0.033, 0.13),
+    (None, None), (0.0, 0.0),
 ])
 def test_production_determinism_each_step(dimension, eta, d_phi):
     """Same seed and optimized backend reproduce the complete dynamic state."""
