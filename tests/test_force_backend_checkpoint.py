@@ -8,12 +8,28 @@ import pickle
 import numpy as np
 import pytest
 
+from tests._helpers import assert_cultures_bitwise_equal
 from tumorsphere.core.forces import Anisotropic_Grosmann, Spring_Force
 from tumorsphere.core.simulation import Simulation
 
 
-def make_simulation(force_backend, steps):
+def make_simulation(force_backend, steps, *, use_selector=False):
     optimized = force_backend == "numba"
+    backend_options = (
+        {"backend": force_backend}
+        if use_selector
+        else {
+            "overlap_backend": "numba" if optimized else "numpy",
+            "force_backend": force_backend,
+            "relative_positions_backend": "numba" if optimized else "numpy",
+            "interaction_backend": (
+                "batch_cached_noise_numba" if optimized else "cached"
+            ),
+            "elongation_backend": (
+                "grouped_early_numba" if optimized else "standard"
+            ),
+        }
+    )
     return Simulation(
         forces=[Anisotropic_Grosmann(
             kRep=2.5,
@@ -42,16 +58,12 @@ def make_simulation(force_backend, steps):
         cell_speed_max=1.0,
         trabajo_final=True,
         spatial_dimension=3,
-        overlap_backend="numba" if optimized else "numpy",
-        force_backend=force_backend,
-        relative_positions_backend="numba" if optimized else "numpy",
-        interaction_backend="batch_cached_noise_numba" if optimized else "cached",
-        elongation_backend="grouped_early_numba" if optimized else "standard",
+        **backend_options,
     )
 
 
-def run_simulation(force_backend, steps, output_dir):
-    simulation = make_simulation(force_backend, steps)
+def run_simulation(force_backend, steps, output_dir, *, use_selector=False):
+    simulation = make_simulation(force_backend, steps, use_selector=use_selector)
     simulation.simulate_parallel(
         sql=False, number_of_processes=1, output_dir=str(output_dir)
     )
@@ -131,3 +143,43 @@ def test_inconsistent_force_backend_metadata_is_rejected(tmp_path):
         pickle.dump((culture, tic, state), stream, pickle.HIGHEST_PROTOCOL)
     with pytest.raises(ValueError, match="force_backend.*disagrees"):
         run_simulation("numpy", 8, tmp_path)
+
+
+@pytest.mark.parametrize("backend", ["numpy", "numba"])
+def test_unified_selector_preserves_exact_dynamics(backend, tmp_path):
+    if backend == "numba":
+        pytest.importorskip("numba")
+    old, _ = run_simulation(backend, 8, tmp_path / "explicit")
+    selected, _ = run_simulation(
+        backend, 8, tmp_path / "selector", use_selector=True,
+    )
+    assert_cultures_bitwise_equal(old, selected)
+    assert make_simulation(backend, 8, use_selector=True).backend == backend
+
+
+@pytest.mark.parametrize("backend", ["numpy", "numba"])
+def test_unified_selector_checkpoint_resume(backend, tmp_path):
+    if backend == "numba":
+        pytest.importorskip("numba")
+    partial = tmp_path / "partial"
+    run_simulation(backend, 4, partial, use_selector=True)
+    resumed, _ = run_simulation(backend, 8, partial, use_selector=True)
+    full, _ = run_simulation(
+        backend, 8, tmp_path / "full", use_selector=True,
+    )
+    assert_cultures_bitwise_equal(resumed, full)
+
+
+@pytest.mark.parametrize("invalid", ["CUDA", "fast", "NUMBA", "cached"])
+def test_unified_selector_rejects_invalid_backend(invalid):
+    with pytest.raises(ValueError, match="backend must"):
+        Simulation(backend=invalid)
+
+
+def test_unified_selector_rejects_component_override():
+    with pytest.raises(ValueError, match="cannot be combined"):
+        Simulation(
+            backend="numba",
+            overlap_backend="numba",
+            forces=[Anisotropic_Grosmann()],
+        )

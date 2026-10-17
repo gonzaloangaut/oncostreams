@@ -126,6 +126,10 @@ class Simulation:
         If True, use instantaneous shape changes by setting
         delta_aspect_ratio to aspect_ratio_max - 1.
         Otherwise, use the supplied delta_aspect_ratio.
+    backend : {"numpy", "numba"} or None, optional
+        Select the reference or optimized implementation. During migration,
+        None (default) retains the individual component selectors.
+        Do not combine this option with non-default component selectors.
     overlap_backend : str, optional
         Overlap evaluation implementation: "numpy" (default) or "numba".
         This setting must match the one stored in a checkpoint.
@@ -215,6 +219,7 @@ class Simulation:
         relative_positions_backend: str = "numpy",
         interaction_backend: str = "cached",
         elongation_backend: str = "standard",
+        backend: Optional[str] = None,
     ):
         # main simulation attributes
         self.forces = forces
@@ -363,6 +368,27 @@ class Simulation:
             )
 
         self.spatial_dimension = int(spatial_dimension)
+
+        if backend is not None:
+            if backend not in ("numpy", "numba"):
+                raise ValueError("backend must be 'numpy' or 'numba'.")
+            defaults = ("numpy", "numpy", "numpy", "cached", "standard")
+            chosen = (
+                overlap_backend, force_backend, relative_positions_backend,
+                interaction_backend, elongation_backend,
+            )
+            if chosen != defaults:
+                raise ValueError(
+                    "backend cannot be combined with non-default "
+                    "individual backend selectors."
+                )
+            if backend == "numba":
+                overlap_backend = "numba"
+                force_backend = "numba"
+                relative_positions_backend = "numba"
+                interaction_backend = "batch_cached_noise_numba"
+                elongation_backend = "grouped_early_numba"
+        self.backend = backend
 
         if overlap_backend not in ("numpy", "numba"):
             raise ValueError(
