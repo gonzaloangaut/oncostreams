@@ -93,14 +93,7 @@ def _simulation(steps, backend):
         delta_t=0.005, deformation_attempt_period=0.05,
         initial_aspect_ratio=1.0, aspect_ratio_max=2.7,
         cell_speed_max=1.0, trabajo_final=True, spatial_dimension=3,
-        overlap_backend=backend, force_backend=backend,
-        relative_positions_backend=backend,
-        interaction_backend=(
-            "batch_cached_noise_numba" if backend == "numba" else "cached"
-        ),
-        elongation_backend=(
-            "grouped_early_numba" if backend == "numba" else "standard"
-        ),
+        backend=backend,
     )
 
 

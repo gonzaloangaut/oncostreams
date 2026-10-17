@@ -126,16 +126,9 @@ class Simulation:
         If True, use instantaneous shape changes by setting
         delta_aspect_ratio to aspect_ratio_max - 1.
         Otherwise, use the supplied delta_aspect_ratio.
-    backend : {"numpy", "numba"} or None, optional
-        Select the reference or optimized implementation. During migration,
-        None (default) retains the individual component selectors.
-        Do not combine this option with non-default component selectors.
-    overlap_backend : str, optional
-        Overlap evaluation implementation: "numpy" (default) or "numba".
-        This setting must match the one stored in a checkpoint.
-    force_backend : str, optional
-        Implementation for Anisotropic_Grosmann interactions: "numpy"
-        (default) or "numba". Must match the checkpoint setting.
+    backend : {"numpy", "numba"}, optional
+        Select the reference (default) or optimized execution path.
+        Numba requires fixed-N Grosmann movement in the plane.
     initialization_mode: str
         String to determine the initial conditions to use.
     deformation_warmup_steps : int
@@ -214,12 +207,7 @@ class Simulation:
         cluster_range_factors=(1.0, 1.1),
         cluster_alignment_angle_deg: float = 45.0,
         spatial_dimension: int = 3,
-        overlap_backend: str = "numpy",
-        force_backend: str = "numpy",
-        relative_positions_backend: str = "numpy",
-        interaction_backend: str = "cached",
-        elongation_backend: str = "standard",
-        backend: Optional[str] = None,
+        backend: str = "numpy",
     ):
         # main simulation attributes
         self.forces = forces
@@ -369,94 +357,30 @@ class Simulation:
 
         self.spatial_dimension = int(spatial_dimension)
 
-        if backend is not None:
-            if backend not in ("numpy", "numba"):
-                raise ValueError("backend must be 'numpy' or 'numba'.")
-            defaults = ("numpy", "numpy", "numpy", "cached", "standard")
-            chosen = (
-                overlap_backend, force_backend, relative_positions_backend,
-                interaction_backend, elongation_backend,
-            )
-            if chosen != defaults:
-                raise ValueError(
-                    "backend cannot be combined with non-default "
-                    "individual backend selectors."
-                )
-            if backend == "numba":
-                overlap_backend = "numba"
-                force_backend = "numba"
-                relative_positions_backend = "numba"
-                interaction_backend = "batch_cached_noise_numba"
-                elongation_backend = "grouped_early_numba"
-        self.backend = backend
-
-        if overlap_backend not in ("numpy", "numba"):
-            raise ValueError(
-                "overlap_backend must be 'numpy' or 'numba'."
-            )
-        self.overlap_backend = overlap_backend
-
-        if force_backend not in ("numpy", "numba"):
-            raise ValueError(
-                "force_backend must be 'numpy' or 'numba'."
-            )
-        if force_backend == "numba" and forces is not None:
-            if any(
-                not isinstance(force, Anisotropic_Grosmann)
-                for force in forces
-            ):
-                raise ValueError(
-                    "force_backend='numba' only supports "
-                    "Anisotropic_Grosmann forces."
-                )
-        self.force_backend = force_backend
-
-        if relative_positions_backend not in ("numpy", "numba"):
-            raise ValueError(
-                "relative_positions_backend must be 'numpy' or 'numba'."
-            )
-        self.relative_positions_backend = relative_positions_backend
-
-        if interaction_backend not in ("cached", "batch_cached_noise_numba"):
-            raise ValueError(
-                "interaction_backend must be 'cached' or "
-                "'batch_cached_noise_numba'. Historical Numba backends "
-                "require the pre-cleanup branch."
-            )
-        if interaction_backend == "cached" and force_backend == "numba":
-            raise ValueError(
-                "force_backend='numba' requires "
-                "interaction_backend='batch_cached_noise_numba'."
-            )
-        if interaction_backend == "batch_cached_noise_numba":
-            if (force_backend != "numba" or overlap_backend != "numba"
-                    or relative_positions_backend != "numba"):
-                raise ValueError(
-                    "batch_cached_noise_numba requires all three Numba backends"
-                )
+        if backend not in ("numpy", "numba"):
+            raise ValueError("backend must be 'numpy' or 'numba'.")
+        if backend == "numba":
             if reproduction or not movement:
-                raise ValueError(
-                    "batch_cached_noise_numba requires fixed-N movement"
-                )
+                raise ValueError("backend='numba' requires fixed-N movement")
             if forces is None or any(
                 not isinstance(force, Anisotropic_Grosmann)
                 for force in forces
             ):
                 raise ValueError(
-                    "batch_cached_noise_numba only supports Anisotropic_Grosmann"
+                    "backend='numba' only supports Anisotropic_Grosmann forces"
                 )
-        self.interaction_backend = interaction_backend
-        if elongation_backend not in ("standard", "grouped_early_numba"):
-            raise ValueError(
-                "elongation_backend must be 'standard' or 'grouped_early_numba'. "
-                "Historical Numba backends require the pre-cleanup branch."
-            )
-        if elongation_backend == "grouped_early_numba":
-            if overlap_backend != "numba":
-                raise ValueError("Numba elongation requires overlap_backend=numba")
-            if reproduction:
-                raise ValueError("Numba elongation requires fixed cell count")
-        self.elongation_backend = elongation_backend
+
+        self.backend = backend
+        # Internal component selectors are kept until Culture is refactored.
+        self.overlap_backend = backend
+        self.force_backend = backend
+        self.relative_positions_backend = backend
+        self.interaction_backend = (
+            "batch_cached_noise_numba" if backend == "numba" else "cached"
+        )
+        self.elongation_backend = (
+            "grouped_early_numba" if backend == "numba" else "standard"
+        )
 
     def calculate_culture_bounds_from_density(
         self,
@@ -1263,11 +1187,7 @@ def simulate_single_culture(
         "movement",
         "deformation",
         "overlap_threshold_ratio",
-        "overlap_backend",
-        "force_backend",
-        "relative_positions_backend",
-        "interaction_backend",
-        "elongation_backend",
+        "backend",
         "contraction_overlap_safety_ratio",
         "delta_t",
         "initial_aspect_ratio",
@@ -1287,7 +1207,7 @@ def simulate_single_culture(
 
     # Record the effective values passed to this realization
     expected_config.update({
-        "checkpoint_config_version": 2,
+        "checkpoint_config_version": 3,
         "initial_number_of_cells": actual_number_of_cells,
         "initial_fraction_elongated": sim.initial_fraction_elongated[t],
         "prob_stem": sim.prob_stem[i],
@@ -1361,9 +1281,13 @@ def simulate_single_culture(
                 "Use a new output directory for a fresh simulation."
             )
 
-        # Older checkpoints also stored output-policy fields inside this
-        # dictionary. Ignore those fields when checking physical compatibility.
-        # Cluster graph settings are diagnostics rather than dynamical parameters.
+        if saved_config.get("checkpoint_config_version") != 3:
+            raise ValueError(
+                "Unsupported checkpoint configuration version; "
+                "start a fresh simulation with this code."
+            )
+
+        # Output and cluster diagnostic options may change on resume.
         ignored_checkpoint_keys = {
             "checkpoint_config_version",
             "cluster_range_factors",
@@ -1381,65 +1305,33 @@ def simulate_single_culture(
         saved_dynamic_config = dynamic_config(saved_config)
         expected_dynamic_config = dynamic_config(expected_config)
 
-        # Checkpoints predating spatial_dimension used a 3D grid.
-        saved_dynamic_config.setdefault(
-            "grid_spatial_dimension",
-            getattr(culture.grid, "spatial_dimension", 3),
-        )
-
-        # Older checkpoints did not declare an overlap backend.
-        # Use the serialized Culture value if present, else NumPy.
-        stored_backend = getattr(culture, "overlap_backend", "numpy")
-        saved_dynamic_config.setdefault(
-            "overlap_backend", stored_backend
-        )
-        if saved_dynamic_config["overlap_backend"] != stored_backend:
+        # Guard against corrupted or manually edited serialized backend state.
+        stored_backend = getattr(culture, "backend", None)
+        if stored_backend not in ("numpy", "numba"):
+            raise ValueError("Checkpoint has no supported serialized backend")
+        if saved_dynamic_config.get("backend") != stored_backend:
             raise ValueError(
-                "Checkpoint overlap_backend metadata disagrees with "
-                "the serialized Culture backend."
+                "Checkpoint backend metadata disagrees with serialized Culture"
             )
 
-        # Older checkpoints used NumPy for forces; prefer the stored
-        # force attribute if available (including intermediate versions).
-        stored_force_backend = getattr(
-            culture.force, "force_backend", "numpy"
+        expected_components = (
+            ("numba", "numba", "numba", "batch_cached_noise_numba",
+             "grouped_early_numba")
+            if stored_backend == "numba"
+            else ("numpy", "numpy", "numpy", "cached", "standard")
         )
-        saved_dynamic_config.setdefault(
-            "force_backend", stored_force_backend
+        actual_components = (
+            getattr(culture, "overlap_backend", None),
+            getattr(culture.force, "force_backend", "numpy"),
+            getattr(culture, "relative_positions_backend", None),
+            getattr(culture, "interaction_backend", None),
+            getattr(culture, "elongation_backend", None),
         )
-        if saved_dynamic_config["force_backend"] != stored_force_backend:
+        if actual_components != expected_components:
             raise ValueError(
-                "Checkpoint force_backend metadata disagrees with "
-                "the serialized Force backend."
+                "Checkpoint serialized backend components disagree with "
+                "the selected backend"
             )
-
-        # Older checkpoints used NumPy for periodic relative positions.
-        # Verify both serialized Culture state and metadata when present.
-        stored_relative_backend = getattr(
-            culture, "relative_positions_backend", "numpy"
-        )
-        saved_dynamic_config.setdefault(
-            "relative_positions_backend", stored_relative_backend
-        )
-        if (
-            saved_dynamic_config["relative_positions_backend"]
-            != stored_relative_backend
-        ):
-            raise ValueError(
-                "Checkpoint relative_positions_backend metadata disagrees "
-                "with the serialized Culture backend."
-            )
-
-        # Checkpoint compatibility for old cultures without a direct backend.
-        stored_interaction_backend = getattr(culture, "interaction_backend", "cached")
-        saved_dynamic_config.setdefault("interaction_backend", stored_interaction_backend)
-        if saved_dynamic_config["interaction_backend"] != stored_interaction_backend:
-            raise ValueError("Checkpoint interaction backend disagrees with serialized Culture")
-
-        stored_elongation_backend = getattr(culture, "elongation_backend", "standard")
-        saved_dynamic_config.setdefault("elongation_backend", stored_elongation_backend)
-        if saved_dynamic_config["elongation_backend"] != stored_elongation_backend:
-            raise ValueError("Checkpoint elongation backend disagrees with serialized Culture")
 
         differences = []
 
@@ -1474,8 +1366,8 @@ def simulate_single_culture(
                 f"the checkpoint step ({start_tic})."
             )
 
-        # Make the validated choice explicit for legacy checkpoints,
-        # then persist it in subsequent checkpoint metadata.
+        # Restore the selected execution configuration after validation.
+        culture.backend = sim.backend
         culture.overlap_backend = sim.overlap_backend
         culture.relative_positions_backend = sim.relative_positions_backend
         culture.interaction_backend = sim.interaction_backend
@@ -1618,6 +1510,7 @@ def simulate_single_culture(
             interaction_backend=sim.interaction_backend,
             elongation_backend=sim.elongation_backend,
         )
+        sim.cultures[current_realization_name].backend = sim.backend
         sim.cultures[current_realization_name].overlap_backend = (
             sim.overlap_backend
         )
