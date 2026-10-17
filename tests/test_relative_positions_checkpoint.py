@@ -32,7 +32,7 @@ def make_simulation(backend="numpy", steps=8, *, noise=False):
         initial_aspect_ratio=1.0, aspect_ratio_max=2.7,
         cell_speed_max=1.0, trabajo_final=True,
         spatial_dimension=3,
-        overlap_backend="numba", force_backend="numba",
+        overlap_backend="numba", force_backend="numpy",
         relative_positions_backend=backend,
     )
 

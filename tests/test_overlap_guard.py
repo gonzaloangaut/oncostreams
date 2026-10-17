@@ -76,7 +76,7 @@ def test_interaction_forwards_cached_policy(output_enabled, tmp_path):
     assert seen == [output_enabled]
 
 
-def _simulation(steps):
+def _simulation(steps, backend):
     return Simulation(
         forces=[Anisotropic_Grosmann(
             kRep=2.5, bExp=3.0, lambda_core=1.0,
@@ -93,13 +93,19 @@ def _simulation(steps):
         delta_t=0.005, deformation_attempt_period=0.05,
         initial_aspect_ratio=1.0, aspect_ratio_max=2.7,
         cell_speed_max=1.0, trabajo_final=True, spatial_dimension=3,
-        overlap_backend="numba", force_backend="numba",
-        relative_positions_backend="numba",
+        overlap_backend=backend, force_backend=backend,
+        relative_positions_backend=backend,
+        interaction_backend=(
+            "batch_cached_noise_numba" if backend == "numba" else "cached"
+        ),
+        elongation_backend=(
+            "grouped_early_numba" if backend == "numba" else "standard"
+        ),
     )
 
 
-def _run(output_dir, steps, with_overlap):
-    sim = _simulation(steps)
+def _run(output_dir, steps, with_overlap, backend):
+    sim = _simulation(steps, backend)
     sim.simulate_parallel(
         sql=False, number_of_processes=1, output_dir=str(output_dir),
         dat_overlap_par=with_overlap, save_step_dat_overlap_par=2,
@@ -122,21 +128,23 @@ def _assert_same_state(a, b):
     assert a.rng.bit_generator.state == b.rng.bit_generator.state
 
 
+@pytest.mark.parametrize("backend", ["numpy", "numba"])
 @pytest.mark.parametrize("initial_output,new_output", [
     (False, True), (True, False), (False, False), (True, True),
 ])
-def test_checkpoint_output_change(initial_output, new_output, tmp_path):
-    pytest.importorskip("numba")
+def test_checkpoint_output_change(backend, initial_output, new_output, tmp_path):
+    if backend == "numba":
+        pytest.importorskip("numba")
     partial = tmp_path / "partial"
-    previous = _run(partial, 4, initial_output)
+    previous = _run(partial, 4, initial_output, backend)
     assert previous.output.collect_overlap_statistics == initial_output
     if not initial_output:
         assert previous.normalized_overlap_count_interval == 0
-    resumed = _run(partial, 8, new_output)
+    resumed = _run(partial, 8, new_output, backend)
     assert resumed.output.collect_overlap_statistics == new_output
     if not new_output:
         assert resumed.normalized_overlap_count_interval == 0
-    uninterrupted = _run(tmp_path / "full", 8, new_output)
+    uninterrupted = _run(tmp_path / "full", 8, new_output, backend)
     _assert_same_state(resumed, uninterrupted)
     if new_output:
         assert list((partial / "dat_overlap_parameters").glob("*.dat"))

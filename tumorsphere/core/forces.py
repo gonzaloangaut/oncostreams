@@ -650,18 +650,10 @@ class Anisotropic_Grosmann(Force):
         neighbors_indexes,
         nematic_tensors,
     ):
-        force_backend = getattr(self, "force_backend", "numpy")
-        if force_backend == "numba":
-            from tumorsphere.core.forces_numba import (
-                calculate_interaction_numba,
-            )
-            return calculate_interaction_numba(
-                self, cells, phies, cell_index, delta_t, area,
-                neighbors_indexes, nematic_tensors,
-            )
-        if force_backend != "numpy":
+        if getattr(self, "force_backend", "numpy") != "numpy":
             raise ValueError(
-                f"Unknown force backend: {force_backend!r}"
+                "Per-cell Grosmann interactions require force_backend='numpy'; "
+                "use interaction_backend='batch_cached_noise_numba' for Numba."
             )
 
         # First of all we are going to calculate the force and torque and then

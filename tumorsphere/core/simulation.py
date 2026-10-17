@@ -397,6 +397,11 @@ class Simulation:
                 "'batch_cached_noise_numba'. Historical Numba backends "
                 "require the pre-cleanup branch."
             )
+        if interaction_backend == "cached" and force_backend == "numba":
+            raise ValueError(
+                "force_backend='numba' requires "
+                "interaction_backend='batch_cached_noise_numba'."
+            )
         if interaction_backend == "batch_cached_noise_numba":
             if (force_backend != "numba" or overlap_backend != "numba"
                     or relative_positions_backend != "numba"):
