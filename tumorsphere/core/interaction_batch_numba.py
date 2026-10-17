@@ -11,7 +11,7 @@ from numba import njit
 
 @njit(cache=True, fastmath=False)
 def _batch_pair_forces(positions, phies, diagonals, anisotropies, qxx, qxy,
-                       ptr, indices, side, area, overlap_threshold,
+                       ptr, indices, side, overlap_threshold,
                        k_rep, gamma, lambda_core, xi_power_max):
     n = len(ptr) - 1
     f = np.zeros((n, 3), dtype=np.float64)
@@ -85,7 +85,6 @@ def _batch_pair_forces(positions, phies, diagonals, anisotropies, qxx, qxy,
             mxy = (w0 * y0 + w1 * y1) / ds
             quad = ((1.0 - mxx) * rx ** 2 + (1.0 + mxx) * ry ** 2
                     - 2.0 * mxy * rx * ry + rz ** 2)
-            imax = 4.0 * area ** 2 / (np.pi * np.sqrt(beta))
             norm = np.exp(-(ds / beta) * quad)
             xis[k] = norm
         # Stage 2: exact force and torque accumulation in reference neighbor order.
@@ -228,7 +227,7 @@ def batch_interaction_step(self, delta_t):
         self.cell_positions, self.cell_phies, geometry_d, geometry_e,
         qxx, qxy, np.asarray(ptr, dtype=np.intp),
         np.asarray(neighbors, dtype=np.intp),
-        float(self.side), float(self.cell_area),
+        float(self.side),
         float(self.overlap_threshold_ratio), float(self.force.kRep),
         float(self.force.bExp), float(self.force.lambda_core),
         XI_POWER_MAX,
