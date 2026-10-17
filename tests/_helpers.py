@@ -35,7 +35,6 @@ def fixed_n_grosmann_culture(
         kRep=2.5, bExp=3, noise_eta=eta, d_phi=d_phi,
         shrinking=True, lambda_core=1.0,
     )
-    force.force_backend = 'numba'
     outputs = [] if output_dir is None else [
         DatOutput_order_parameters('identical', str(output_dir), save_step=4),
         DatOutput_position_aspectratio('identical', str(output_dir), save_step=4),
@@ -57,11 +56,11 @@ def fixed_n_grosmann_culture(
         aspect_ratio_max=ar_max,
         trabajo_final=True,
         cell_max_def_attempts=attempts,
-        interaction_backend=interaction_backend,
-        elongation_backend=elongation_backend,
+        backend="numba",
     )
-    culture.overlap_backend = 'numba'
-    culture.relative_positions_backend = 'numba'
+    # Only tests may select individual paths to isolate equivalence.
+    culture.interaction_backend = interaction_backend
+    culture.elongation_backend = elongation_backend
     return culture
 
 

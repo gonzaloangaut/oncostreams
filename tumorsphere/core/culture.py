@@ -24,7 +24,7 @@ import tempfile
 from tumorsphere.core.cells import Cell
 from tumorsphere.core.output import TumorsphereOutput
 from tumorsphere.core.spatial_hash_grid import SpatialHashGrid
-from tumorsphere.core.forces import Force
+from tumorsphere.core.forces import Force, Anisotropic_Grosmann
 
 
 class _UnionFind:
@@ -176,8 +176,7 @@ class Culture:
         contraction_overlap_safety_ratio: Optional[float] = None,
         cluster_range_factors: Tuple[float, ...] = (1.0, 1.1),
         cluster_alignment_angle_deg: float = 45.0,
-        interaction_backend: str = "cached",
-        elongation_backend: str = "standard",
+        backend: str = "numpy",
     ):
         """
         Initialize a new culture of cells.
@@ -190,6 +189,8 @@ class Culture:
             The force used in the interaction between cells.
         grid : SpatialHashGrid
             The spatial hash grid to be used in the simulation.
+        backend : {"numpy", "numba"}, optional
+            Select the reference or optimized fixed-N implementation.
         adjacency_threshold : int, optional
             The maximum distance at which two cells can be considered
             neighbors, by default 4.
@@ -333,26 +334,28 @@ class Culture:
         active_cells : list[Cell]
             List of all active cells in the culture.
         """
-        # Experimental overlap backend. The NumPy path stays the default;
-        # only opt-in Culture instances use Numba.
-        self.overlap_backend = "numpy"
-        # Default preserves the historical x/y periodic displacement path.
-        self.relative_positions_backend = "numpy"
-        if interaction_backend not in ("cached", "batch_cached_noise_numba"):
-            raise ValueError(
-                "interaction_backend must be 'cached' or "
-                "'batch_cached_noise_numba'. Historical Numba backends "
-                "require the pre-cleanup branch."
-            )
-        self.interaction_backend = interaction_backend
-        if elongation_backend not in ("standard", "grouped_early_numba"):
-            raise ValueError(
-                "elongation_backend must be 'standard' or 'grouped_early_numba'. "
-                "Historical Numba backends require the pre-cleanup branch."
-            )
-        if elongation_backend == "grouped_early_numba" and reproduction:
-            raise ValueError("grouped_early_numba requires fixed cell count")
-        self.elongation_backend = elongation_backend
+        # A single choice governs all production components. Individual
+        # component flags remain internal until kernel dispatch is migrated.
+        if backend not in ("numpy", "numba"):
+            raise ValueError("backend must be 'numpy' or 'numba'.")
+        if backend == "numba":
+            if reproduction or not movement:
+                raise ValueError("backend='numba' requires fixed-N movement")
+            if not isinstance(force, Anisotropic_Grosmann):
+                raise ValueError(
+                    "backend='numba' only supports Anisotropic_Grosmann"
+                )
+        self.backend = backend
+        self.overlap_backend = backend
+        self.relative_positions_backend = backend
+        self.interaction_backend = (
+            "batch_cached_noise_numba" if backend == "numba" else "cached"
+        )
+        self.elongation_backend = (
+            "grouped_early_numba" if backend == "numba" else "standard"
+        )
+        if isinstance(force, Anisotropic_Grosmann):
+            force.force_backend = backend
 
         # cell attributes
         self.force = force

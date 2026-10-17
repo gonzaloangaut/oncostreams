@@ -1507,23 +1507,8 @@ def simulate_single_culture(
             cluster_alignment_angle_deg=(
                 sim.cluster_alignment_angle_deg
             ),
-            interaction_backend=sim.interaction_backend,
-            elongation_backend=sim.elongation_backend,
+            backend=sim.backend,
         )
-        sim.cultures[current_realization_name].backend = sim.backend
-        sim.cultures[current_realization_name].overlap_backend = (
-            sim.overlap_backend
-        )
-        sim.cultures[current_realization_name].relative_positions_backend = (
-            sim.relative_positions_backend
-        )
-        if isinstance(
-            sim.cultures[current_realization_name].force,
-            Anisotropic_Grosmann,
-        ):
-            sim.cultures[current_realization_name].force.force_backend = (
-                sim.force_backend
-            )
         # Persist only model/dynamical compatibility metadata. Output policy
         # is intentionally reconstructed from the current simulate_parallel()
         # call whenever a checkpoint is resumed.

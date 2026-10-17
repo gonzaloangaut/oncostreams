@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from tests._helpers import assert_cultures_bitwise_equal
+from tumorsphere.core.culture import Culture
 from tumorsphere.core.forces import Anisotropic_Grosmann, Spring_Force
 from tumorsphere.core.simulation import Simulation
 
@@ -169,3 +170,23 @@ def test_numba_requires_supported_model():
     with pytest.raises(ValueError, match="fixed-N movement"):
         Simulation(backend="numba", forces=[Anisotropic_Grosmann()], movement=False)
     assert Simulation(backend="numpy", forces=[Spring_Force()])
+
+
+@pytest.mark.parametrize("backend", ["numpy", "numba"])
+def test_new_culture_uses_complete_backend_configuration(backend, tmp_path):
+    culture, _ = run(backend, 2, tmp_path)
+    components = (
+        culture.overlap_backend, culture.force.force_backend,
+        culture.relative_positions_backend, culture.interaction_backend,
+        culture.elongation_backend,
+    )
+    assert components == COMPONENTS[backend]
+
+
+@pytest.mark.parametrize("backend", [
+    "direct_numba", "batch_numba", "batch_cached_numba",
+    "fast_numba", None,
+])
+def test_direct_culture_rejects_removed_backends(backend):
+    with pytest.raises(ValueError, match="backend must"):
+        Culture(output=None, force=None, grid=None, backend=backend)
