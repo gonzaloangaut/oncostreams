@@ -345,17 +345,7 @@ class Culture:
                 raise ValueError(
                     "backend='numba' only supports Anisotropic_Grosmann"
                 )
-        self.backend = backend
-        self.overlap_backend = backend
-        self.relative_positions_backend = backend
-        self.interaction_backend = (
-            "batch_cached_noise_numba" if backend == "numba" else "cached"
-        )
-        self.elongation_backend = (
-            "grouped_early_numba" if backend == "numba" else "standard"
-        )
-        if isinstance(force, Anisotropic_Grosmann):
-            force.force_backend = backend
+        self._configure_backend(backend)
 
         # cell attributes
         self.force = force
@@ -523,6 +513,22 @@ class Culture:
                 initial_positions,
                 dtype=float,
             ).copy()
+
+    def _configure_backend(self, backend: str) -> None:
+        """Set execution flags from one validated backend choice.
+
+        Internal flags remain available for isolated numerical tests.
+        Production uses only the two complete configurations.
+        """
+        self.backend = backend
+        self.overlap_backend = backend
+        self.relative_positions_backend = backend
+        self.interaction_backend = (
+            "batch_cached_noise_numba" if backend == "numba" else "cached"
+        )
+        self.elongation_backend = (
+            "grouped_early_numba" if backend == "numba" else "standard"
+        )
 
     # ----------------database related behavior----------------
 

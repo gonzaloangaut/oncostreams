@@ -203,10 +203,10 @@ def batch_interaction_step(self, delta_t):
     """Return all step displacements, preserving the original per-cell RNG order."""
     from tumorsphere.core.forces import Anisotropic_Grosmann
     if (not isinstance(self.force, Anisotropic_Grosmann)
-            or getattr(self.force, 'force_backend', None) != 'numba'
+            or getattr(self, 'backend', None) != 'numba'
             or getattr(self, 'interaction_backend', None) != 'batch_cached_noise_numba'
             or not self.movement or self.reproduction):
-        raise RuntimeError('batch_cached_noise_numba requires fixed-N Grosmann force_backend=numba')
+        raise RuntimeError('batch_cached_noise_numba requires backend=numba and fixed-N Grosmann')
     if list(self.active_cell_indexes) != list(range(len(self.cells))):
         raise RuntimeError('Requires cells active in ascending index order')
     if self.relative_positions_backend != 'numba' or self.overlap_backend != 'numba':

@@ -16,8 +16,8 @@ from tumorsphere.core.simulation import Simulation
 
 
 COMPONENTS = {
-    "numpy": ("numpy", "numpy", "numpy", "cached", "standard"),
-    "numba": ("numba", "numba", "numba", "batch_cached_noise_numba",
+    "numpy": ("numpy", "numpy", "cached", "standard"),
+    "numba": ("numba", "numba", "batch_cached_noise_numba",
               "grouped_early_numba"),
 }
 
@@ -85,16 +85,15 @@ def modify_checkpoint(path, modify):
 
 
 @pytest.mark.parametrize("backend", ["numpy", "numba"])
-def test_backend_selects_expected_components(backend):
-    force = Anisotropic_Grosmann()
-    sim = Simulation(forces=[force], backend=backend)
-    actual = (
-        sim.overlap_backend, sim.force_backend, sim.relative_positions_backend,
-        sim.interaction_backend, sim.elongation_backend,
-    )
-    assert actual == COMPONENTS[backend]
+def test_simulation_has_single_backend_selector(backend):
+    sim = Simulation(forces=[Anisotropic_Grosmann()], backend=backend)
     assert sim.backend == backend
     assert Simulation().backend == "numpy"
+    for name in (
+        "overlap_backend", "force_backend", "relative_positions_backend",
+        "interaction_backend", "elongation_backend",
+    ):
+        assert not hasattr(sim, name)
 
 
 @pytest.mark.parametrize("backend", ["numpy", "numba"])
@@ -176,11 +175,11 @@ def test_numba_requires_supported_model():
 def test_new_culture_uses_complete_backend_configuration(backend, tmp_path):
     culture, _ = run(backend, 2, tmp_path)
     components = (
-        culture.overlap_backend, culture.force.force_backend,
-        culture.relative_positions_backend, culture.interaction_backend,
-        culture.elongation_backend,
+        culture.overlap_backend, culture.relative_positions_backend,
+        culture.interaction_backend, culture.elongation_backend,
     )
     assert components == COMPONENTS[backend]
+    assert not hasattr(culture.force, "force_backend")
 
 
 @pytest.mark.parametrize("backend", [

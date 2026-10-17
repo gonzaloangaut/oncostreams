@@ -443,8 +443,6 @@ class Anisotropic_Grosmann(Force):
         if not np.isfinite(lambda_core) or not 0 <= lambda_core <= 1:
             raise ValueError("lambda_core must be between 0 and 1.")
         self.lambda_core = float(lambda_core)
-        # Optional force backend (NumPy remains the default).
-        self.force_backend = "numpy"
         # Cache mobilities for each area and aspect ratio
         self._mobilities_cache = {}
 
@@ -650,12 +648,6 @@ class Anisotropic_Grosmann(Force):
         neighbors_indexes,
         nematic_tensors,
     ):
-        if getattr(self, "force_backend", "numpy") != "numpy":
-            raise ValueError(
-                "Per-cell Grosmann interactions require force_backend='numpy'; "
-                "use interaction_backend='batch_cached_noise_numba' for Numba."
-            )
-
         # First of all we are going to calculate the force and torque and then
         # we see how these change the velocity and orientation
         cell = cells[cell_index]

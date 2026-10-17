@@ -44,7 +44,6 @@ def paired_cultures(*, seed, rho, dimension, attempts=1, eta=None, d_phi=None,
     assert reference.rng.bit_generator.state == optimized.rng.bit_generator.state
 
     reference.backend = "numpy"
-    reference.force.force_backend = "numpy"
     reference.overlap_backend = "numpy"
     reference.relative_positions_backend = "numpy"
     reference.interaction_backend = "cached"

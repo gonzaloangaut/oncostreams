@@ -371,16 +371,6 @@ class Simulation:
                 )
 
         self.backend = backend
-        # Internal component selectors are kept until Culture is refactored.
-        self.overlap_backend = backend
-        self.force_backend = backend
-        self.relative_positions_backend = backend
-        self.interaction_backend = (
-            "batch_cached_noise_numba" if backend == "numba" else "cached"
-        )
-        self.elongation_backend = (
-            "grouped_early_numba" if backend == "numba" else "standard"
-        )
 
     def calculate_culture_bounds_from_density(
         self,
@@ -1315,14 +1305,13 @@ def simulate_single_culture(
             )
 
         expected_components = (
-            ("numba", "numba", "numba", "batch_cached_noise_numba",
+            ("numba", "numba", "batch_cached_noise_numba",
              "grouped_early_numba")
             if stored_backend == "numba"
-            else ("numpy", "numpy", "numpy", "cached", "standard")
+            else ("numpy", "numpy", "cached", "standard")
         )
         actual_components = (
             getattr(culture, "overlap_backend", None),
-            getattr(culture.force, "force_backend", "numpy"),
             getattr(culture, "relative_positions_backend", None),
             getattr(culture, "interaction_backend", None),
             getattr(culture, "elongation_backend", None),
@@ -1366,14 +1355,8 @@ def simulate_single_culture(
                 f"the checkpoint step ({start_tic})."
             )
 
-        # Restore the selected execution configuration after validation.
-        culture.backend = sim.backend
-        culture.overlap_backend = sim.overlap_backend
-        culture.relative_positions_backend = sim.relative_positions_backend
-        culture.interaction_backend = sim.interaction_backend
-        culture.elongation_backend = sim.elongation_backend
-        if isinstance(culture.force, Anisotropic_Grosmann):
-            culture.force.force_backend = sim.force_backend
+        # Restore the chosen execution path after validating the checkpoint.
+        culture._configure_backend(sim.backend)
         culture._checkpoint_model_config = expected_config.copy()
 
         # Restore the saved RNG state without replacing the generator.
