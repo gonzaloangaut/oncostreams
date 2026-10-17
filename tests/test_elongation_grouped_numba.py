@@ -6,6 +6,7 @@ import pytest
 
 from tumorsphere.core.elongation_grouped_numba import (
     _cached_elongation_neighbors, _shared_elongation_geometry,
+    _cached_proposal_geometry,
 )
 
 from tests._helpers import (
@@ -107,6 +108,30 @@ def test_compiled_proposal_geometry_is_bitwise_identical(attempts):
                     assert expected.dtype == actual.dtype
                     assert expected.shape == actual.shape
                     assert expected.tobytes() == actual.tobytes()
+
+
+@pytest.mark.parametrize("area,old_ratio,delta,max_ratio", [
+    (np.pi, 1.0, 1.7, 2.7),
+    (np.pi, 1.0, 0.2, 2.7),
+    (1.5, 1.0, 1.7, 2.7),
+    (np.pi, 2.0, 0.8, 2.7),
+])
+def test_cached_proposal_geometry_matches_original_bitwise(
+    area, old_ratio, delta, max_ratio,
+):
+    new_ratio = min(old_ratio + delta, max_ratio)
+    expected_displacement = np.sqrt((area * new_ratio) / np.pi) - np.sqrt(
+        (area * old_ratio) / np.pi
+    )
+    expected_diagonal = (area / np.pi) * (new_ratio + 1 / new_ratio)
+    expected_anisotropy = (new_ratio ** 2 - 1) / (new_ratio ** 2 + 1)
+    expected = (new_ratio, expected_displacement, expected_diagonal,
+                expected_anisotropy)
+    _cached_proposal_geometry.cache_clear()
+    for _ in range(2):  # Validate both cache miss and hit.
+        actual = _cached_proposal_geometry(area, old_ratio, delta, max_ratio)
+        for result, reference in zip(actual, expected):
+            assert np.asarray(result).tobytes() == np.asarray(reference).tobytes()
 
 
 # Grouped-elongation cache regressions (formerly test_elongation_reuse_cache.py).

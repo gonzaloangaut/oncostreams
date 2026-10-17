@@ -16,8 +16,26 @@ Numba/NumPy bitwise equivalence is version-dependent and is verified by tests.
 """
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 from numba import njit
+
+
+@lru_cache(maxsize=128)
+def _cached_proposal_geometry(cell_area, old_aspect_ratio, delta_aspect_ratio,
+                              aspect_ratio_max):
+    """Cache proposal shape constants without changing arithmetic order."""
+    new_aspect_ratio = min(old_aspect_ratio + delta_aspect_ratio,
+                           aspect_ratio_max)
+    displacement_length = np.sqrt(
+        (cell_area * new_aspect_ratio) / np.pi
+    ) - np.sqrt((cell_area * old_aspect_ratio) / np.pi)
+    d_i = (cell_area / np.pi) * (
+        new_aspect_ratio + 1 / new_aspect_ratio
+    )
+    eps_i = (new_aspect_ratio ** 2 - 1) / (new_aspect_ratio ** 2 + 1)
+    return new_aspect_ratio, displacement_length, d_i, eps_i
 
 
 def _shared_elongation_geometry(culture):
@@ -119,8 +137,15 @@ def grouped_proposal_scores(
             dj = diagonals[j]
             ej = anisotropies[j]
             ds = d_i + dj
-            delta = proposed_phies[a] - phies[j]
-            cos_delta = np.cos(delta)
+            # For a round neighbor (epsilon_j == 0), the angular
+            # contribution to beta vanishes exactly. Avoid an expensive
+            # cosine without changing the overlap expression or neighbor
+            # processing order. Keep the full path for elongated neighbors.
+            if ej == 0.0:
+                cos_delta = 1.0
+            else:
+                delta = proposed_phies[a] - phies[j]
+                cos_delta = np.cos(delta)
             beta = (ds ** 2 - (d_i * eps_i - dj * ej) ** 2
                     - 4.0 * d_i * dj * eps_i * ej * (cos_delta ** 2))
             wi = d_i * eps_i
@@ -153,15 +178,12 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
     old_position = self.cell_positions[cell_index].copy()
     old_aspect_ratio = cell.aspect_ratio
     old_bucket = self.grid.get_hash_key(old_position)
-    new_aspect_ratio = min(old_aspect_ratio + self.delta_aspect_ratio,
-                           self.aspect_ratio_max)
-    displacement_length = np.sqrt(
-        (self.cell_area * new_aspect_ratio) / np.pi
-    ) - np.sqrt((self.cell_area * old_aspect_ratio) / np.pi)
-    d_i = (self.cell_area / np.pi) * (
-        new_aspect_ratio + 1 / new_aspect_ratio
+    new_aspect_ratio, displacement_length, d_i, eps_i = (
+        _cached_proposal_geometry(
+            self.cell_area, old_aspect_ratio, self.delta_aspect_ratio,
+            self.aspect_ratio_max,
+        )
     )
-    eps_i = (new_aspect_ratio ** 2 - 1) / (new_aspect_ratio ** 2 + 1)
 
     # Bulk draws preserve the scalar NumPy RNG sequence and generator state.
     # Keep the scalar path for a single attempt to avoid an unnecessary array.
@@ -200,8 +222,11 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
         positions, phis, proposed_qxx, proposed_qxy,
         trial_buckets, np.asarray(ptr, dtype=np.intp), indices,
         self.cell_positions, self.cell_phies, diag, eps,
-        np.ascontiguousarray(qs[:, 0, 0]),
-        np.ascontiguousarray(qs[:, 0, 1]),
+        # Read directly from the live tensor array: these non-contiguous
+        # views avoid two O(N) copies for every round-cell attempt.
+        # Numba supports strided inputs; arithmetic/order stay unchanged.
+        qs[:, 0, 0],
+        qs[:, 0, 1],
         float(d_i), float(eps_i), float(self.side),
         float(self.overlap_threshold_ratio),
     )
