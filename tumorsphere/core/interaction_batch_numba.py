@@ -1,6 +1,6 @@
 """Fixed-N, order-preserving, cached and vectorized Grosmann interactions.
 
-Implements interaction_backend="batch_cached_noise_numba", with or without
+Implements the backend="numba" interaction sweep, with or without
 translational/rotational noise. Pair-force arithmetic is unchanged by cleanup.
 """
 from __future__ import annotations
@@ -203,14 +203,11 @@ def batch_interaction_step(self, delta_t):
     """Return all step displacements, preserving the original per-cell RNG order."""
     from tumorsphere.core.forces import Anisotropic_Grosmann
     if (not isinstance(self.force, Anisotropic_Grosmann)
-            or getattr(self, 'backend', None) != 'numba'
-            or getattr(self, 'interaction_backend', None) != 'batch_cached_noise_numba'
+            or self.backend != 'numba'
             or not self.movement or self.reproduction):
         raise RuntimeError('batch_cached_noise_numba requires backend=numba and fixed-N Grosmann')
     if list(self.active_cell_indexes) != list(range(len(self.cells))):
         raise RuntimeError('Requires cells active in ascending index order')
-    if self.relative_positions_backend != 'numba' or self.overlap_backend != 'numba':
-        raise RuntimeError('Requires Numba relative positions and overlap backends')
     # The validated canonical pair semantics assume planar cells.
     if np.any(self.cell_positions[:, 2] != 0.0):
         raise RuntimeError('batch_cached_noise_numba requires planar positions (z=0)')

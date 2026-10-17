@@ -15,9 +15,9 @@ from tests._helpers import (
     (0.22, 2, 1), (0.84, 3, 10), (0.90, 2, 5),
 ])
 def test_grouped_elongation_determinism(rho, dimension, attempts):
-    a = build_culture("grouped_early_numba", rho=rho,
+    a = build_culture("numba", rho=rho,
                       dimension=dimension, attempts=attempts)
-    b = build_culture("grouped_early_numba", rho=rho,
+    b = build_culture("numba", rho=rho,
                       dimension=dimension, attempts=attempts)
     for tic in range(1, 21):
         run(a, tic - 1, tic)
@@ -26,14 +26,14 @@ def test_grouped_elongation_determinism(rho, dimension, attempts):
 
 
 def test_real_elongation_successes_are_recorded():
-    culture = build_culture("grouped_early_numba", rho=0.22, n=64, seed=17)
+    culture = build_culture("numba", rho=0.22, n=64, seed=17)
     run(culture, 0, 10)
     assert culture.deformation_event_counts["round_elongation_successes"] > 0
 
 
 def test_grouped_checkpoint_resume(tmp_path):
-    continuous = build_culture("grouped_early_numba", seed=42, n=64, rho=0.5)
-    paused = build_culture("grouped_early_numba", seed=42, n=64, rho=0.5)
+    continuous = build_culture("numba", seed=42, n=64, rho=0.5)
+    paused = build_culture("numba", seed=42, n=64, rho=0.5)
     run(continuous, 0, 45)
     run(paused, 0, 17)
     checkpoint = tmp_path / "grouped_elongation.pkl"
@@ -41,7 +41,7 @@ def test_grouped_checkpoint_resume(tmp_path):
     with checkpoint.open("rb") as stream:
         restored, start, saved_rng_state = pickle.load(stream)
     assert start == 17
-    assert restored.elongation_backend == "grouped_early_numba"
+    assert restored.backend == "numba"
     assert getattr(restored.grid, "_batch_neighbor_cache", None) is None
     restored.rng.bit_generator.state = saved_rng_state
     run(restored, start, 45)
@@ -50,10 +50,16 @@ def test_grouped_checkpoint_resume(tmp_path):
 
 def test_zero_attempts_matches_standard_path():
     """With no proposals, either elongation backend must do the same thing."""
-    reference = build_culture("standard", attempts=0)
-    optimized = build_culture("grouped_early_numba", attempts=0)
-    run(reference, 0, 3)
-    run(optimized, 0, 3)
+    reference = build_culture("numpy", attempts=0)
+    optimized = build_culture("numba", attempts=0)
+    # Isolate deformation: reference and optimized interactions need not
+    # produce byte-identical continuous trajectories.
+    run(reference, 0, 0)
+    run(optimized, 0, 0)
+    for index, cell in enumerate(reference.cells):
+        if cell.is_round:
+            assert not reference.elongate_from_round(index)
+            assert not optimized.elongate_from_round(index)
     compare_bitwise(reference, optimized)
     assert optimized.deformation_event_counts["round_elongation_successes"] == 0
 

@@ -14,7 +14,7 @@ from tests._helpers import (
 from tumorsphere.core.interaction_noise_numba import _numba_noise_all
 
 
-BACKEND = "batch_cached_noise_numba"
+BACKEND = "numba"
 
 
 def test_synthetic_noise_algebra_and_rng_order():

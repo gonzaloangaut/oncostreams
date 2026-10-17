@@ -1,7 +1,7 @@
-"""Reference equivalence tests for the optional relative-position backend.
+"""Reference equivalence tests for periodic relative positions.
 
-The NumPy implementation is the reference. No change to the x/y periodic
-minimum-image rule and no z wrapping are permitted.
+NumPy is the reference. The x/y minimum-image rule and unwrapped z
+must remain unchanged when selecting backend="numba".
 """
 
 from types import SimpleNamespace
@@ -13,13 +13,13 @@ from tumorsphere.core.culture import Culture
 
 
 def numpy_reference(cell, neighbors, side):
-    dummy = SimpleNamespace(side=side, relative_positions_backend="numpy")
+    dummy = SimpleNamespace(side=side, backend="numpy")
     return Culture.calculate_relative_positions(dummy, cell, neighbors)
 
 
 def actual_backend(cell, neighbors, side):
     pytest.importorskip("numba")
-    dummy = SimpleNamespace(side=side, relative_positions_backend="numba")
+    dummy = SimpleNamespace(side=side, backend="numba")
     return Culture.calculate_relative_positions(dummy, cell, neighbors)
 
 
@@ -71,18 +71,8 @@ def test_boundaries_and_empty(side):
 def test_unknown_backend_rejected():
     cell = np.zeros(3)
     neighbors = np.zeros((0, 3))
-    with pytest.raises(ValueError, match="relative_positions_backend"):
+    with pytest.raises(ValueError, match="Unknown backend"):
         Culture.calculate_relative_positions(
-            SimpleNamespace(side=10.0, relative_positions_backend="cuda"),
+            SimpleNamespace(side=10.0, backend="cuda"),
             cell, neighbors,
         )
-
-
-def test_legacy_culture_without_attribute_uses_numpy():
-    dummy = SimpleNamespace(side=10.0)
-    cell = np.array([1., 2., 0.])
-    neighbors = np.array([[3., 4., 0.]])
-    np.testing.assert_array_equal(
-        Culture.calculate_relative_positions(dummy, cell, neighbors),
-        numpy_reference(cell, neighbors, 10.0),
-    )

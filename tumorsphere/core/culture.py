@@ -345,7 +345,7 @@ class Culture:
                 raise ValueError(
                     "backend='numba' only supports Anisotropic_Grosmann"
                 )
-        self._configure_backend(backend)
+        self.backend = backend
 
         # cell attributes
         self.force = force
@@ -513,22 +513,6 @@ class Culture:
                 initial_positions,
                 dtype=float,
             ).copy()
-
-    def _configure_backend(self, backend: str) -> None:
-        """Set execution flags from one validated backend choice.
-
-        Internal flags remain available for isolated numerical tests.
-        Production uses only the two complete configurations.
-        """
-        self.backend = backend
-        self.overlap_backend = backend
-        self.relative_positions_backend = backend
-        self.interaction_backend = (
-            "batch_cached_noise_numba" if backend == "numba" else "cached"
-        )
-        self.elongation_backend = (
-            "grouped_early_numba" if backend == "numba" else "standard"
-        )
 
     # ----------------database related behavior----------------
 
@@ -777,8 +761,8 @@ class Culture:
             The relative position of the cell with every neighbor.
         """
 
-        # Optional compiled implementation of the SAME minimum-image rule.
-        backend = getattr(self, "relative_positions_backend", "numpy")
+        # Numba uses the SAME minimum-image rule as NumPy.
+        backend = self.backend
         if backend == "numba":
             from tumorsphere.core.relative_positions_numba import (
                 periodic_relative_positions_numba,
@@ -788,7 +772,7 @@ class Culture:
             )
         if backend != "numpy":
             raise ValueError(
-                f"Unknown relative_positions_backend: {backend!r}"
+                f"Unknown backend: {backend!r}"
             )
 
         # Calculate the relative positions between all the neighbors and the cell
@@ -855,8 +839,8 @@ class Culture:
         eps_i = cell.anisotropy
         eps_j = np.array([neighbor.anisotropy for neighbor in neighbors])
 
-        # Optional Numba path. Keep NumPy import/behavior unchanged by default.
-        backend = getattr(self, "overlap_backend", "numpy")
+        # Select the compiled overlap implementation for the Numba backend.
+        backend = self.backend
         if backend == "numba":
             from tumorsphere.core.overlap_numba import calculate_overlap_numba
 
@@ -877,7 +861,7 @@ class Culture:
                 float(self.cell_area),
             )
         if backend != "numpy":
-            raise ValueError(f"Unknown overlap backend: {backend!r}")
+            raise ValueError(f"Unknown backend: {backend!r}")
 
         cos_phi_diff = np.cos(phi_i - phi_j)
 
@@ -1115,14 +1099,14 @@ class Culture:
         All proposals start from the original position and use the same
         proposed aspect ratio. Exact ties are resolved randomly.
         """
-        backend = getattr(self, "elongation_backend", "standard")
-        if backend == "grouped_early_numba":
+        backend = self.backend
+        if backend == "numba":
             from tumorsphere.core.elongation_grouped_numba import (
                 elongate_from_round_grouped,
             )
             return elongate_from_round_grouped(self, cell_index)
-        if backend != "standard":
-            raise ValueError(f"Unknown elongation_backend: {backend!r}")
+        if backend != "numpy":
+            raise ValueError(f"Unknown backend: {backend!r}")
 
         cell = self.cells[cell_index]
         n_attempts = self.cell_max_def_attempts
@@ -1634,11 +1618,11 @@ class Culture:
             The change in the angle phi of the cell.
         -----
         """
-        backend = getattr(self, "interaction_backend", "cached")
-        if backend == "batch_cached_noise_numba":
+        backend = self.backend
+        if backend == "numba":
             raise RuntimeError("Batch backends process full sweeps; call Culture.simulate()")
-        if backend != "cached":
-            raise ValueError(f"Unknown interaction_backend: {backend!r}")
+        if backend != "numpy":
+            raise ValueError(f"Unknown backend: {backend!r}")
 
         cell = self.cells[cell_index]
 
@@ -2378,7 +2362,7 @@ class Culture:
                                 )
                                 self.steps_without_deformation = 0
 
-                if getattr(self, "interaction_backend", "cached") == "batch_cached_noise_numba":
+                if self.backend == "numba":
                     # Evaluate all ordered pairs in one compiled sweep. The
                     # returned arrays are ordinary state increments: no cache
                     # is stored on Culture or serialized into checkpoints.

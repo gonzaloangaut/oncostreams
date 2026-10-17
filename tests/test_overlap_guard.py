@@ -67,6 +67,7 @@ def test_interaction_forwards_cached_policy(output_enabled, tmp_path):
         calculate_interaction=lambda *args: (np.zeros(3), 0.0)
     )
     fake = SimpleNamespace(
+        backend="numpy",
         output=output,
         _get_significant_neighbors=spy,
         cells=[cell], cell_phies=np.array([0.0]),

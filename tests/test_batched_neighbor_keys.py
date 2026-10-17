@@ -12,7 +12,7 @@ from tests._helpers import make_batch_culture as make_culture, run_steps as run
 @pytest.mark.parametrize("eta", [0.0, 0.033])
 def test_ordered_csr_matches_scalar_candidate_queries(dimension, rho, eta):
     culture = make_culture(
-        'batch_cached_noise_numba', seed=17, dimension=dimension,
+        'numba', seed=17, dimension=dimension,
         rho=rho, eta=eta, n=64,
     )
     run(culture, 0, 12)
@@ -48,7 +48,7 @@ def test_ordered_csr_matches_scalar_candidate_queries(dimension, rho, eta):
 
 def test_ordered_csr_after_grid_membership_change():
     culture = make_culture(
-        'batch_cached_noise_numba', seed=29, dimension=2,
+        'numba', seed=29, dimension=2,
         rho=0.84, eta=0.0, n=64,
     )
     run(culture, 0, 10)

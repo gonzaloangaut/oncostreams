@@ -42,9 +42,9 @@ def assert_bucket_cache_current(culture):
 def test_grouped_caches_preserve_bitwise_steps(rho, attempts, dimension):
     # Compare persistent caches against a run that deliberately rebuilds
     # elongation caches every step. The optimized physics must not change.
-    rebuilt = build_culture('grouped_early_numba', n=64, rho=rho,
+    rebuilt = build_culture('numba', n=64, rho=rho,
                             attempts=attempts, dimension=dimension)
-    optimized = build_culture('grouped_early_numba', n=64, rho=rho,
+    optimized = build_culture('numba', n=64, rho=rho,
                               attempts=attempts, dimension=dimension)
     for tic in range(1, 21):
         rebuilt.grid._elongation_geometry_cache = None
@@ -57,7 +57,7 @@ def test_grouped_caches_preserve_bitwise_steps(rho, attempts, dimension):
 
 
 def test_caches_update_and_invalidate_directly():
-    culture = build_culture('grouped_early_numba', n=64, rho=0.5)
+    culture = build_culture('numba', n=64, rho=0.5)
     run(culture, 0, 0)
     grid = culture.grid
     geometry = _shared_elongation_geometry(culture)
@@ -83,8 +83,8 @@ def test_caches_update_and_invalidate_directly():
 
 
 def test_elongation_caches_not_checkpointed(tmp_path):
-    continuous = build_culture('grouped_early_numba', n=64, rho=0.84, attempts=5)
-    paused = build_culture('grouped_early_numba', n=64, rho=0.84, attempts=5)
+    continuous = build_culture('numba', n=64, rho=0.84, attempts=5)
+    paused = build_culture('numba', n=64, rho=0.84, attempts=5)
     run(continuous, 0, 30)
     run(paused, 0, 13)
     assert getattr(paused.grid, '_elongation_geometry_cache', None) is not None

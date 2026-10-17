@@ -46,9 +46,9 @@ def test_numba_vs_numpy_overlap_components(seed, n_neighbors, nonplanar):
     culture.nematic_tensors = q
     neighbors = list(range(1, n))
 
-    culture.overlap_backend = "numpy"
+    culture.backend = "numpy"
     ref = culture.calculate_overlap_components(0, neighbors, relative_positions)
-    culture.overlap_backend = "numba"
+    culture.backend = "numba"
     got = culture.calculate_overlap_components(0, neighbors, relative_positions)
     for reference, actual in zip(ref, got):
         np.testing.assert_allclose(actual, reference, rtol=2e-12, atol=1e-14)
@@ -61,6 +61,6 @@ def test_unknown_backend_rejected():
     culture.cell_area = np.pi
     culture.cell_phies = np.zeros(1)
     culture.nematic_tensors = np.zeros((1, 3, 3))
-    culture.overlap_backend = "nonexistent"
-    with pytest.raises(ValueError, match="Unknown overlap backend"):
+    culture.backend = "nonexistent"
+    with pytest.raises(ValueError, match="Unknown backend"):
         culture.calculate_overlap_components(0, [], np.empty((0, 3)))

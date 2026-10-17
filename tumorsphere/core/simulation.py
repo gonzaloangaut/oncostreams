@@ -1197,7 +1197,7 @@ def simulate_single_culture(
 
     # Record the effective values passed to this realization
     expected_config.update({
-        "checkpoint_config_version": 3,
+        "checkpoint_config_version": 4,
         "initial_number_of_cells": actual_number_of_cells,
         "initial_fraction_elongated": sim.initial_fraction_elongated[t],
         "prob_stem": sim.prob_stem[i],
@@ -1271,7 +1271,7 @@ def simulate_single_culture(
                 "Use a new output directory for a fresh simulation."
             )
 
-        if saved_config.get("checkpoint_config_version") != 3:
+        if saved_config.get("checkpoint_config_version") != 4:
             raise ValueError(
                 "Unsupported checkpoint configuration version; "
                 "start a fresh simulation with this code."
@@ -1304,23 +1304,30 @@ def simulate_single_culture(
                 "Checkpoint backend metadata disagrees with serialized Culture"
             )
 
-        expected_components = (
-            ("numba", "numba", "batch_cached_noise_numba",
-             "grouped_early_numba")
-            if stored_backend == "numba"
-            else ("numpy", "numpy", "cached", "standard")
+        # The force class and its physical parameters must also agree with
+        # serialized model metadata (not merely with the new Simulation).
+        stored_force_class = (
+            f"{type(culture.force).__module__}."
+            f"{type(culture.force).__qualname__}"
         )
-        actual_components = (
-            getattr(culture, "overlap_backend", None),
-            getattr(culture, "relative_positions_backend", None),
-            getattr(culture, "interaction_backend", None),
-            getattr(culture, "elongation_backend", None),
-        )
-        if actual_components != expected_components:
+        if saved_dynamic_config.get("force_class") != stored_force_class:
             raise ValueError(
-                "Checkpoint serialized backend components disagree with "
-                "the selected backend"
+                "Checkpoint force metadata disagrees with serialized Force class"
             )
+        for name in (
+            "kRep", "bExp", "noise_eta", "d_phi", "shrinking", "lambda_core",
+        ):
+            if saved_dynamic_config.get(f"force.{name}") != getattr(
+                culture.force, name, None
+            ):
+                raise ValueError(
+                    "Checkpoint force metadata disagrees with serialized "
+                    f"Force parameter: {name}"
+                )
+        if stored_backend == "numba" and not isinstance(
+            culture.force, Anisotropic_Grosmann
+        ):
+            raise ValueError("Checkpoint backend=numba requires Anisotropic_Grosmann")
 
         differences = []
 
@@ -1356,7 +1363,7 @@ def simulate_single_culture(
             )
 
         # Restore the chosen execution path after validating the checkpoint.
-        culture._configure_backend(sim.backend)
+        culture.backend = sim.backend
         culture._checkpoint_model_config = expected_config.copy()
 
         # Restore the saved RNG state without replacing the generator.

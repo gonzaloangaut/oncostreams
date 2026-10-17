@@ -1,8 +1,7 @@
 """Reusable fixtures for fixed-N Grosmann backend regression tests.
 
-Keep these helpers independent of individual test modules. They intentionally
-preserve the constructor arguments and exact bytewise assertions used before
-this refactor; they are not part of the production API.
+Keep these helpers independent of individual test modules. Tests select
+complete NumPy or Numba implementations; no individual production flags remain.
 """
 from __future__ import annotations
 
@@ -19,7 +18,7 @@ from tumorsphere.core.spatial_hash_grid import SpatialHashGrid
 
 
 def fixed_n_grosmann_culture(
-    *, interaction_backend, elongation_backend, seed, n, rho,
+    *, backend, seed, n, rho,
     dimension, eta, d_phi, attempts, deformation_period, output_dir,
 ):
     """Create the exact model configuration used by the backend tests."""
@@ -56,11 +55,8 @@ def fixed_n_grosmann_culture(
         aspect_ratio_max=ar_max,
         trabajo_final=True,
         cell_max_def_attempts=attempts,
-        backend="numba",
+        backend=backend,
     )
-    # Only tests may select individual paths to isolate equivalence.
-    culture.interaction_backend = interaction_backend
-    culture.elongation_backend = elongation_backend
     return culture
 
 
@@ -70,7 +66,7 @@ def make_batch_culture(
 ):
     """Use the final grouped-elongation implementation in interaction tests."""
     return fixed_n_grosmann_culture(
-        interaction_backend=backend, elongation_backend='grouped_early_numba',
+        backend=backend,
         seed=seed, n=n, rho=rho, dimension=dimension,
         eta=eta, d_phi=d_phi, attempts=1,
         deformation_period=0.01, output_dir=out,
@@ -83,8 +79,7 @@ def make_elongation_culture(
 ):
     """Preserve the existing grouped-elongation test defaults."""
     return fixed_n_grosmann_culture(
-        interaction_backend='batch_cached_noise_numba',
-        elongation_backend=backend, seed=seed, n=n, rho=rho,
+        backend=backend, seed=seed, n=n, rho=rho,
         dimension=dimension, eta=eta, d_phi=None, attempts=attempts,
         deformation_period=0.005, output_dir=output_dir,
     )

@@ -143,8 +143,8 @@ def grouped_proposal_scores(
 
 def elongate_from_round_grouped(self, cell_index: int) -> bool:
     """Replace elongate_from_round_fast; never modifies state until acceptance."""
-    if getattr(self, 'overlap_backend', 'numpy') != 'numba':
-        raise RuntimeError('Grouped elongation requires overlap_backend=numba')
+    if self.backend != 'numba':
+        raise RuntimeError('Grouped elongation requires backend=numba')
     cell = self.cells[cell_index]
     n_attempts = self.cell_max_def_attempts
     if n_attempts <= 0:

@@ -57,8 +57,7 @@ OVERLAP_FIELDS = (
 def _culture(settings):
     """Construct the production configuration recorded in the fixture."""
     return fixed_n_grosmann_culture(
-        interaction_backend="batch_cached_noise_numba",
-        elongation_backend="grouped_early_numba",
+        backend="numba",
         seed=settings["seed"], n=64, rho=settings["rho"],
         dimension=settings["dimension"],
         eta=settings["eta"], d_phi=settings["d_phi"],

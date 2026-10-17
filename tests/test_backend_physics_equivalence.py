@@ -20,8 +20,6 @@ def paired_cultures(*, seed, rho, dimension, attempts=1, eta=None, d_phi=None,
                     lambda_core=1.0):
     """Two independent cultures with identical initial positions and RNG."""
     options = dict(
-        interaction_backend="batch_cached_noise_numba",
-        elongation_backend="grouped_early_numba",
         seed=seed,
         n=64,
         rho=rho,
@@ -32,23 +30,16 @@ def paired_cultures(*, seed, rho, dimension, attempts=1, eta=None, d_phi=None,
         deformation_period=0.005,
         output_dir=None,
     )
-    reference = fixed_n_grosmann_culture(**options)
-    optimized = fixed_n_grosmann_culture(**options)
+    reference = fixed_n_grosmann_culture(backend="numpy", **options)
+    optimized = fixed_n_grosmann_culture(backend="numba", **options)
 
-    # Initialize cells, grid, orientation tensors, and RNG identically, without
-    # any movement or deformation. Do not consume new draws when switching.
+    # Initialize cells, grid, orientation tensors and RNG identically,
+    # without movement or deformation. No backend mutation is needed.
     reference.simulate(num_times=0, start_tic=0, checkpoint_path=None)
     optimized.simulate(num_times=0, start_tic=0, checkpoint_path=None)
     np.testing.assert_array_equal(reference.cell_positions, optimized.cell_positions)
     np.testing.assert_array_equal(reference.cell_phies, optimized.cell_phies)
     assert reference.rng.bit_generator.state == optimized.rng.bit_generator.state
-
-    reference.backend = "numpy"
-    reference.overlap_backend = "numpy"
-    reference.relative_positions_backend = "numpy"
-    reference.interaction_backend = "cached"
-    reference.elongation_backend = "standard"
-    optimized.backend = "numba"
 
     reference.force.lambda_core = lambda_core
     optimized.force.lambda_core = lambda_core

@@ -15,11 +15,10 @@ from tumorsphere.core.forces import Anisotropic_Grosmann, Spring_Force
 from tumorsphere.core.simulation import Simulation
 
 
-COMPONENTS = {
-    "numpy": ("numpy", "numpy", "cached", "standard"),
-    "numba": ("numba", "numba", "batch_cached_noise_numba",
-              "grouped_early_numba"),
-}
+REMOVED_COMPONENTS = (
+    "overlap_backend", "force_backend", "relative_positions_backend",
+    "interaction_backend", "elongation_backend",
+)
 
 
 def make_simulation(backend, steps, *, noise=False):
@@ -67,11 +66,8 @@ def run(backend, steps, output_dir, *, noise=False):
     assert culture.backend == backend
     config = culture._checkpoint_model_config
     assert config["backend"] == backend
-    assert config["checkpoint_config_version"] == 3
-    for retired_key in (
-        "overlap_backend", "force_backend", "relative_positions_backend",
-        "interaction_backend", "elongation_backend",
-    ):
+    assert config["checkpoint_config_version"] == 4
+    for retired_key in REMOVED_COMPONENTS:
         assert retired_key not in config
     return culture, paths[0]
 
@@ -115,7 +111,7 @@ def test_backend_change_on_resume_is_rejected(old, new, tmp_path):
         run(new, 8, tmp_path)
 
 
-@pytest.mark.parametrize("tamper", ["metadata", "serialized", "components"])
+@pytest.mark.parametrize("tamper", ["metadata", "serialized", "force_model", "force_parameters"])
 def test_checkpoint_backend_tampering_is_rejected(tamper, tmp_path):
     _, path = run("numpy", 4, tmp_path)
 
@@ -124,11 +120,13 @@ def test_checkpoint_backend_tampering_is_rejected(tamper, tmp_path):
             culture._checkpoint_model_config["backend"] = "numba"
         elif tamper == "serialized":
             culture.backend = "numba"
+        elif tamper == "force_model":
+            culture.force = Spring_Force()
         else:
-            culture.relative_positions_backend = "numba"
+            culture.force.lambda_core = 0.5
 
     modify_checkpoint(path, corrupt)
-    with pytest.raises(ValueError, match="backend"):
+    with pytest.raises(ValueError, match="backend|force"):
         run("numpy", 8, tmp_path)
 
 
@@ -137,7 +135,7 @@ def test_old_checkpoint_format_is_not_accepted(tmp_path):
     modify_checkpoint(
         path,
         lambda culture: culture._checkpoint_model_config.update(
-            checkpoint_config_version=2
+            checkpoint_config_version=3
         ),
     )
     with pytest.raises(ValueError, match="Unsupported checkpoint"):
@@ -174,11 +172,9 @@ def test_numba_requires_supported_model():
 @pytest.mark.parametrize("backend", ["numpy", "numba"])
 def test_new_culture_uses_complete_backend_configuration(backend, tmp_path):
     culture, _ = run(backend, 2, tmp_path)
-    components = (
-        culture.overlap_backend, culture.relative_positions_backend,
-        culture.interaction_backend, culture.elongation_backend,
-    )
-    assert components == COMPONENTS[backend]
+    assert culture.backend == backend
+    for name in REMOVED_COMPONENTS:
+        assert not hasattr(culture, name)
     assert not hasattr(culture.force, "force_backend")
 
 

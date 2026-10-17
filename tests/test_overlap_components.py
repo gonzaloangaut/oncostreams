@@ -20,6 +20,7 @@ ANGLES = (0.0, 0.37, -0.51, 1.38, math.pi / 2, 2.74)
 def make_culture(area=math.pi):
     """Build only the attributes needed by the overlap routine."""
     culture = Culture.__new__(Culture)
+    culture.backend = "numpy"
     culture.cell_area = area
     culture.cell_phies = np.asarray(ANGLES, dtype=float)
     culture.cells = []
