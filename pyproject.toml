@@ -56,7 +56,7 @@ readme = "README.md"
 
 license = {file = "LICENSE"}
 
-description = "Software for simulating tumorsphere cultures."
+description = "Active-matter simulations of collective glioma-cell migration."
 
 keywords = [
     "tumorsphere",
@@ -76,12 +76,13 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 
-urls = { Homepage = "https://github.com/JeroFotinos/tumorsphere_culture", Repository = "https://github.com/JeroFotinos/tumorsphere_culture" }
+urls = { Homepage = "https://github.com/gonzaloangaut/oncostreams", Repository = "https://github.com/gonzaloangaut/oncostreams", Upstream = "https://github.com/JeroFotinos/tumorsphere_culture" }
 
 [project.scripts]
 tumorsphere = "tumorsphere.cli:cli"
 
 [project.optional-dependencies]
+numba = ["numba"]
 dev = [
     "black",
     "flake8",
