@@ -56,6 +56,11 @@ class No_Forces(Force):
         neighbors_indexes,
         nematic_tensors,
     ):
+        """Return intrinsic displacement without pair forces or turning.
+
+        The position increment is the cell's self-propulsion velocity
+        multiplied by ``delta_t``; the orientation increment is zero.
+        """
         cell = cells[cell_index]
         # there is no change in the orientation and no force so the only change in
         # position is because of the intrinsic velocity
@@ -92,6 +97,13 @@ class Spring_Force(Force):
         neighbors_indexes,
         nematic_tensors,
     ):
+        """Compute spring-induced displacement and orientation change.
+
+        Neighbor contributions are accumulated from stored relative
+        positions and added to intrinsic motility. For moving cells, the
+        angle increment follows the direction of the resulting velocity.
+        The increments are returned, not applied to the culture state.
+        """
         cell = cells[cell_index]
 
         # initialization of the parameters of interaction
@@ -150,6 +162,12 @@ class Vicsek(Force):
         nematic_tensors,
     ):
         # In this model there is no change in the velocity but in the orientation
+        """Align a motile cell with its motile neighbors.
+
+        The mean direction includes the cell itself. Only its intrinsic
+        velocity contributes to displacement; a round, nonmotile cell
+        keeps its orientation unchanged.
+        """
         cell = cells[cell_index]
         # Calculate interaction with filtered neighbors
         dif_phi = 0  # Default value in case the cell is not moving
@@ -204,6 +222,12 @@ class Vicsek_and_Spring_Force(Force):
         neighbors_indexes,
         nematic_tensors,
     ):
+        """Combine Vicsek orientation alignment and spring displacement.
+
+        Moving neighbors determine the target orientation. Spring
+        contributions are added to self-propulsion for the position
+        increment, independently of the alignment calculation.
+        """
         cell = cells[cell_index]
         # initialization of the parameters of interaction
         dif_velocity = np.zeros(3)
@@ -274,6 +298,13 @@ class Grosmann(Force):
         nematic_tensors,
     ):
         # First of all we are going to calculate the force and the torque
+        """Calculate Grossmann-model force and torque increments.
+
+        Neighbor forces and torques use stored relative positions and
+        the model's overlap kernel. Shape-dependent translational and
+        rotational mobilities convert these totals to a displacement
+        and angle increment. No culture state is changed here.
+        """
         cell = cells[cell_index]
         # get some properties of the cell
         # nematic matrix
@@ -414,8 +445,27 @@ class Grosmann(Force):
 
 
 class Anisotropic_Grosmann(Force):
-    """
-    The model is the given by the generalization of Grosmann paper.
+    """Anisotropic Grossmann-type force, torque, mobility and noise model.
+
+    Pair contributions depend on normalized Gaussian overlap, cell
+    geometry and orientation. The resulting deterministic displacement
+    combines self-propulsion with a mobility-weighted interaction force.
+    Translational/rotational noise contributes additional increments.
+
+    Parameters
+    ----------
+    kRep : float, optional
+        Repulsive interaction strength.
+    bExp : float, optional
+        Exponent applied to normalized overlap in the force kernel.
+    noise_eta : float or None, optional
+        Amplitude of the translational random displacement; None disables it.
+    d_phi : float or None, optional
+        Rotational diffusion strength; None disables rotational noise.
+    shrinking : bool, optional
+        Whether to update the cell's contraction request from mechanics.
+    lambda_core : float, optional
+        Short-range force amplification parameter, constrained to [0, 1].
     """
 
     def __init__(
@@ -495,9 +545,16 @@ class Anisotropic_Grosmann(Force):
         return 1.0 + self.lambda_core * xi_power_safe / (1.0 - xi_power_safe)
 
     def calculate_mobilities(self, cell, area):
-        """
-        Calculate the longitudinal, transversal and rotational mobilities of
-        the cell
+        """Return geometry-dependent longitudinal, transverse and rotational mobilities.
+
+        Results are cached by ``(area, aspect_ratio)``. These factors act on
+        interaction forces, torques and noise amplitudes; the intrinsic cell
+        velocity is computed separately.
+
+        Returns
+        -------
+        tuple[float, float, float]
+            ``(mP, mS, mR)`` in that order.
         """
         # Reuse mobilities whenever the cell geometry matches
         cache_key = (area, cell.aspect_ratio)
@@ -567,8 +624,19 @@ class Anisotropic_Grosmann(Force):
         mS,
         mR,
     ):
-        """
-        If there is noise in the force, calculate it.
+        """Generate translational and rotational increments for one cell.
+
+        Random draws come from the culture's NumPy generator. Translational
+        increments are sampled in axes parallel and perpendicular to the
+        cell orientation, with amplitudes proportional to
+        ``noise_eta * sqrt(mobility * delta_t)``. The returned translation
+        is a position increment, not an instantaneous velocity.
+
+        Returns
+        -------
+        tuple
+            Translational increment and angular increment. A disabled
+            component is returned as zero.
         """
         cell = cells[cell_index]
 
@@ -650,6 +718,20 @@ class Anisotropic_Grosmann(Force):
     ):
         # First of all we are going to calculate the force and torque and then
         # we see how these change the velocity and orientation
+        """Return one cell's anisotropic force and torque increments.
+
+        The force kernel uses normalized Gaussian overlaps and the two
+        cells' shape and orientation tensors. A mobility tensor acts on
+        the summed pair force, which is added to intrinsic motion.
+        Translational and rotational random *increments* are added when
+        enabled, advancing the culture's NumPy RNG. When configured,
+        the mechanical contraction condition updates ``cell.shrink``.
+
+        Returns
+        -------
+        tuple[np.ndarray, float]
+            Position increment (shape ``(3,)``) and angle increment.
+        """
         cell = cells[cell_index]
         # Get some properties of the cell
         # nematic matrix

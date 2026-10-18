@@ -22,6 +22,7 @@ REMOVED_COMPONENTS = (
 
 
 def make_simulation(backend, steps, *, noise=False):
+    """Build the fixed-N fixture used to exercise public checkpoint APIs."""
     return Simulation(
         forces=[Anisotropic_Grosmann(
             kRep=2.5, bExp=3.0, lambda_core=1.0, shrinking=True,
@@ -52,6 +53,7 @@ def make_simulation(backend, steps, *, noise=False):
 
 
 def run(backend, steps, output_dir, *, noise=False):
+    """Execute and reload a saved checkpoint, asserting metadata integrity."""
     if backend == "numba":
         pytest.importorskip("numba")
     sim = make_simulation(backend, steps, noise=noise)
@@ -73,6 +75,7 @@ def run(backend, steps, output_dir, *, noise=False):
 
 
 def modify_checkpoint(path, modify):
+    """Rewrite checkpoint metadata to exercise corruption guards."""
     with path.open("rb") as handle:
         culture, tic, state = pickle.load(handle)
     modify(culture)

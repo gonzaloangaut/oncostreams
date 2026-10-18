@@ -11,6 +11,7 @@ from tumorsphere.core.spatial_hash_grid import SpatialHashGrid
 
 
 def make_minimal_culture(dimension, seed):
+    """Create a controlled periodic culture with boundary-adjacent cells."""
     rng = np.random.default_rng(seed)
     n = 32
     culture = Culture.__new__(Culture)
@@ -53,6 +54,7 @@ def original_move(culture, dif_positions, dif_phies):
 
 
 def grid_signature(culture):
+    """Capture bucket keys and ordered membership for exact comparisons."""
     return [(key, tuple(indices)) for key, indices in culture.grid.hash_table.items()]
 
 

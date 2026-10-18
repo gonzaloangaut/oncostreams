@@ -133,11 +133,13 @@ class _UnionFind:
 
 
 class Culture:
-    """
-    Class that represents a culture of cells.
+    """State and time evolution of a culture of cells.
 
-    This class handles the simulation, as well as some behavior of the cells,
-    such as reproduction.
+    Supports cell reproduction and fixed-population active-matter dynamics.
+    ``backend='numpy'`` selects the reference implementation;
+    ``backend='numba'`` selects the optimized planar, fixed-N
+    ``Anisotropic_Grosmann`` implementation. The chosen output object
+    controls which diagnostics are recorded.
     """
 
     def __init__(
@@ -518,6 +520,11 @@ class Culture:
 
     def _get_simulation_time(self):
         # we get the current date and time
+        """Return a human-readable local timestamp for culture metadata.
+
+        The timestamp identifies when the culture was created; it is not
+        the physical time variable used by the simulation.
+        """
         current_time = datetime.now()
         # we format the string
         time_string = current_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -744,21 +751,25 @@ class Culture:
     def calculate_relative_positions(
         self, cell_position: np.ndarray, neighbor_positions: np.ndarray
     ) -> np.ndarray:
-        """
-        It calculates the relative position in x and y of q cell with every neighbor
-        taking into account that they move in a box with periodic boundary conditions.
+        """Return minimum-image displacements from neighbors to a cell.
+
+        Periodic wrapping is applied independently to x and y when the
+        absolute difference exceeds half the box side. The z component is
+        preserved without minimum-image correction, matching the reference
+        implementation.
 
         Parameters
         ----------
         cell_position : np.ndarray
-            The position of the cell.
+            Reference position with shape ``(3,)``.
         neighbor_positions : np.ndarray
-            An array with all the positions of the neighbors.
+            Neighbor coordinates with shape ``(M, 3)``.
 
         Returns
         -------
-        relative_pos : np.ndarray
-            The relative position of the cell with every neighbor.
+        np.ndarray
+            Displacements ``cell_position - neighbor_positions``, shape
+            ``(M, 3)``, with the x/y minimum-image correction.
         """
 
         # Numba uses the SAME minimum-image rule as NumPy.
@@ -974,21 +985,22 @@ class Culture:
         cell_index: int,
         neighbor_indices: list,  # shape (N,)
     ) -> np.ndarray:  # returns shape (N,)
-        """
-        Calculates the maximum overlap between a single cell and multiple neighbors using
-        overlap calculated in the TF in a vectorized way. (with the orientation of each cell)
+        """Calculate the pairwise maximum Gaussian overlap for each neighbor.
+
+        The maximum depends on the two cell geometries and orientations,
+        but not on the distance between their centers.
 
         Parameters
         ----------
         cell_index : int
-            Index of the cell of reference.
-        neighbor_indices : np.ndarray
-            Indices of the neighboring cells.
+            Reference cell index.
+        neighbor_indices : sequence of int
+            Indices of cells to compare against the reference cell.
 
         Returns
         -------
-        overlaps : np.ndarray
-            Array of maximum overlaps with each neighbor.
+        np.ndarray
+            Maximum pairwise overlaps in the supplied neighbor order.
         """
         cell = self.cells[cell_index]
         neighbor_indices = np.array(neighbor_indices, dtype=int)
@@ -1021,14 +1033,14 @@ class Culture:
         return max_overlap
 
     def update_nematic_tensors(self, cell_indices: np.ndarray = None) -> None:
-        """
-        Updates the nematic tensors Q for the specified subset of cells.
-        If no indices are provided, all tensors are updated.
+        """Update nematic orientation tensors for the selected cells.
 
-        Parameters:
-        -----------
-        indices : np.ndarray or list of int, optional
-            Indices of the cells to update. If None, updates all cells.
+        Parameters
+        ----------
+        cell_indices : np.ndarray or list[int], optional
+            Cell indices to update. By default, the implementation updates
+            indices ``0..len(active_cell_indexes)-1``; this covers all
+            cells in a fixed-N culture with contiguous indices.
         """
         if cell_indices is None:
             cell_indices = np.arange(len(self.active_cell_indexes))
@@ -1239,21 +1251,22 @@ class Culture:
         return True
 
     def elongate_from_elliptical(self, cell_index: int) -> bool:
-        """If the cell is round, an angle is chosen randomly.
-        If the new cell with these angle and aspect ratio = maximum (given as an
-        attribute) does not overlap with others, it remains.
-        If not, try again up to cell_max_def_attempts.
-        If it fails to deform, it remains as it was originally.
+        """Attempt one further elongation of an already elliptical cell.
+
+        The existing orientation is retained. A proposed aspect ratio is
+        obtained by adding ``delta_aspect_ratio`` up to ``aspect_ratio_max``;
+        the associated new center is tested against the overlap threshold.
+        On rejection the original position and shape are restored.
 
         Parameters
         ----------
         cell_index : int
-            The index of the cell.
+            Index of the elliptical cell.
 
         Returns
-        ----------
-        succesful_elongation : bool
-            True if the elongation was successful, False otherwise.
+        -------
+        bool
+            Whether the shape change was accepted.
         """
         cell = self.cells[cell_index]
         # we save the old attributes
@@ -1262,8 +1275,7 @@ class Culture:
         # and get the place of the grid that correspond to the cell
         old_index = self.grid.get_hash_key(old_position)
 
-        # random phi and aspect ratio=max and generate a position with them
-        # new_phi = self.rng.uniform(low=0, high=2 * np.pi)
+        # The elliptical cell keeps its orientation during this proposal.
         new_aspect_ratio = min(
             old_aspect_ratio + self.delta_aspect_ratio, self.aspect_ratio_max
         )
@@ -1280,7 +1292,7 @@ class Culture:
                 position=new_position,
             )
         )
-        # modifies the set in-place to remove the actual cell index
+        # Exclude the deforming cell from the candidate list.
         candidate_neighbors.remove(cell_index)
 
         if not candidate_neighbors:
@@ -1597,26 +1609,26 @@ class Culture:
     def interaction(
         self, cell_index: int, delta_t: float
     ) -> Tuple[np.ndarray, float]:
-        """The given cell interacts with others if they are close enough.
+        """Calculate one cell's displacement and orientation increment.
 
-        It describes the interaction of the cells given a force. It changes the position
-        of the cell (because of the forces exerted by all the other cells and the
-        intrinsic velocity) and it's angle in the x-y plane, phi (because of a torque).
+        Only the NumPy backend supports this per-cell method. The optimized
+        Numba backend calculates the complete interaction sweep inside
+        ``Culture.simulate``. This method returns increments without moving
+        the cell; the caller applies the increments in a separate step.
 
         Parameters
         ----------
         cell_index : int
-            The index of the cell.
+            Index of the cell.
         delta_t : float
-            The time step.
+            Simulation time step.
 
         Returns
         -------
-        dif_position : np.ndarray
-            The change in the position of the cell.
-        dif_phi : float
-            The change in the angle phi of the cell.
-        -----
+        np.ndarray
+            Position increment with shape ``(3,)``.
+        float
+            Orientation increment in radians.
         """
         backend = self.backend
         if backend == "numba":
@@ -2070,23 +2082,24 @@ class Culture:
         checkpoint_path: str,
         checkpoint_period: float = 10.0,
     ) -> None:
-        """Simulate culture growth for a specified number of time steps.
+        """Advance culture dynamics for a specified number of time steps.
 
-        At each time step, we randomly sort the list of active cells and then
-        we tell them to reproduce one by one.
+        Depending on the model configuration, steps may include reproduction,
+        force-driven and self-propelled movement, rotational dynamics, and
+        scheduled cell deformation. The selected backend only changes the
+        numerical implementation of the supported dynamics. Initial states,
+        outputs, and checkpoints are managed here.
 
         Parameters
         ----------
         num_times : int
-            The number of time steps to simulate the cellular automaton.
+            Number of steps to execute.
         start_tic : int
-            The time step to start the simulation from. This is useful for
-            resuming from a checkpoint.
-        checkpoint_path : str
-            The path to save the checkpoint file. If None, no checkpoint will be saved.
+            Starting time-step index; used when resuming a simulation.
+        checkpoint_path : str or None
+            Destination checkpoint path. Disable checkpoint output with None.
         checkpoint_period : float, optional
-            The time interval (in simulation time units) between checkpoints.
-            Default is 10.0. Must be a positive finite value.
+            Positive interval between checkpoints in simulation time units.
         """
         # Validate the checkpoint period
         if not np.isfinite(checkpoint_period) or checkpoint_period <= 0:

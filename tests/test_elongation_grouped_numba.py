@@ -137,6 +137,7 @@ def test_cached_proposal_geometry_matches_original_bitwise(
 # Grouped-elongation cache regressions (formerly test_elongation_reuse_cache.py).
 
 def assert_geometry_cache_current(culture):
+    """Compare cached shape arrays against current cell geometry."""
     cache = getattr(culture.grid, '_elongation_geometry_cache', None)
     if cache is not None:
         np.testing.assert_array_equal(
@@ -147,6 +148,7 @@ def assert_geometry_cache_current(culture):
 
 def assert_bucket_cache_current(culture):
     # Check bucket membership AND the original ordered iteration sequence.
+    """Check cached neighbor lists against live ordered bucket contents."""
     cache = getattr(culture.grid, '_elongation_bucket_cache', None)
     if cache:
         for key, ordered in cache.items():

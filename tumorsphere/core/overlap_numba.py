@@ -1,7 +1,7 @@
-"""Experimental Numba backend for Gaussian overlaps in Oncostreams.
+"""Numba implementation of Gaussian overlap calculations.
 
-Numba is imported only when this module is explicitly requested by Culture.
-The default NumPy backend does not import or require Numba.
+This module is loaded lazily by the optimized fixed-N backend. The
+default NumPy backend does not require Numba to be imported.
 """
 
 import numpy as np

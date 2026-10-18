@@ -196,7 +196,13 @@ class TumorsphereOutput(ABC):
 
 
 class OutputDemux(TumorsphereOutput):
-    """Class managing multiple output objects and delegating method calls."""
+    """Delegate recording to several outputs without changing the dynamics.
+
+    ``collect_overlap_statistics`` records whether any configured output
+    requests overlap diagnostics. When no output requires them, the
+    interaction code can skip accumulation of those diagnostics while
+    preserving the actual force and overlap calculations.
+    """
 
     def __init__(
         self,
@@ -214,7 +220,6 @@ class OutputDemux(TumorsphereOutput):
             is not TumorsphereOutput.should_record_overlap_parameters
             for result in result_list
         )
-        # result_list's elements are other TumorsphereOutput objects
 
     def begin_culture(
         self,
@@ -742,6 +747,12 @@ class DatOutput(TumorsphereOutput):
 
 
 class DatOutput_position_aspectratio(TumorsphereOutput):
+    """Write per-cell positions, orientations and aspect ratios.
+
+    Each selected step produces one ``.dat`` snapshot. The output
+    does not change the simulation state.
+    """
+
     def __init__(self, culture_name, output_dir=".", save_step=1):
         self.output_dir = output_dir
         self.save_step = save_step
@@ -808,6 +819,13 @@ class DatOutput_position_aspectratio(TumorsphereOutput):
 
 
 class DatOutput_order_parameters(TumorsphereOutput):
+    """Write global polar/nematic order and elongated-cell fraction.
+
+    Polar and nematic order are reported both with normalization by
+    elongated cells and with normalization by all cells, alongside
+    the fraction of elongated cells.
+    """
+
     def __init__(self, culture_name, output_dir=".", save_step=1):
         self.output_dir = output_dir
         self.save_step = save_step
@@ -912,6 +930,14 @@ class DatOutput_order_parameters(TumorsphereOutput):
 
 
 class DatOutput_motion_parameters(TumorsphereOutput):
+    """Track unwrapped trajectories and write motion diagnostics.
+
+    Wrapped displacements are processed every step, even when the
+    output interval skips writing a record. The stored reference for
+    ``msd_t0`` is the first tracked state (or the resumed state if
+    this output is enabled only after a checkpoint).
+    """
+
     def __init__(self, culture_name, output_dir=".", save_step=1):
         self.output_dir = output_dir
         self.save_step = save_step
@@ -1098,6 +1124,12 @@ class DatOutput_motion_parameters(TumorsphereOutput):
 
 
 class DatOutput_local_order_parameters(TumorsphereOutput):
+    """Write coarse-grained local order statistics in spatial boxes.
+
+    Compact summaries and detailed per-occupied-box records may use
+    different output intervals.
+    """
+
     def __init__(
         self,
         culture_name,
@@ -1619,6 +1651,12 @@ class DatOutput_local_order_parameters(TumorsphereOutput):
 
 
 class DatOutput_cluster_parameters(TumorsphereOutput):
+    """Record connected-cluster observables and per-cluster details.
+
+    Summary and detailed cluster outputs can be written with
+    independently configured frequencies.
+    """
+
     def __init__(
         self,
         culture_name,
@@ -2428,6 +2466,12 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
 
 
 class DatOutput_deformation_parameters(TumorsphereOutput):
+    """Record deformation attempts, successes and contraction events.
+
+    The accumulated counters and overlap-related deformation
+    diagnostics describe the interval since the preceding record.
+    """
+
     def __init__(
         self,
         culture_name,
@@ -2668,6 +2712,7 @@ class DatOutput_overlap_parameters(TumorsphereOutput):
         tic: int,
         final_tic: int,
     ) -> bool:
+        """Request interval overlap statistics at configured and final steps."""
         return tic > 0 and (
             np.mod(tic, self.save_step) == 0 or tic == final_tic
         )
@@ -2680,6 +2725,11 @@ class DatOutput_overlap_parameters(TumorsphereOutput):
         max_normalized_overlap: float,
         mean_normalized_overlap: float,
     ) -> None:
+        """Write maximum and mean normalized overlap for a step interval.
+
+        The output includes the inclusive start/end step indices and
+        number of steps represented by the aggregates.
+        """
         output_folder = os.path.join(
             self.output_dir,
             "dat_overlap_parameters",

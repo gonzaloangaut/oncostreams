@@ -777,36 +777,35 @@ class Simulation:
         number_of_processes: int = None,
         output_dir: str = ".",
     ) -> None:
-        """
-        Simulate the growth of multiple cultures in parallel.
+        """Execute independent configured culture realizations in parallel.
 
-        Simulate culture growth `self.num_of_realizations` number of times
-        for each combination of self-replication (elements of the
-        `self.prob_stem` list) and differentiation probabilities (elements of
-        the `self.prob_diff` list), persisting the data of each culture to its
-        own file. The simulations are parallelized using multiprocessing.
+        One worker runs each combination of force, initial condition,
+        parameter values and seed, persisting enabled outputs. Worker
+        processes are managed by ``multiprocessing.Pool``.
 
-        Several different output types are simultaneously available, and the
-        data that is recorded is handled by the `TumorsphereOutput` classes.
-
-        When resuming from a checkpoint, output choices and recording intervals
-        may be changed because they do not alter the physical trajectory.
-        Existing stateful outputs are reused when possible. In particular, a
-        motion output that was already active preserves its unwrapped trajectory
-        and MSD reference. If motion output is enabled only after resuming, the
-        checkpoint state becomes the new ``msd_t0`` reference and a warning is
-        emitted. Model parameters that affect the dynamics remain strict.
-        If `number_of_processes` is None (default), the number of processes is
-        equal to the number of cores in the machine. Limitting the number of
-        processes is useful when running the simulation in a cluster, where
-        the number of cores is limited, or when running with all the resources
-        might trigger an alarm.
+        On checkpoint resume, output formats and save intervals can change
+        without changing the physical trajectory. An existing motion output
+        retains its unwrapped-trajectory history; newly enabled motion output
+        starts a new MSD reference at the resumed state, with a warning.
+        Model parameters and backend selection must match the checkpoint.
 
         Parameters
         ----------
-        number_of_processes : int
-            The number of the processes. If None (default), the number of
-            processes is equal to the number of cores in the machine.
+        sql, dat_files, dat_pos_ar, dat_order_par, dat_motion_par : bool
+            Select individual output formats and observables.
+        dat_cluster_par, dat_deformation_par, dat_overlap_par : bool
+            Enable cluster, deformation-event and overlap diagnostics.
+        dat_local_order_par, ovito, df : bool
+            Enable local order, OVITO and dataframe outputs.
+        number_of_processes : int or None, optional
+            Number of worker processes; None uses the pool default.
+        output_dir : str, optional
+            Root directory for output files and checkpoints.
+
+        Notes
+        -----
+        ``save_step_*`` arguments set the record frequency of each output.
+        Their defaults are listed in the function signature.
         """
         if number_of_processes is None:
             number_of_processes = mp.cpu_count()

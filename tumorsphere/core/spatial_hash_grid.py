@@ -47,36 +47,28 @@ class OrderedIndexSet(MutableSet):
 
 
 class SpatialHashGrid:
-    """
-    A class representing a spatial hash grid in a culture.
+    """Spatial hash for neighbor searches in two or three dimensions.
+
+    Bucket coordinates are serialized as ``bytes`` keys. Each bucket
+    stores cell indices in an ``OrderedIndexSet`` so iteration order is
+    stable across checkpoints made with the current format. Transient
+    candidate-neighbor caches are invalidated after bucket mutations
+    and are not serialized.
 
     Attributes
     ----------
-    hash_table : Dict[Tuple[int, int, int], Set[int]]
-        A dictionary that maps the coordinates of the grid to the set of cell
-        indices that are in that cube.
-    culture : Culture, optional
-        The Culture to be spatially hashed. None at initialization, but
-        meant to be set by `tumorsphere.core.culture.Culture.__init__()`.
-    bounds : float, optional
-        The bounds of the grid. If None, the space is unbounded. If provided,
-        the space is bounded to the [0, bounds)^3 cube.
-    cube_size : float, optional
-        The size of the cubes in the grid. This value comes from considering
-        that cells have usually radius 1, so a cube of side `h=2r` is enough
-        to make sure that we only have to check superpositions with cells on
-        the same or first neighboring grid cells. Enlarge if using larger
-        cells. If we are in a torus, it can change in order to have an
-        integer number of buckets in the grid completed.
-    torus : bool, optional
-        Whether the grid is a torus or not. If True, the grid is a torus, so
-        the cells that go out of the bounds appear on the other side of the
-        grid. If False, the grid is a bounded cube, so behavior should be
-        defined to manage what happens when cells go out of the bounds of the
-        simulation.
+    hash_table : defaultdict[bytes, OrderedIndexSet]
+        Spatial bucket membership, in insertion order.
+    spatial_dimension : int
+        Number of hashed dimensions: 2 (requires z=0) or 3.
+    bounds : float or None
+        Periodic box side when a bounded torus is used.
+    cube_size : float
+        Spatial bucket side length.
+    torus : bool
+        Whether bounded coordinates wrap periodically.
     offsets : np.ndarray
-        The offsets to be added to the current bucket to get the adjacent
-        buckets. This is used to get the neighbors of a cell in the grid.
+        Moore-neighborhood offsets for ``spatial_dimension`` dimensions.
     """
 
     def __init__(
@@ -87,42 +79,21 @@ class SpatialHashGrid:
         torus: bool = True,
         spatial_dimension: int = 3,
     ) -> None:
-        """
-        Initialize the Spatial Hashing of a Culture.
+        """Initialize the grid and its transient neighbor caches.
 
         Parameters
         ----------
-        culture : Culture
-            The Culture to be spatially hashed. None at initialization, but
-            meant to be set by `tumorsphere.core.culture.Culture.__init__()`.
-        bounds : int, optional
-            The bounds of the grid, by default None. If None, the space is
-            unbouded. If provided, the space is bounded to the [0, bounds)^3
-            cube.
-        cube_size : int, optional
-            The size of the cubes in the grid, by default 2. This value comes
-            from considering that cells have usually radius 1, so a cube of
-            side $h=2r$ is enough to make sure that we only have to check
-            superpositions with cells on the same or first neighboring grid
-            cells. Enlarge if using larger cells.
+        culture : Culture or None, optional
+            Owning culture; generally set during ``Culture`` initialization.
+        bounds : float or None, optional
+            Side length of the bounded domain, or None for unbounded space.
+        cube_size : float, optional
+            Side length of a spatial bucket.
         torus : bool, optional
-            Whether the grid is a torus or not, only relevant when bounds are
-            provided, True by default. If True, the grid is a torus, so the
-            cells that go out of the bounds appear on the other side of the
-            grid. If False, the grid is a bounded cube, so behavior should be
-            defined to manage what happens when cells go out of the bounds of
-            the simulation.
-
-        Attributes
-        ----------
-        hash_table : Dict[Tuple[int, int, int], Set[int]]
-            A dictionary that maps the coordinates of the grid to the set of
-            cell indices that are in that cube.
-        number_of_buckets : int
-            The number of buckets in the grid along each dimension. If using a
-            toroidal grid (torus), this value must be an integer, and the total
-            size of the grid should  wrap around to match the system bounds,
-            ensuring periodic boundary conditions.
+            Whether to wrap buckets across periodic boundaries.
+        spatial_dimension : {2, 3}, optional
+            Number of coordinates used for hashing. Two-dimensional grids
+            require all stored positions to have z=0.
         """
         if (
             not isinstance(spatial_dimension, (int, np.integer))
@@ -335,24 +306,25 @@ class SpatialHashGrid:
         position: np.ndarray,
         bucket_radius: int = 1,
     ) -> Iterable:
-        """Return cell indexes in neighboring hash buckets.
+        """Iterate over candidates in the neighboring spatial buckets.
+
+        The returned cells are *candidates*, not necessarily interacting
+        neighbors: overlap filtering is performed separately. Periodic
+        wrapping deduplicates bucket coordinates. Iteration preserves the
+        ordering of buckets and of indices within each bucket.
 
         Parameters
         ----------
         position : np.ndarray
-            Position of the target cell.
+            Position defining the central bucket.
         bucket_radius : int, optional
-            Number of hash buckets to inspect in each Cartesian direction.
-            ``bucket_radius=1`` reproduces the standard 3x3x3 Moore
-            neighborhood used by the dynamics. Larger values are useful for
-            observables whose range is deliberately larger than the force
-            interaction range (for example a +10% cluster graph).
+            Radius in bucket units. A value of one covers a 3x3 or 3x3x3
+            Moore neighborhood in 2D or 3D, respectively.
 
-        Notes
-        -----
-        Periodic wrapping can map several requested buckets onto the same
-        physical bucket. Those duplicates are removed before cell indexes are
-        returned.
+        Returns
+        -------
+        Iterable[int]
+            Candidate cell indices, including the reference cell if present.
         """
         if not isinstance(bucket_radius, (int, np.integer)) or bucket_radius < 0:
             raise ValueError("bucket_radius must be a non-negative integer.")

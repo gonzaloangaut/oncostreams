@@ -16,6 +16,21 @@ XI_POWER_MAX = float(np.nextafter(1.0, 0.0))
 def _batch_pair_forces(positions, phies, diagonals, anisotropies, qxx, qxy,
                        ptr, indices, side, overlap_threshold,
                        k_rep, gamma, lambda_core, xi_power_max):
+    """Accumulate ordered pair forces and torques in a compiled sweep.
+
+    ``ptr`` and ``indices`` encode candidate neighbors in CSR form.
+    The first stage computes their normalized overlaps using the
+    reference minimum-image rule; the second stage accumulates force
+    and torque only where the overlap strictly exceeds the threshold.
+    The supplied candidate order determines floating-point summation
+    order. The routine does not generate noise or mutate cell state.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, np.ndarray]
+        Total pair forces ``(N, 3)``, torques ``(N,)`` and normalized
+        overlaps for all candidate entries, in CSR order.
+    """
     n = len(ptr) - 1
     f = np.zeros((n, 3), dtype=np.float64)
     t = np.zeros(n, dtype=np.float64)

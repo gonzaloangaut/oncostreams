@@ -47,6 +47,7 @@ def paired_cultures(*, seed, rho, dimension, attempts=1, eta=None, d_phi=None,
 
 
 def ordered_grid(culture):
+    """Capture bucket membership and iteration order for exact comparisons."""
     return [(key, tuple(bucket)) for key, bucket in culture.grid.hash_table.items()]
 
 

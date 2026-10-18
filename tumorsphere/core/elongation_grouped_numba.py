@@ -1,18 +1,11 @@
-"""Opt-in grouped round-cell elongation with safe early overlap rejection.
+"""Grouped round-cell elongation for the production Numba backend.
 
-This implementation is based on the experimentally validated ``combined``
-mode from ``oncostreams_elongation_probe.py``. It preserves, for each cell:
-  * the NumPy RNG sequence and per-proposal position/orientation arithmetic;
-  * all attempted orientations, including rejected ones;
-  * the best-valid-score selection and the final tie-breaking RNG draw;
-  * sequential deformation processing in the caller-defined cell order;
-  * accepted cell updates and spatial-grid insertion order.
-
-The expensive neighbor/overlap calculation is fused into one Numba call
-per round-cell elongation. Invalid proposals stop at the first overlap
-above threshold. Valid scores are evaluated completely in reference order.
-
-Numba/NumPy bitwise equivalence is version-dependent and is verified by tests.
+For each cell, the code samples the same number of trial orientations
+as the NumPy reference, evaluates proposals in the original order,
+and rejects invalid overlaps early. Valid proposals are ranked by
+maximum normalized overlap, with exact ties broken using the culture
+RNG. The candidate and geometry caches are transient and kept current
+on grid and shape changes.
 """
 from __future__ import annotations
 

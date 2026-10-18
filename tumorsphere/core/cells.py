@@ -232,14 +232,17 @@ class Cell:
         self.update_shape_parameters()
 
     def velocity(self) -> np.ndarray:
-        """
-        It returns the velocity vector of the given cell. Speed=0 for round cells
-        and speed=1 for maximum aspect ratio.
+        """Return the cell's intrinsic self-propulsion velocity.
+
+        Its magnitude is ``cell_speed_max * (aspect_ratio - 1) /
+        (aspect_ratio_max - 1)``. It vanishes for round cells and reaches
+        ``cell_speed_max`` at the maximum aspect ratio. Interaction-induced
+        motion and translational noise are not included here.
 
         Returns
         -------
         np.ndarray
-            The velocity vector of the cell.
+            Intrinsic velocity vector in the x-y plane, shape ``(3,)``.
         """
         speed = (
             self.culture.cell_speed_max

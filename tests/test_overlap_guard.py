@@ -78,6 +78,7 @@ def test_interaction_forwards_cached_policy(output_enabled, tmp_path):
 
 
 def _simulation(steps, backend):
+    """Build a deterministic fixed-N configuration for output-policy tests."""
     return Simulation(
         forces=[Anisotropic_Grosmann(
             kRep=2.5, bExp=3.0, lambda_core=1.0,
@@ -99,6 +100,7 @@ def _simulation(steps, backend):
 
 
 def _run(output_dir, steps, with_overlap, backend):
+    """Run one case and reload the saved physical state from checkpoint."""
     sim = _simulation(steps, backend)
     sim.simulate_parallel(
         sql=False, number_of_processes=1, output_dir=str(output_dir),
@@ -113,6 +115,7 @@ def _run(output_dir, steps, with_overlap, backend):
 
 
 def _assert_same_state(a, b):
+    """Assert bitwise-equivalent positions, shapes, angles and RNG state."""
     np.testing.assert_array_equal(a.cell_positions, b.cell_positions)
     np.testing.assert_array_equal(a.cell_phies, b.cell_phies)
     np.testing.assert_array_equal(

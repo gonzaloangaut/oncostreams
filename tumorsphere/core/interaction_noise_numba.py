@@ -1,11 +1,9 @@
-"""Optional exact-order compiled noise for batch interaction sweeps.
+"""Compiled noise increments for the production batch interaction sweep.
 
-The RNG remains NumPy's Generator, advancing in the same per-cell order as
-Anisotropic_Grosmann.calculate_noise. Only the deterministic noise algebra
-runs in Numba; no fastmath and no parallel reductions are enabled.
-
-This kernel is not a generally portable promise of bitwise NumPy/Numba equality:
-the supported installed versions are checked by regression tests.
+The RNG remains NumPy's Generator, advancing in the reference cell
+order. Only deterministic transformations of the sampled random
+values execute in Numba. ``fastmath`` is disabled, but exact binary
+agreement across different library versions is not guaranteed.
 """
 from __future__ import annotations
 

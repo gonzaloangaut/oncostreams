@@ -13,11 +13,13 @@ from tumorsphere.core.culture import Culture
 
 
 def numpy_reference(cell, neighbors, side):
+    """Evaluate the unmodified NumPy relative-position implementation."""
     dummy = SimpleNamespace(side=side, backend="numpy")
     return Culture.calculate_relative_positions(dummy, cell, neighbors)
 
 
 def actual_backend(cell, neighbors, side):
+    """Evaluate the Numba relative-position implementation under test."""
     pytest.importorskip("numba")
     dummy = SimpleNamespace(side=side, backend="numba")
     return Culture.calculate_relative_positions(dummy, cell, neighbors)

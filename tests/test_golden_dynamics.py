@@ -97,6 +97,7 @@ def _state(culture):
 
 @pytest.fixture(scope="module")
 def golden():
+    """Read the committed golden fixture without regenerating reference data."""
     if not FIXTURE.exists():
         pytest.fail(
             f"Missing frozen regression fixture: {FIXTURE}. "

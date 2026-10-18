@@ -94,6 +94,7 @@ def scalar_overlap_reference(culture, index, neighbors, relative_positions):
 
 
 def assert_overlap_matches_reference(culture, index, neighbors, positions):
+    """Compare absolute, normalized and maximum overlaps with scalar formulas."""
     actual = culture.calculate_overlap_components(index, neighbors, positions)
     expected = scalar_overlap_reference(culture, index, neighbors, positions)
 
