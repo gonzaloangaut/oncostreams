@@ -75,6 +75,13 @@ These are medians from three repetitions after 60 warmup steps, timing 150
 steps without file output or checkpoints. Initialization and JIT compilation
 are excluded. Speedups are not guaranteed for other regimes or full runs.
 
+For a reproducible comparison of NumPy and Numba on the **same current code**,
+run `python benchmarks/performance.py benchmark`. To generate Python-level
+profiling reports, run `python benchmarks/performance.py profile`. A recorded
+same-commit benchmark and readable profiles are available in
+[`benchmarks/results/reference/`](benchmarks/results/reference/).
+Profiling times are instrumented and should not be used to calculate speedups.
+
 Checkpoint formats also changed: this branch requires checkpoint configuration
 version 4, so checkpoints made by the historical `main` implementation
 cannot be resumed directly. Resume tests cover checkpoints made with the

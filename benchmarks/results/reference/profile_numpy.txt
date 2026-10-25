@@ -1,0 +1,92 @@
+cProfile: cumulative Python time
+         29670072 function calls in 60.963 seconds
+
+   Ordered by: cumulative time
+   List reduced from 96 to 35 due to restriction <35>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.319    0.319   60.963   60.963 culture.py:2078(simulate)
+   150000    0.809    0.000   54.782    0.000 culture.py:1609(interaction)
+   150000   12.469    0.000   27.270    0.000 forces.py:709(calculate_interaction)
+   150000   10.118    0.000   25.969    0.000 culture.py:1469(_get_significant_neighbors)
+   190928    9.323    0.000   10.784    0.000 culture.py:811(calculate_overlap_components)
+     9263    1.209    0.000    5.802    0.001 culture.py:1108(elongate_from_round)
+   487816    1.648    0.000    4.751    0.000 forces.py:519(calculate_core_amplification)
+   190928    3.981    0.000    3.981    0.000 culture.py:751(calculate_relative_positions)
+   637816    2.062    0.000    3.581    0.000 _linalg.py:2623(norm)
+   487816    0.700    0.000    2.995    0.000 fromnumeric.py:2241(clip)
+   150000    2.247    0.000    2.477    0.000 forces.py:616(calculate_noise)
+   487816    0.386    0.000    2.295    0.000 fromnumeric.py:51(_wrapfunc)
+   150000    0.492    0.000    2.231    0.000 forces.py:683(check_shrink_condition)
+   487816    0.658    0.000    1.785    0.000 {method 'clip' of 'numpy.generic' objects}
+   357396    1.466    0.000    1.756    0.000 cells.py:234(velocity)
+   165156    0.652    0.000    1.575    0.000 spatial_hash_grid.py:304(find_neighbors)
+  4459212    0.969    0.000    1.483    0.000 spatial_hash_grid.py:30(__iter__)
+  1276495    1.416    0.000    1.416    0.000 {built-in method numpy.array}
+   150000    0.284    0.000    1.325    0.000 numeric.py:2231(identity)
+  1128744    1.247    0.000    1.247    0.000 {built-in method numpy.asarray}
+   487816    1.127    0.000    1.127    0.000 _methods.py:98(_clip)
+  4624368    0.925    0.000    0.925    0.000 spatial_hash_grid.py:376(<genexpr>)
+   221363    0.585    0.000    0.793    0.000 spatial_hash_grid.py:198(get_bucket_position)
+   150000    0.607    0.000    0.792    0.000 _twodim_base_impl.py:176(eye)
+   450000    0.698    0.000    0.698    0.000 {method 'clear' of 'dict' objects}
+   637816    0.694    0.000    0.694    0.000 {method 'dot' of 'numpy.ndarray' objects}
+    46541    0.514    0.000    0.552    0.000 culture.py:1035(update_nematic_tensors)
+  4459212    0.514    0.000    0.514    0.000 {built-in method builtins.iter}
+   637816    0.218    0.000    0.304    0.000 _linalg.py:187(isComplexType)
+   637816    0.289    0.000    0.289    0.000 {method 'ravel' of 'numpy.ndarray' objects}
+   346841    0.258    0.000    0.258    0.000 {built-in method numpy.zeros}
+   150000    0.171    0.000    0.248    0.000 <frozen importlib._bootstrap>:1390(_handle_fromlist)
+    46340    0.051    0.000    0.236    0.000 fromnumeric.py:3052(max)
+    56207    0.044    0.000    0.228    0.000 spatial_hash_grid.py:214(get_hash_key)
+   221663    0.209    0.000    0.209    0.000 {method 'astype' of 'numpy.ndarray' objects}
+
+
+
+cProfile: Python self time
+         29670072 function calls in 60.963 seconds
+
+   Ordered by: internal time
+   List reduced from 96 to 35 due to restriction <35>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   150000   12.469    0.000   27.270    0.000 forces.py:709(calculate_interaction)
+   150000   10.118    0.000   25.969    0.000 culture.py:1469(_get_significant_neighbors)
+   190928    9.323    0.000   10.784    0.000 culture.py:811(calculate_overlap_components)
+   190928    3.981    0.000    3.981    0.000 culture.py:751(calculate_relative_positions)
+   150000    2.247    0.000    2.477    0.000 forces.py:616(calculate_noise)
+   637816    2.062    0.000    3.581    0.000 _linalg.py:2623(norm)
+   487816    1.648    0.000    4.751    0.000 forces.py:519(calculate_core_amplification)
+   357396    1.466    0.000    1.756    0.000 cells.py:234(velocity)
+  1276495    1.416    0.000    1.416    0.000 {built-in method numpy.array}
+  1128744    1.247    0.000    1.247    0.000 {built-in method numpy.asarray}
+     9263    1.209    0.000    5.802    0.001 culture.py:1108(elongate_from_round)
+   487816    1.127    0.000    1.127    0.000 _methods.py:98(_clip)
+  4459212    0.969    0.000    1.483    0.000 spatial_hash_grid.py:30(__iter__)
+  4624368    0.925    0.000    0.925    0.000 spatial_hash_grid.py:376(<genexpr>)
+   150000    0.809    0.000   54.782    0.000 culture.py:1609(interaction)
+   487816    0.700    0.000    2.995    0.000 fromnumeric.py:2241(clip)
+   450000    0.698    0.000    0.698    0.000 {method 'clear' of 'dict' objects}
+   637816    0.694    0.000    0.694    0.000 {method 'dot' of 'numpy.ndarray' objects}
+   487816    0.658    0.000    1.785    0.000 {method 'clip' of 'numpy.generic' objects}
+   165156    0.652    0.000    1.575    0.000 spatial_hash_grid.py:304(find_neighbors)
+   150000    0.607    0.000    0.792    0.000 _twodim_base_impl.py:176(eye)
+   221363    0.585    0.000    0.793    0.000 spatial_hash_grid.py:198(get_bucket_position)
+    46541    0.514    0.000    0.552    0.000 culture.py:1035(update_nematic_tensors)
+  4459212    0.514    0.000    0.514    0.000 {built-in method builtins.iter}
+   150000    0.492    0.000    2.231    0.000 forces.py:683(check_shrink_condition)
+   487816    0.386    0.000    2.295    0.000 fromnumeric.py:51(_wrapfunc)
+        1    0.319    0.319   60.963   60.963 culture.py:2078(simulate)
+   637816    0.289    0.000    0.289    0.000 {method 'ravel' of 'numpy.ndarray' objects}
+   150000    0.284    0.000    1.325    0.000 numeric.py:2231(identity)
+   346841    0.258    0.000    0.258    0.000 {built-in method numpy.zeros}
+   637816    0.218    0.000    0.304    0.000 _linalg.py:187(isComplexType)
+   221663    0.209    0.000    0.209    0.000 {method 'astype' of 'numpy.ndarray' objects}
+   315206    0.207    0.000    0.207    0.000 {method 'get' of 'dict' objects}
+  1275632    0.195    0.000    0.195    0.000 {built-in method builtins.issubclass}
+   150000    0.171    0.000    0.248    0.000 <frozen importlib._bootstrap>:1390(_handle_fromlist)
+
+
+
+Important: Numba nopython kernels are opaque here; the profiler does not attribute time to lines inside compiled kernels.
+This instrumented runtime must not be used as the benchmark timing.

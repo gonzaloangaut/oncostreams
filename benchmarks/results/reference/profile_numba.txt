@@ -1,0 +1,92 @@
+cProfile: cumulative Python time
+         3809047 function calls in 2.802 seconds
+
+   Ordered by: cumulative time
+   List reduced from 99 to 35 due to restriction <35>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.032    0.032    2.802    2.802 culture.py:2078(simulate)
+      150    0.374    0.002    1.695    0.011 interaction_batch_numba.py:217(batch_interaction_step)
+     9263    0.022    0.000    0.965    0.000 culture.py:1108(elongate_from_round)
+     9263    0.419    0.000    0.943    0.000 elongation_grouped_numba.py:162(elongate_from_round_grouped)
+      150    0.254    0.002    0.925    0.006 neighbor_candidate_cache.py:48(ordered_csr)
+    10537    0.219    0.000    0.485    0.000 neighbor_candidate_cache.py:27(_refresh)
+    15131    0.094    0.000    0.239    0.000 elongation_grouped_numba.py:53(_cached_elongation_neighbors)
+    28689    0.203    0.000    0.203    0.000 {built-in method numpy.asarray}
+    56207    0.036    0.000    0.183    0.000 spatial_hash_grid.py:214(get_hash_key)
+    74098    0.138    0.000    0.178    0.000 spatial_hash_grid.py:198(get_bucket_position)
+   467451    0.098    0.000    0.149    0.000 spatial_hash_grid.py:30(__iter__)
+      150    0.067    0.000    0.138    0.001 interaction_batch_numba.py:156(_vectorized_compiled_noise_postprocess)
+   544415    0.125    0.000    0.125    0.000 {method 'get' of 'dict' objects}
+    17313    0.047    0.000    0.111    0.000 spatial_hash_grid.py:304(find_neighbors)
+      150    0.025    0.000    0.102    0.001 culture.py:1848(move)
+   484764    0.085    0.000    0.085    0.000 spatial_hash_grid.py:376(<genexpr>)
+   150000    0.036    0.000    0.069    0.000 forces.py:547(calculate_mobilities)
+      300    0.034    0.000    0.059    0.000 {built-in method numpy.fromiter}
+    10537    0.033    0.000    0.058    0.000 {built-in method builtins.sorted}
+   165131    0.053    0.000    0.053    0.000 {method 'extend' of 'list' objects}
+      578    0.039    0.000    0.053    0.000 neighbor_candidate_cache.py:74(modified_bucket)
+   239153    0.053    0.000    0.053    0.000 {method 'tobytes' of 'numpy.ndarray' objects}
+   467451    0.051    0.000    0.051    0.000 {built-in method builtins.iter}
+    90154    0.048    0.000    0.048    0.000 {method 'astype' of 'numpy.ndarray' objects}
+      289    0.001    0.000    0.032    0.000 spatial_hash_grid.py:232(remove_cell_from_hash_table)
+   200042    0.030    0.000    0.030    0.000 {built-in method builtins.len}
+      289    0.001    0.000    0.028    0.000 spatial_hash_grid.py:218(add_cell_to_hash_table)
+   165131    0.028    0.000    0.028    0.000 {method 'append' of 'list' objects}
+   159107    0.025    0.000    0.025    0.000 neighbor_candidate_cache.py:31(<genexpr>)
+      226    0.015    0.000    0.017    0.000 culture.py:1035(update_nematic_tensors)
+      150    0.015    0.000    0.016    0.000 interaction_noise_numba.py:62(compiled_noise_for_sweep)
+     9263    0.009    0.000    0.015    0.000 elongation_grouped_numba.py:34(_shared_elongation_geometry)
+   150000    0.013    0.000    0.013    0.000 interaction_batch_numba.py:208(<genexpr>)
+   150000    0.012    0.000    0.012    0.000 interaction_batch_numba.py:181(<genexpr>)
+    37902    0.012    0.000    0.012    0.000 serialize.py:30(_numba_unpickle)
+
+
+
+cProfile: Python self time
+         3809047 function calls in 2.802 seconds
+
+   Ordered by: internal time
+   List reduced from 99 to 35 due to restriction <35>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     9263    0.419    0.000    0.943    0.000 elongation_grouped_numba.py:162(elongate_from_round_grouped)
+      150    0.374    0.002    1.695    0.011 interaction_batch_numba.py:217(batch_interaction_step)
+      150    0.254    0.002    0.925    0.006 neighbor_candidate_cache.py:48(ordered_csr)
+    10537    0.219    0.000    0.485    0.000 neighbor_candidate_cache.py:27(_refresh)
+    28689    0.203    0.000    0.203    0.000 {built-in method numpy.asarray}
+    74098    0.138    0.000    0.178    0.000 spatial_hash_grid.py:198(get_bucket_position)
+   544415    0.125    0.000    0.125    0.000 {method 'get' of 'dict' objects}
+   467451    0.098    0.000    0.149    0.000 spatial_hash_grid.py:30(__iter__)
+    15131    0.094    0.000    0.239    0.000 elongation_grouped_numba.py:53(_cached_elongation_neighbors)
+   484764    0.085    0.000    0.085    0.000 spatial_hash_grid.py:376(<genexpr>)
+      150    0.067    0.000    0.138    0.001 interaction_batch_numba.py:156(_vectorized_compiled_noise_postprocess)
+   165131    0.053    0.000    0.053    0.000 {method 'extend' of 'list' objects}
+   239153    0.053    0.000    0.053    0.000 {method 'tobytes' of 'numpy.ndarray' objects}
+   467451    0.051    0.000    0.051    0.000 {built-in method builtins.iter}
+    90154    0.048    0.000    0.048    0.000 {method 'astype' of 'numpy.ndarray' objects}
+    17313    0.047    0.000    0.111    0.000 spatial_hash_grid.py:304(find_neighbors)
+      578    0.039    0.000    0.053    0.000 neighbor_candidate_cache.py:74(modified_bucket)
+    56207    0.036    0.000    0.183    0.000 spatial_hash_grid.py:214(get_hash_key)
+   150000    0.036    0.000    0.069    0.000 forces.py:547(calculate_mobilities)
+      300    0.034    0.000    0.059    0.000 {built-in method numpy.fromiter}
+    10537    0.033    0.000    0.058    0.000 {built-in method builtins.sorted}
+        1    0.032    0.032    2.802    2.802 culture.py:2078(simulate)
+   200042    0.030    0.000    0.030    0.000 {built-in method builtins.len}
+   165131    0.028    0.000    0.028    0.000 {method 'append' of 'list' objects}
+      150    0.025    0.000    0.102    0.001 culture.py:1848(move)
+   159107    0.025    0.000    0.025    0.000 neighbor_candidate_cache.py:31(<genexpr>)
+     9263    0.022    0.000    0.965    0.000 culture.py:1108(elongate_from_round)
+      226    0.015    0.000    0.017    0.000 culture.py:1035(update_nematic_tensors)
+      150    0.015    0.000    0.016    0.000 interaction_noise_numba.py:62(compiled_noise_for_sweep)
+   150000    0.013    0.000    0.013    0.000 interaction_batch_numba.py:208(<genexpr>)
+   150000    0.012    0.000    0.012    0.000 interaction_batch_numba.py:181(<genexpr>)
+    37902    0.012    0.000    0.012    0.000 serialize.py:30(_numba_unpickle)
+      526    0.010    0.000    0.010    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+     9263    0.009    0.000    0.015    0.000 elongation_grouped_numba.py:34(_shared_elongation_geometry)
+    26053    0.006    0.000    0.006    0.000 {built-in method builtins.getattr}
+
+
+
+Important: Numba nopython kernels are opaque here; the profiler does not attribute time to lines inside compiled kernels.
+This instrumented runtime must not be used as the benchmark timing.
