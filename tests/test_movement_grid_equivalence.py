@@ -10,14 +10,17 @@ from tumorsphere.core.spatial_hash_grid import SpatialHashGrid
 from tumorsphere.core.simulation import Simulation
 
 
-@pytest.mark.parametrize("seed,initial_elongated,attempts", [
-    (17, 0.0, 1),
-    (42, 0.0, 5),
-    (17, 0.0, 10),
-    (42, 0.5, 1),
-    (17, 0.5, 5),
-    (42, 0.5, 10),
-])
+@pytest.mark.parametrize(
+    "seed,initial_elongated,attempts",
+    [
+        (17, 0.0, 1),
+        (42, 0.0, 5),
+        (17, 0.0, 10),
+        (42, 0.5, 1),
+        (17, 0.5, 5),
+        (42, 0.5, 10),
+    ],
+)
 def test_2d_and_3d_grids_produce_identical_dynamics(
     tmp_path, seed, initial_elongated, attempts
 ):
@@ -31,9 +34,7 @@ def test_2d_and_3d_grids_produce_identical_dynamics(
 
     side = np.sqrt(n * np.pi / rho)
 
-    cube_size = 2.0 * np.sqrt(
-        aspect_max * (-np.log(overlap_threshold))
-    )
+    cube_size = 2.0 * np.sqrt(aspect_max * (-np.log(overlap_threshold)))
 
     cultures = []
 
@@ -113,14 +114,13 @@ def test_2d_and_3d_grids_produce_identical_dynamics(
         [cell.aspect_ratio for cell in culture_3d.cells],
     )
 
-    assert (
-        [cell.is_round for cell in culture_2d.cells]
-        ==
-        [cell.is_round for cell in culture_3d.cells]
-    )
+    assert [cell.is_round for cell in culture_2d.cells] == [
+        cell.is_round for cell in culture_3d.cells
+    ]
 
 
 # Simulation spatial-dimension validation (formerly test_simulation_spatial_dimension.py).
+
 
 @pytest.mark.parametrize("dimension", [2, 3])
 def test_simulation_accepts_spatial_dimension(dimension):

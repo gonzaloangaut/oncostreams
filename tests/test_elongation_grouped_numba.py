@@ -1,11 +1,13 @@
 """Final grouped elongation regressions and independent kernel checks."""
+
 import pickle
 
 import numpy as np
 import pytest
 
 from tumorsphere.core.elongation_grouped_numba import (
-    _cached_elongation_neighbors, _shared_elongation_geometry,
+    _cached_elongation_neighbors,
+    _shared_elongation_geometry,
     _cached_proposal_geometry,
 )
 
@@ -16,14 +18,17 @@ from tests._helpers import (
 )
 
 
-@pytest.mark.parametrize("rho,dimension,attempts", [
-    (0.22, 2, 1), (0.84, 3, 10), (0.90, 2, 5),
-])
+@pytest.mark.parametrize(
+    "rho,dimension,attempts",
+    [
+        (0.22, 2, 1),
+        (0.84, 3, 10),
+        (0.90, 2, 5),
+    ],
+)
 def test_grouped_elongation_determinism(rho, dimension, attempts):
-    a = build_culture("numba", rho=rho,
-                      dimension=dimension, attempts=attempts)
-    b = build_culture("numba", rho=rho,
-                      dimension=dimension, attempts=attempts)
+    a = build_culture("numba", rho=rho, dimension=dimension, attempts=attempts)
+    b = build_culture("numba", rho=rho, dimension=dimension, attempts=attempts)
     for tic in range(1, 21):
         run(a, tic - 1, tic)
         run(b, tic - 1, tic)
@@ -66,11 +71,12 @@ def test_zero_attempts_matches_standard_path():
             assert not reference.elongate_from_round(index)
             assert not optimized.elongate_from_round(index)
     compare_bitwise(reference, optimized)
-    assert optimized.deformation_event_counts["round_elongation_successes"] == 0
+    assert (
+        optimized.deformation_event_counts["round_elongation_successes"] == 0
+    )
 
 
-
-@pytest.mark.parametrize('attempts', [1, 5, 10, 127])
+@pytest.mark.parametrize("attempts", [1, 5, 10, 127])
 def test_compiled_proposal_geometry_is_bitwise_identical(attempts):
     """Proposals preserve scalar NumPy results, including periodic crossings."""
     from tumorsphere.core.elongation_grouped_numba import compiled_proposals
@@ -89,16 +95,23 @@ def test_compiled_proposal_geometry_is_bitwise_identical(attempts):
                 expected_qxy = np.empty(attempts)
                 for k, phi in enumerate(phis):
                     expected_positions[k] = np.mod(
-                        old_position + np.array([
-                            displacement_length * np.cos(phi),
-                            displacement_length * np.sin(phi),
-                            0.0,
-                        ]), side,
+                        old_position
+                        + np.array(
+                            [
+                                displacement_length * np.cos(phi),
+                                displacement_length * np.sin(phi),
+                                0.0,
+                            ]
+                        ),
+                        side,
                     )
                     expected_qxx[k] = np.cos(2 * phi)
                     expected_qxy[k] = np.sin(2 * phi)
                 positions, qxx, qxy = compiled_proposals(
-                    old_position, displacement_length, phis, side,
+                    old_position,
+                    displacement_length,
+                    phis,
+                    side,
                 )
                 for expected, actual in (
                     (expected_positions, positions),
@@ -110,46 +123,61 @@ def test_compiled_proposal_geometry_is_bitwise_identical(attempts):
                     assert expected.tobytes() == actual.tobytes()
 
 
-@pytest.mark.parametrize("area,old_ratio,delta,max_ratio", [
-    (np.pi, 1.0, 1.7, 2.7),
-    (np.pi, 1.0, 0.2, 2.7),
-    (1.5, 1.0, 1.7, 2.7),
-    (np.pi, 2.0, 0.8, 2.7),
-])
+@pytest.mark.parametrize(
+    "area,old_ratio,delta,max_ratio",
+    [
+        (np.pi, 1.0, 1.7, 2.7),
+        (np.pi, 1.0, 0.2, 2.7),
+        (1.5, 1.0, 1.7, 2.7),
+        (np.pi, 2.0, 0.8, 2.7),
+    ],
+)
 def test_cached_proposal_geometry_matches_original_bitwise(
-    area, old_ratio, delta, max_ratio,
+    area,
+    old_ratio,
+    delta,
+    max_ratio,
 ):
     new_ratio = min(old_ratio + delta, max_ratio)
     expected_displacement = np.sqrt((area * new_ratio) / np.pi) - np.sqrt(
         (area * old_ratio) / np.pi
     )
     expected_diagonal = (area / np.pi) * (new_ratio + 1 / new_ratio)
-    expected_anisotropy = (new_ratio ** 2 - 1) / (new_ratio ** 2 + 1)
-    expected = (new_ratio, expected_displacement, expected_diagonal,
-                expected_anisotropy)
+    expected_anisotropy = (new_ratio**2 - 1) / (new_ratio**2 + 1)
+    expected = (
+        new_ratio,
+        expected_displacement,
+        expected_diagonal,
+        expected_anisotropy,
+    )
     _cached_proposal_geometry.cache_clear()
     for _ in range(2):  # Validate both cache miss and hit.
         actual = _cached_proposal_geometry(area, old_ratio, delta, max_ratio)
         for result, reference in zip(actual, expected):
-            assert np.asarray(result).tobytes() == np.asarray(reference).tobytes()
+            assert (
+                np.asarray(result).tobytes() == np.asarray(reference).tobytes()
+            )
 
 
 # Grouped-elongation cache regressions (formerly test_elongation_reuse_cache.py).
 
+
 def assert_geometry_cache_current(culture):
     """Compare cached shape arrays against current cell geometry."""
-    cache = getattr(culture.grid, '_elongation_geometry_cache', None)
+    cache = getattr(culture.grid, "_elongation_geometry_cache", None)
     if cache is not None:
         np.testing.assert_array_equal(
-            cache[0], np.asarray([c.squared_diagonal for c in culture.cells]))
+            cache[0], np.asarray([c.squared_diagonal for c in culture.cells])
+        )
         np.testing.assert_array_equal(
-            cache[1], np.asarray([c.anisotropy for c in culture.cells]))
+            cache[1], np.asarray([c.anisotropy for c in culture.cells])
+        )
 
 
 def assert_bucket_cache_current(culture):
     # Check bucket membership AND the original ordered iteration sequence.
     """Check cached neighbor lists against live ordered bucket contents."""
-    cache = getattr(culture.grid, '_elongation_bucket_cache', None)
+    cache = getattr(culture.grid, "_elongation_bucket_cache", None)
     if cache:
         for key, ordered in cache.items():
             # A cached key may be inactive if there have been no mutations;
@@ -160,18 +188,26 @@ def assert_bucket_cache_current(culture):
             assert expected == ordered
 
 
-@pytest.mark.parametrize("rho,attempts,dimension", [
-    (0.22, 1, 2), (0.22, 10, 3),
-    (0.84, 5, 2), (0.84, 1, 3),
-    (0.90, 10, 2), (0.90, 5, 3),
-])
+@pytest.mark.parametrize(
+    "rho,attempts,dimension",
+    [
+        (0.22, 1, 2),
+        (0.22, 10, 3),
+        (0.84, 5, 2),
+        (0.84, 1, 3),
+        (0.90, 10, 2),
+        (0.90, 5, 3),
+    ],
+)
 def test_grouped_caches_preserve_bitwise_steps(rho, attempts, dimension):
     # Compare persistent caches against a run that deliberately rebuilds
     # elongation caches every step. The optimized physics must not change.
-    rebuilt = build_culture('numba', n=64, rho=rho,
-                            attempts=attempts, dimension=dimension)
-    optimized = build_culture('numba', n=64, rho=rho,
-                              attempts=attempts, dimension=dimension)
+    rebuilt = build_culture(
+        "numba", n=64, rho=rho, attempts=attempts, dimension=dimension
+    )
+    optimized = build_culture(
+        "numba", n=64, rho=rho, attempts=attempts, dimension=dimension
+    )
     for tic in range(1, 21):
         rebuilt.grid._elongation_geometry_cache = None
         rebuilt.grid._elongation_bucket_cache = None
@@ -183,7 +219,7 @@ def test_grouped_caches_preserve_bitwise_steps(rho, attempts, dimension):
 
 
 def test_caches_update_and_invalidate_directly():
-    culture = build_culture('numba', n=64, rho=0.5)
+    culture = build_culture("numba", n=64, rho=0.5)
     run(culture, 0, 0)
     grid = culture.grid
     geometry = _shared_elongation_geometry(culture)
@@ -209,17 +245,17 @@ def test_caches_update_and_invalidate_directly():
 
 
 def test_elongation_caches_not_checkpointed(tmp_path):
-    continuous = build_culture('numba', n=64, rho=0.84, attempts=5)
-    paused = build_culture('numba', n=64, rho=0.84, attempts=5)
+    continuous = build_culture("numba", n=64, rho=0.84, attempts=5)
+    paused = build_culture("numba", n=64, rho=0.84, attempts=5)
     run(continuous, 0, 30)
     run(paused, 0, 13)
-    assert getattr(paused.grid, '_elongation_geometry_cache', None) is not None
-    checkpoint = tmp_path / 'reuse.pkl'
+    assert getattr(paused.grid, "_elongation_geometry_cache", None) is not None
+    checkpoint = tmp_path / "reuse.pkl"
     paused.save_checkpoint(str(checkpoint), tic=13)
-    with checkpoint.open('rb') as handle:
+    with checkpoint.open("rb") as handle:
         restored, start, state = pickle.load(handle)
-    assert getattr(restored.grid, '_elongation_geometry_cache', None) is None
-    assert getattr(restored.grid, '_elongation_bucket_cache', None) is None
+    assert getattr(restored.grid, "_elongation_geometry_cache", None) is None
+    assert getattr(restored.grid, "_elongation_bucket_cache", None) is None
     restored.rng.bit_generator.state = state
     run(restored, start, 30)
     compare_bitwise(continuous, restored)

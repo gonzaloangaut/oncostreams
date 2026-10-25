@@ -5,6 +5,7 @@ order. Only deterministic transformations of the sampled random
 values execute in Numba. ``fastmath`` is disabled, but exact binary
 agreement across different library versions is not guaranteed.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -12,9 +13,18 @@ from numba import njit
 
 
 @njit(cache=True, fastmath=False)
-def _numba_noise_all(phies, mobility_p, mobility_s, mobility_r,
-                     eta, rotational_strength, dt, randoms,
-                     has_translational, has_rotational):
+def _numba_noise_all(
+    phies,
+    mobility_p,
+    mobility_s,
+    mobility_r,
+    eta,
+    rotational_strength,
+    dt,
+    randoms,
+    has_translational,
+    has_rotational,
+):
     """Noise algebra in exactly the scalar order used by calculate_noise().
 
     Array 3rd component preserves signed-zero arithmetic from numpy's 3D
@@ -58,7 +68,6 @@ def _numba_noise_all(phies, mobility_p, mobility_s, mobility_r,
     return translation, rotation
 
 
-
 def compiled_noise_for_sweep(culture, mobilities, delta_t):
     """Return (translation[n,3], rotation[n]) and consume exact scalar RNG order.
 
@@ -80,5 +89,8 @@ def compiled_noise_for_sweep(culture, mobilities, delta_t):
         np.ascontiguousarray(mobilities[:, 2]),
         float(force.noise_eta) if trans else 0.0,
         float(force.d_phi) if rot else 0.0,
-        float(delta_t), randoms, trans, rot,
+        float(delta_t),
+        randoms,
+        trans,
+        rot,
     )

@@ -5,6 +5,7 @@ checks are independent of checkpoint correctness and of the frozen Numba
 trajectory fixture. They deliberately do not require identical floating-point
 results across NumPy and Numba.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -16,8 +17,9 @@ from tumorsphere.core.interaction_batch_numba import batch_interaction_step
 pytest.importorskip("numba")
 
 
-def paired_cultures(*, seed, rho, dimension, attempts=1, eta=None, d_phi=None,
-                    lambda_core=1.0):
+def paired_cultures(
+    *, seed, rho, dimension, attempts=1, eta=None, d_phi=None, lambda_core=1.0
+):
     """Two independent cultures with identical initial positions and RNG."""
     options = dict(
         seed=seed,
@@ -37,9 +39,13 @@ def paired_cultures(*, seed, rho, dimension, attempts=1, eta=None, d_phi=None,
     # without movement or deformation. No backend mutation is needed.
     reference.simulate(num_times=0, start_tic=0, checkpoint_path=None)
     optimized.simulate(num_times=0, start_tic=0, checkpoint_path=None)
-    np.testing.assert_array_equal(reference.cell_positions, optimized.cell_positions)
+    np.testing.assert_array_equal(
+        reference.cell_positions, optimized.cell_positions
+    )
     np.testing.assert_array_equal(reference.cell_phies, optimized.cell_phies)
-    assert reference.rng.bit_generator.state == optimized.rng.bit_generator.state
+    assert (
+        reference.rng.bit_generator.state == optimized.rng.bit_generator.state
+    )
 
     reference.force.lambda_core = lambda_core
     optimized.force.lambda_core = lambda_core
@@ -48,23 +54,36 @@ def paired_cultures(*, seed, rho, dimension, attempts=1, eta=None, d_phi=None,
 
 def ordered_grid(culture):
     """Capture bucket membership and iteration order for exact comparisons."""
-    return [(key, tuple(bucket)) for key, bucket in culture.grid.hash_table.items()]
+    return [
+        (key, tuple(bucket)) for key, bucket in culture.grid.hash_table.items()
+    ]
 
 
-@pytest.mark.parametrize("seed,rho,dimension,lambda_core", [
-    (17, 0.22, 2, 0.0),
-    (23, 0.84, 3, 1.0),
-    (42, 0.90, 2, 1.0),
-    (29, 0.84, 2, 0.35),
-])
-@pytest.mark.parametrize("eta,d_phi", [
-    (None, None),
-    (0.033, None),
-    (None, 0.13),
-    (0.033, 0.13),
-])
+@pytest.mark.parametrize(
+    "seed,rho,dimension,lambda_core",
+    [
+        (17, 0.22, 2, 0.0),
+        (23, 0.84, 3, 1.0),
+        (42, 0.90, 2, 1.0),
+        (29, 0.84, 2, 0.35),
+    ],
+)
+@pytest.mark.parametrize(
+    "eta,d_phi",
+    [
+        (None, None),
+        (0.033, None),
+        (None, 0.13),
+        (0.033, 0.13),
+    ],
+)
 def test_same_microstate_has_equivalent_interaction_sweep(
-    seed, rho, dimension, lambda_core, eta, d_phi,
+    seed,
+    rho,
+    dimension,
+    lambda_core,
+    eta,
+    d_phi,
 ):
     """Reference per-cell and production batch forces/torques/noise agree.
 
@@ -72,15 +91,20 @@ def test_same_microstate_has_equivalent_interaction_sweep(
     it compares state increments, contraction decisions and RNG consumption.
     """
     ref, opt = paired_cultures(
-        seed=seed, rho=rho, dimension=dimension,
-        eta=eta, d_phi=d_phi, lambda_core=lambda_core,
+        seed=seed,
+        rho=rho,
+        dimension=dimension,
+        eta=eta,
+        d_phi=d_phi,
+        lambda_core=lambda_core,
     )
     n = len(ref.cells)
     displacement_ref = np.zeros((n, 3), dtype=np.float64)
     rotation_ref = np.zeros(n, dtype=np.float64)
     for i in ref.active_cell_indexes:
         displacement_ref[i], rotation_ref[i] = ref.interaction(
-            cell_index=i, delta_t=ref.delta_t,
+            cell_index=i,
+            delta_t=ref.delta_t,
         )
 
     displacement_opt, rotation_opt = batch_interaction_step(opt, opt.delta_t)
@@ -90,26 +114,38 @@ def test_same_microstate_has_equivalent_interaction_sweep(
     assert np.all(np.isfinite(rotation_ref))
     assert np.all(np.isfinite(rotation_opt))
     np.testing.assert_allclose(
-        displacement_opt, displacement_ref, rtol=1e-9, atol=2e-11,
+        displacement_opt,
+        displacement_ref,
+        rtol=1e-9,
+        atol=2e-11,
         err_msg="Different displacements from the same microstate",
     )
     np.testing.assert_allclose(
-        rotation_opt, rotation_ref, rtol=1e-9, atol=2e-11,
+        rotation_opt,
+        rotation_ref,
+        rtol=1e-9,
+        atol=2e-11,
         err_msg="Different angular increments from the same microstate",
     )
     assert [c.shrink for c in ref.cells] == [c.shrink for c in opt.cells]
     assert ref.rng.bit_generator.state == opt.rng.bit_generator.state
 
 
-@pytest.mark.parametrize("seed,rho,dimension,attempts", [
-    (17, 0.22, 2, 1),
-    (42, 0.22, 3, 10),
-    (23, 0.84, 3, 1),
-    (29, 0.84, 2, 5),
-    (37, 0.90, 2, 10),
-])
+@pytest.mark.parametrize(
+    "seed,rho,dimension,attempts",
+    [
+        (17, 0.22, 2, 1),
+        (42, 0.22, 3, 10),
+        (23, 0.84, 3, 1),
+        (29, 0.84, 2, 5),
+        (37, 0.90, 2, 10),
+    ],
+)
 def test_same_microstate_has_equivalent_round_elongation_choices(
-    seed, rho, dimension, attempts,
+    seed,
+    rho,
+    dimension,
+    attempts,
 ):
     """Proposal acceptance, selected geometry and RNG match the reference.
 
@@ -117,9 +153,14 @@ def test_same_microstate_has_equivalent_round_elongation_choices(
     candidate sets and ordered grid membership.
     """
     ref, opt = paired_cultures(
-        seed=seed, rho=rho, dimension=dimension, attempts=attempts,
+        seed=seed,
+        rho=rho,
+        dimension=dimension,
+        attempts=attempts,
     )
-    round_indices = [i for i, cell in enumerate(ref.cells) if cell.is_round][:6]
+    round_indices = [i for i, cell in enumerate(ref.cells) if cell.is_round][
+        :6
+    ]
     assert len(round_indices) == 6
     for i in round_indices:
         accepted_ref = ref.elongate_from_round(i)
@@ -129,17 +170,27 @@ def test_same_microstate_has_equivalent_round_elongation_choices(
             f"attempts={attempts}, cell={i}"
         )
         np.testing.assert_allclose(
-            opt.cell_positions, ref.cell_positions, rtol=0, atol=2e-12,
+            opt.cell_positions,
+            ref.cell_positions,
+            rtol=0,
+            atol=2e-12,
         )
         np.testing.assert_allclose(
-            opt.cell_phies, ref.cell_phies, rtol=0, atol=2e-12,
+            opt.cell_phies,
+            ref.cell_phies,
+            rtol=0,
+            atol=2e-12,
         )
         np.testing.assert_allclose(
             [cell.aspect_ratio for cell in opt.cells],
-            [cell.aspect_ratio for cell in ref.cells], rtol=0, atol=0,
+            [cell.aspect_ratio for cell in ref.cells],
+            rtol=0,
+            atol=0,
         )
         assert ref.rng.bit_generator.state == opt.rng.bit_generator.state
         assert ordered_grid(ref) == ordered_grid(opt)
+
+
 # ---------------------------------------------------------------------------
 # Controlled two-cell tests at physical decision boundaries.
 # These exercise the actual production NumPy and Numba dispatch paths.
@@ -149,8 +200,15 @@ def test_same_microstate_has_equivalent_round_elongation_choices(
 def _threshold_pair(backend, *, seed=17, lambda_core=1.0):
     """Initialize two cells and reduce both to round, noiseless cells."""
     culture = fixed_n_grosmann_culture(
-        backend=backend, seed=seed, n=2, rho=0.02, dimension=2,
-        eta=None, d_phi=None, attempts=1, deformation_period=0.005,
+        backend=backend,
+        seed=seed,
+        n=2,
+        rho=0.02,
+        dimension=2,
+        eta=None,
+        d_phi=None,
+        attempts=1,
+        deformation_period=0.005,
         output_dir=None,
     )
     culture.simulate(num_times=0, start_tic=0, checkpoint_path=None)
@@ -191,23 +249,31 @@ def _compare_pair_interactions(reference, optimized, target):
     from tumorsphere.core.interaction_batch_numba import batch_interaction_step
 
     reference_displacement, reference_rotation = reference.interaction(
-        target, reference.delta_t,
+        target,
+        reference.delta_t,
     )
     optimized_displacements, optimized_rotations = batch_interaction_step(
-        optimized, optimized.delta_t,
+        optimized,
+        optimized.delta_t,
     )
     np.testing.assert_allclose(
-        optimized_displacements[target], reference_displacement,
-        rtol=1e-9, atol=2e-11,
+        optimized_displacements[target],
+        reference_displacement,
+        rtol=1e-9,
+        atol=2e-11,
     )
     np.testing.assert_allclose(
-        optimized_rotations[target], reference_rotation,
-        rtol=1e-9, atol=2e-11,
+        optimized_rotations[target],
+        reference_rotation,
+        rtol=1e-9,
+        atol=2e-11,
     )
     assert np.all(np.isfinite(reference_displacement))
     assert np.all(np.isfinite(optimized_displacements))
     assert np.all(np.isfinite(optimized_rotations))
-    assert reference.rng.bit_generator.state == optimized.rng.bit_generator.state
+    assert (
+        reference.rng.bit_generator.state == optimized.rng.bit_generator.state
+    )
     return reference_displacement, optimized_displacements[target]
 
 
@@ -226,7 +292,8 @@ def test_two_round_cells_cross_interaction_threshold(factor):
         _relocate_pair(culture, i, j, [separation, 0.0, 0.0])
 
     actual_neighbors = reference._get_significant_neighbors(
-        i, update_overlap_diagnostic=False,
+        i,
+        update_overlap_diagnostic=False,
     )
     measured_xi = reference.cells[i].neighbors_normalized_overlap[j]
     np.testing.assert_allclose(measured_xi, xi, rtol=1e-12, atol=1e-14)
@@ -241,7 +308,8 @@ def test_two_round_cells_cross_interaction_threshold(factor):
 @pytest.mark.parametrize("lambda_core", [0.0, 0.35, 1.0])
 @pytest.mark.parametrize("xi", [1.0 - 1e-3, 1.0 - 1e-6, 1.0])
 def test_core_regularization_near_unity_is_finite_and_equivalent(
-    lambda_core, xi,
+    lambda_core,
+    xi,
 ):
     """Near xi=1, the force amplification is finite and matches both paths."""
     reference, i, j = _threshold_pair("numpy", lambda_core=lambda_core)
@@ -251,7 +319,7 @@ def test_core_regularization_near_unity_is_finite_and_equivalent(
     for culture in (reference, optimized):
         _relocate_pair(culture, i, j, [separation, 0.0, 0.0])
 
-    amplification = reference.force.calculate_core_amplification(xi ** 3.0)
+    amplification = reference.force.calculate_core_amplification(xi**3.0)
     assert np.isfinite(amplification)
     assert amplification >= 1.0
     if lambda_core == 0.0:
@@ -269,7 +337,9 @@ def test_marginal_round_elongation_decision_matches_backends(seed, factor):
     reference, i, j = _threshold_pair("numpy", seed=seed)
     optimized, i_opt, j_opt = _threshold_pair("numba", seed=seed)
     assert (i, j) == (i_opt, j_opt)
-    assert reference.rng.bit_generator.state == optimized.rng.bit_generator.state
+    assert (
+        reference.rng.bit_generator.state == optimized.rng.bit_generator.state
+    )
 
     # Read the next proposal angle without consuming either culture's RNG.
     probe = np.random.default_rng()
@@ -286,23 +356,30 @@ def test_marginal_round_elongation_decision_matches_backends(seed, factor):
     ei = (new_aspect**2 - 1.0) / (new_aspect**2 + 1.0)
     dj = 2.0
     ds = di + dj
-    beta = ds**2 - (di * ei)**2
+    beta = ds**2 - (di * ei) ** 2
     parallel_weight = di * ei / ds
     coefficient = ds / beta * (1.0 - parallel_weight)
     target_xi = reference.overlap_threshold_ratio * factor
     separation = np.sqrt(-np.log(target_xi) / coefficient)
     np.testing.assert_allclose(
-        np.exp(-coefficient * separation**2), target_xi,
-        rtol=1e-12, atol=1e-14,
+        np.exp(-coefficient * separation**2),
+        target_xi,
+        rtol=1e-12,
+        atol=1e-14,
     )
     for culture in (reference, optimized):
         _relocate_pair(
-            culture, i, j, (displacement + separation) * direction,
+            culture,
+            i,
+            j,
+            (displacement + separation) * direction,
         )
         proposed_position = np.mod(
             culture.cell_positions[i] + displacement * direction, culture.side
         )
-        assert j in list(culture.grid.find_neighbors(position=proposed_position))
+        assert j in list(
+            culture.grid.find_neighbors(position=proposed_position)
+        )
 
     original_positions = reference.cell_positions.copy()
     success_numpy = reference.elongate_from_round(i)
@@ -310,10 +387,16 @@ def test_marginal_round_elongation_decision_matches_backends(seed, factor):
     expected_success = factor < 1.0
     assert success_numpy == success_numba == expected_success
     np.testing.assert_allclose(
-        optimized.cell_positions, reference.cell_positions, rtol=0, atol=2e-12,
+        optimized.cell_positions,
+        reference.cell_positions,
+        rtol=0,
+        atol=2e-12,
     )
     np.testing.assert_allclose(
-        optimized.cell_phies, reference.cell_phies, rtol=0, atol=2e-12,
+        optimized.cell_phies,
+        reference.cell_phies,
+        rtol=0,
+        atol=2e-12,
     )
     assert [c.aspect_ratio for c in reference.cells] == [
         c.aspect_ratio for c in optimized.cells
@@ -324,6 +407,10 @@ def test_marginal_round_elongation_decision_matches_backends(seed, factor):
         assert not np.array_equal(reference.cell_positions, original_positions)
     else:
         assert reference.cells[i].is_round
-        np.testing.assert_array_equal(reference.cell_positions, original_positions)
-    assert reference.rng.bit_generator.state == optimized.rng.bit_generator.state
+        np.testing.assert_array_equal(
+            reference.cell_positions, original_positions
+        )
+    assert (
+        reference.rng.bit_generator.state == optimized.rng.bit_generator.state
+    )
     assert ordered_grid(reference) == ordered_grid(optimized)

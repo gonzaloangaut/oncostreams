@@ -2,6 +2,7 @@
 
 New checkpoints only: no compatibility with earlier component-selector formats.
 """
+
 from __future__ import annotations
 
 import pickle
@@ -16,19 +17,27 @@ from tumorsphere.core.simulation import Simulation
 
 
 REMOVED_COMPONENTS = (
-    "overlap_backend", "force_backend", "relative_positions_backend",
-    "interaction_backend", "elongation_backend",
+    "overlap_backend",
+    "force_backend",
+    "relative_positions_backend",
+    "interaction_backend",
+    "elongation_backend",
 )
 
 
 def make_simulation(backend, steps, *, noise=False):
     """Build the fixed-N fixture used to exercise public checkpoint APIs."""
     return Simulation(
-        forces=[Anisotropic_Grosmann(
-            kRep=2.5, bExp=3.0, lambda_core=1.0, shrinking=True,
-            noise_eta=0.033 if noise else None,
-            d_phi=0.13 if noise else None,
-        )],
+        forces=[
+            Anisotropic_Grosmann(
+                kRep=2.5,
+                bExp=3.0,
+                lambda_core=1.0,
+                shrinking=True,
+                noise_eta=0.033 if noise else None,
+                d_phi=0.13 if noise else None,
+            )
+        ],
         backend=backend,
         rng_seed=13579,
         num_of_realizations=1,
@@ -89,8 +98,11 @@ def test_simulation_has_single_backend_selector(backend):
     assert sim.backend == backend
     assert Simulation().backend == "numpy"
     for name in (
-        "overlap_backend", "force_backend", "relative_positions_backend",
-        "interaction_backend", "elongation_backend",
+        "overlap_backend",
+        "force_backend",
+        "relative_positions_backend",
+        "interaction_backend",
+        "elongation_backend",
     ):
         assert not hasattr(sim, name)
 
@@ -114,7 +126,9 @@ def test_backend_change_on_resume_is_rejected(old, new, tmp_path):
         run(new, 8, tmp_path)
 
 
-@pytest.mark.parametrize("tamper", ["metadata", "serialized", "force_model", "force_parameters"])
+@pytest.mark.parametrize(
+    "tamper", ["metadata", "serialized", "force_model", "force_parameters"]
+)
 def test_checkpoint_backend_tampering_is_rejected(tamper, tmp_path):
     _, path = run("numpy", 4, tmp_path)
 
@@ -151,10 +165,16 @@ def test_invalid_backend_is_rejected(backend):
         Simulation(backend=backend)
 
 
-@pytest.mark.parametrize("retired", [
-    "overlap_backend", "force_backend", "relative_positions_backend",
-    "interaction_backend", "elongation_backend",
-])
+@pytest.mark.parametrize(
+    "retired",
+    [
+        "overlap_backend",
+        "force_backend",
+        "relative_positions_backend",
+        "interaction_backend",
+        "elongation_backend",
+    ],
+)
 def test_individual_selector_arguments_are_removed(retired):
     with pytest.raises(TypeError, match="unexpected keyword argument"):
         Simulation(**{retired: "numpy"})
@@ -166,9 +186,13 @@ def test_numba_requires_supported_model():
     with pytest.raises(ValueError, match="Anisotropic_Grosmann"):
         Simulation(backend="numba")
     with pytest.raises(ValueError, match="fixed-N movement"):
-        Simulation(backend="numba", forces=[Anisotropic_Grosmann()], reproduction=True)
+        Simulation(
+            backend="numba", forces=[Anisotropic_Grosmann()], reproduction=True
+        )
     with pytest.raises(ValueError, match="fixed-N movement"):
-        Simulation(backend="numba", forces=[Anisotropic_Grosmann()], movement=False)
+        Simulation(
+            backend="numba", forces=[Anisotropic_Grosmann()], movement=False
+        )
     assert Simulation(backend="numpy", forces=[Spring_Force()])
 
 
@@ -181,10 +205,16 @@ def test_new_culture_uses_complete_backend_configuration(backend, tmp_path):
     assert not hasattr(culture.force, "force_backend")
 
 
-@pytest.mark.parametrize("backend", [
-    "direct_numba", "batch_numba", "batch_cached_numba",
-    "fast_numba", None,
-])
+@pytest.mark.parametrize(
+    "backend",
+    [
+        "direct_numba",
+        "batch_numba",
+        "batch_cached_numba",
+        "fast_numba",
+        None,
+    ],
+)
 def test_direct_culture_rejects_removed_backends(backend):
     with pytest.raises(ValueError, match="backend must"):
         Culture(output=None, force=None, grid=None, backend=backend)

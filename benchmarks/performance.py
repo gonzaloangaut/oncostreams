@@ -79,7 +79,9 @@ def add_physical_options(
     parser.add_argument("--steps", type=int, default=150)
     if include_repeats:
         parser.add_argument(
-            "--repeats", type=int, default=3,
+            "--repeats",
+            type=int,
+            default=3,
             help="Independent timing repetitions, with identical seed (default: 3)",
         )
     else:
@@ -106,8 +108,13 @@ def config_from_args(args: argparse.Namespace) -> dict:
         "repeats": args.repeats,
         "aspect_ratio_max": 2.7,
         "cell_radius": 1.0,
-        "force": {"name": "Anisotropic_Grosmann", "kRep": 2.5,
-                  "bExp": 3.0, "lambda_core": 1.0, "shrinking": True},
+        "force": {
+            "name": "Anisotropic_Grosmann",
+            "kRep": 2.5,
+            "bExp": 3.0,
+            "lambda_core": 1.0,
+            "shrinking": True,
+        },
         "overlap_threshold_ratio": "exp(-1)",
         "trabajo_final": True,
         "fixed_n": True,
@@ -129,15 +136,24 @@ def validate(args: argparse.Namespace) -> None:
     if not math.isfinite(args.delta_t) or args.delta_t <= 0:
         raise ValueError("--delta-t must be positive and finite")
     ratio = args.deformation_period / args.delta_t
-    if not math.isfinite(ratio) or round(ratio) < 1 or not math.isclose(
-        ratio, round(ratio), rel_tol=1e-10, abs_tol=1e-10
+    if (
+        not math.isfinite(ratio)
+        or round(ratio) < 1
+        or not math.isclose(ratio, round(ratio), rel_tol=1e-10, abs_tol=1e-10)
     ):
         raise ValueError(
             "--deformation-period must be a positive integer multiple "
             "of --delta-t"
         )
-    if args.attempts < 0 or args.warmup < 1 or args.steps < 1 or args.repeats < 1:
-        raise ValueError("attempts>=0; warmup, steps and repeats must be positive")
+    if (
+        args.attempts < 0
+        or args.warmup < 1
+        or args.steps < 1
+        or args.repeats < 1
+    ):
+        raise ValueError(
+            "attempts>=0; warmup, steps and repeats must be positive"
+        )
     if args.warmup < round(ratio):
         raise ValueError(
             "--warmup must span at least one deformation interval, "
@@ -152,35 +168,52 @@ def validate(args: argparse.Namespace) -> None:
             "Box too small for the periodic spatial grid: increase --n "
             "or adjust --rho"
         )
-    if not math.isfinite(args.initial_fraction) or not 0 <= args.initial_fraction <= 1:
+    if (
+        not math.isfinite(args.initial_fraction)
+        or not 0 <= args.initial_fraction <= 1
+    ):
         raise ValueError("--initial-fraction must be in [0, 1]")
-    if any(x is not None and (not math.isfinite(x) or x < 0)
-           for x in (args.eta, args.d_phi)):
-        raise ValueError("noise strengths must be finite and nonnegative or 'none'")
+    if any(
+        x is not None and (not math.isfinite(x) or x < 0)
+        for x in (args.eta, args.d_phi)
+    ):
+        raise ValueError(
+            "noise strengths must be finite and nonnegative or 'none'"
+        )
 
 
 def git_metadata() -> dict:
     """
     Return the current Git commit hash and whether the working tree is dirty.
     """
+
     def git(*params: str) -> str:
         """
         Run a Git command in the repository and return its stdout, or "unknown"
         if the command fails.
         """
         run = subprocess.run(
-            ["git", "-C", str(REPO), *params], capture_output=True,
-            text=True, check=False,
+            ["git", "-C", str(REPO), *params],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         return run.stdout.strip() if run.returncode == 0 else "unknown"
+
     return {
         "commit": git("rev-parse", "HEAD"),
         # Ignore benchmark outputs when inspecting source-code cleanliness:
         # otherwise the current run itself makes the working tree "dirty".
-        "dirty": bool(git(
-            "status", "--porcelain", "--untracked-files=all", "--",
-            ".", ":(exclude)benchmarks/results",
-        )),
+        "dirty": bool(
+            git(
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+                "--",
+                ".",
+                ":(exclude)benchmarks/results",
+            )
+        ),
     }
 
 
@@ -217,8 +250,11 @@ def sha_state(culture) -> str:
     arrays = (
         culture.cell_positions,
         culture.cell_phies,
-        np.fromiter((cell.aspect_ratio for cell in culture.cells),
-                    dtype=np.float64, count=len(culture.cells)),
+        np.fromiter(
+            (cell.aspect_ratio for cell in culture.cells),
+            dtype=np.float64,
+            count=len(culture.cells),
+        ),
     )
     for array in arrays:
         hash_obj.update(np.asarray(array, dtype=np.float64).tobytes())
@@ -249,17 +285,24 @@ def make_culture(args: argparse.Namespace, backend: str):
         spatial_dimension=args.dimension,
     )
     force = Anisotropic_Grosmann(
-        kRep=2.5, bExp=3.0,
-        noise_eta=args.eta, d_phi=args.d_phi,
-        shrinking=True, lambda_core=1.0,
+        kRep=2.5,
+        bExp=3.0,
+        noise_eta=args.eta,
+        d_phi=args.d_phi,
+        shrinking=True,
+        lambda_core=1.0,
     )
     return Culture(
         output=OutputDemux("performance", []),
-        force=force, grid=grid, backend=backend,
+        force=force,
+        grid=grid,
+        backend=backend,
         rng_seed=args.seed,
         initial_number_of_cells=args.n,
         initial_fraction_elongated=args.initial_fraction,
-        reproduction=False, movement=True, deformation=True,
+        reproduction=False,
+        movement=True,
+        deformation=True,
         stabilization_time=0,
         overlap_threshold_ratio=threshold,
         delta_t=args.delta_t,
@@ -276,7 +319,7 @@ def initial_and_warm(culture, warmup: int) -> tuple[str, str, float]:
     """
     Initialize the culture, compute its initial SHA-256 hash, perform a warmup
     simulation, and compute the warmed SHA-256 hash and the fraction of elongated
-    cells after the warmup. 
+    cells after the warmup.
     Return a tuple of (initial_hash, warmed_hash, fraction_elongated).
     """
     culture.simulate(num_times=0, start_tic=0, checkpoint_path=None)
@@ -298,7 +341,9 @@ def benchmark_worker(args: argparse.Namespace) -> dict:
     warm_fractions = []
     for repeat in range(args.repeats):
         culture = make_culture(args, args.backend)
-        initial_hash, warmed_hash, fraction = initial_and_warm(culture, args.warmup)
+        initial_hash, warmed_hash, fraction = initial_and_warm(
+            culture, args.warmup
+        )
         hashes.append(initial_hash)
         warm_hashes.append(warmed_hash)
         warm_fractions.append(fraction)
@@ -310,8 +355,11 @@ def benchmark_worker(args: argparse.Namespace) -> dict:
         )
         elapsed = time.perf_counter() - start
         measures.append(elapsed * 1000 / args.steps)
-        print(f"{args.backend}, repetition {repeat + 1}/{args.repeats}: "
-              f"{measures[-1]:.3f} ms/step", flush=True)
+        print(
+            f"{args.backend}, repetition {repeat + 1}/{args.repeats}: "
+            f"{measures[-1]:.3f} ms/step",
+            flush=True,
+        )
     if len(set(hashes)) != 1:
         raise RuntimeError("Inconsistent initial states across repetitions")
     if len(set(warm_hashes)) != 1:
@@ -338,11 +386,13 @@ def benchmark_worker(args: argparse.Namespace) -> dict:
 
 def profile_worker(args: argparse.Namespace) -> dict:
     """
-    Run the simulation with cProfile instrumentation and return a dictionary 
+    Run the simulation with cProfile instrumentation and return a dictionary
     of results.
     """
     culture = make_culture(args, args.backend)
-    initial_hash, warmed_hash, fraction = initial_and_warm(culture, args.warmup)
+    initial_hash, warmed_hash, fraction = initial_and_warm(
+        culture, args.warmup
+    )
     profiler = cProfile.Profile()
     start = time.perf_counter()
     profiler.enable()
@@ -415,13 +465,18 @@ def forward_args(args: argparse.Namespace) -> list[str]:
     """
     options = []
     mapping = (
-        ("n", "--n"), ("rho", "--rho"), ("seed", "--seed"),
-        ("dimension", "--dimension"), ("delta_t", "--delta-t"),
+        ("n", "--n"),
+        ("rho", "--rho"),
+        ("seed", "--seed"),
+        ("dimension", "--dimension"),
+        ("delta_t", "--delta-t"),
         ("deformation_period", "--deformation-period"),
         ("attempts", "--attempts"),
         ("initial_fraction", "--initial-fraction"),
-        ("eta", "--eta"), ("d_phi", "--d-phi"),
-        ("warmup", "--warmup"), ("steps", "--steps"),
+        ("eta", "--eta"),
+        ("d_phi", "--d-phi"),
+        ("warmup", "--warmup"),
+        ("steps", "--steps"),
         ("repeats", "--repeats"),
     )
     for attr, flag in mapping:
@@ -430,17 +485,29 @@ def forward_args(args: argparse.Namespace) -> list[str]:
     return options
 
 
-def run_child(args: argparse.Namespace, backend: str, mode: str,
-              out_file: Path, profile_stats: Path | None = None) -> dict:
+def run_child(
+    args: argparse.Namespace,
+    backend: str,
+    mode: str,
+    out_file: Path,
+    profile_stats: Path | None = None,
+) -> dict:
     """
     Run a child process with the specified backend and mode, forwarding the
     relevant command-line arguments. The child process will write its output to
     the specified out_file, and optionally write cProfile stats to profile_stats.
     """
     command = [
-        sys.executable, str(Path(__file__).resolve()), "_worker",
-        "--mode", mode, "--backend", backend,
-        "--out-file", str(out_file), *forward_args(args),
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "_worker",
+        "--mode",
+        mode,
+        "--backend",
+        backend,
+        "--out-file",
+        str(out_file),
+        *forward_args(args),
     ]
     if profile_stats is not None:
         command.extend(("--profile-stats", str(profile_stats)))
@@ -450,9 +517,9 @@ def run_child(args: argparse.Namespace, backend: str, mode: str,
 
 def result_directory(args: argparse.Namespace, mode: str) -> Path:
     """Create a unique run directory without overwriting earlier results."""
-    config_bytes = json.dumps(
-        config_from_args(args), sort_keys=True
-    ).encode("utf-8")
+    config_bytes = json.dumps(config_from_args(args), sort_keys=True).encode(
+        "utf-8"
+    )
     case_id = hashlib.sha256(config_bytes).hexdigest()[:10]
     timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
     directory = (
@@ -522,8 +589,10 @@ def benchmark(args: argparse.Namespace) -> None:
     print(f"Speedup: {speedup:.2f}x (NumPy / Numba)")
     print(f"Repetitions per backend: {args.repeats}")
     print("Same initial microstate: yes")
-    print(f"Same warmup microstate bitwise: "
-          f"{summary['same_warmed_microstate_bitwise']}")
+    print(
+        f"Same warmup microstate bitwise: "
+        f"{summary['same_warmed_microstate_bitwise']}"
+    )
     print(
         "Elongated fraction after warmup: "
         f"NumPy={summary['warmup_fraction_elongated']['numpy']:.4f}, "
@@ -549,10 +618,14 @@ def profile(args: argparse.Namespace) -> None:
     """
     validate(args)
     directory = result_directory(args, "profile")
-    backends = ("numpy", "numba") if args.backend == "both" else (args.backend,)
+    backends = (
+        ("numpy", "numba") if args.backend == "both" else (args.backend,)
+    )
     for backend in backends:
         run_child(
-            args, backend, "profile",
+            args,
+            backend,
+            "profile",
             directory / f"profile_{backend}.json",
             profile_stats=directory / f"profile_{backend}.prof",
         )
@@ -579,7 +652,9 @@ def main() -> None:
     )
     add_physical_options(pr, include_repeats=False)
     pr.add_argument(
-        "--backend", choices=("numpy", "numba", "both"), default="both",
+        "--backend",
+        choices=("numpy", "numba", "both"),
+        default="both",
         help="Backend(s) to profile (default: both)",
     )
     pr.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
@@ -591,7 +666,9 @@ def main() -> None:
         internal.add_argument(
             "--backend", choices=("numpy", "numba"), required=True
         )
-        internal.add_argument("--mode", choices=("benchmark", "profile"), required=True)
+        internal.add_argument(
+            "--mode", choices=("benchmark", "profile"), required=True
+        )
         internal.add_argument("--out-file", required=True)
         internal.add_argument("--profile-stats", default=None)
         args = internal.parse_args(sys.argv[2:])
@@ -606,7 +683,9 @@ def main() -> None:
 
     args = parser.parse_args()
     if not (REPO / "tumorsphere" / "core" / "culture.py").is_file():
-        parser.error("Place this script in the repository's benchmarks/ directory")
+        parser.error(
+            "Place this script in the repository's benchmarks/ directory"
+        )
     try:
         if args.command == "benchmark":
             benchmark(args)

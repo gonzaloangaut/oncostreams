@@ -1,4 +1,5 @@
 """Guard overlap diagnostics without modifying physical dynamics or output policy."""
+
 import pickle
 from types import SimpleNamespace
 
@@ -8,7 +9,9 @@ import pytest
 from tumorsphere.core.culture import Culture
 from tumorsphere.core.forces import Anisotropic_Grosmann
 from tumorsphere.core.output import (
-    OutputDemux, TumorsphereOutput, create_output_demux,
+    OutputDemux,
+    TumorsphereOutput,
+    create_output_demux,
 )
 from tumorsphere.core.simulation import Simulation
 
@@ -45,7 +48,10 @@ def test_demux_detects_overlap_collectors(tmp_path):
     assert none.collect_overlap_statistics is False
     assert regular.collect_overlap_statistics is False
     assert overlaps.collect_overlap_statistics is True
-    assert OutputDemux("test", [CustomOverlapOutput()]).collect_overlap_statistics is True
+    assert (
+        OutputDemux("test", [CustomOverlapOutput()]).collect_overlap_statistics
+        is True
+    )
 
 
 @pytest.mark.parametrize("output_enabled", [False, True])
@@ -60,7 +66,8 @@ def test_interaction_forwards_cached_policy(output_enabled, tmp_path):
         return np.empty(0, dtype=int)
 
     cell = SimpleNamespace(
-        neighbors_relative_pos={}, neighbors_overlap={},
+        neighbors_relative_pos={},
+        neighbors_overlap={},
         neighbors_normalized_overlap={},
     )
     force = SimpleNamespace(
@@ -70,8 +77,11 @@ def test_interaction_forwards_cached_policy(output_enabled, tmp_path):
         backend="numpy",
         output=output,
         _get_significant_neighbors=spy,
-        cells=[cell], cell_phies=np.array([0.0]),
-        force=force, cell_area=np.pi, nematic_tensors=np.zeros((1, 3, 3)),
+        cells=[cell],
+        cell_phies=np.array([0.0]),
+        force=force,
+        cell_area=np.pi,
+        nematic_tensors=np.zeros((1, 3, 3)),
     )
     Culture.interaction(fake, 0, 0.005)
     assert seen == [output_enabled]
@@ -80,21 +90,35 @@ def test_interaction_forwards_cached_policy(output_enabled, tmp_path):
 def _simulation(steps, backend):
     """Build a deterministic fixed-N configuration for output-policy tests."""
     return Simulation(
-        forces=[Anisotropic_Grosmann(
-            kRep=2.5, bExp=3.0, lambda_core=1.0,
-            shrinking=True, noise_eta=None, d_phi=None,
-        )],
-        rng_seed=13579, num_of_realizations=1,
+        forces=[
+            Anisotropic_Grosmann(
+                kRep=2.5,
+                bExp=3.0,
+                lambda_core=1.0,
+                shrinking=True,
+                noise_eta=None,
+                d_phi=None,
+            )
+        ],
+        rng_seed=13579,
+        num_of_realizations=1,
         num_of_steps_per_realization=steps,
         initial_number_of_cells=[48],
         initial_fraction_elongated=[0.5],
         initial_density=[0.84],
         cell_max_def_attempts=1,
-        reproduction=False, movement=True, deformation=True,
-        stabilization_time=0, overlap_threshold_ratio=np.exp(-1),
-        delta_t=0.005, deformation_attempt_period=0.05,
-        initial_aspect_ratio=1.0, aspect_ratio_max=2.7,
-        cell_speed_max=1.0, trabajo_final=True, spatial_dimension=3,
+        reproduction=False,
+        movement=True,
+        deformation=True,
+        stabilization_time=0,
+        overlap_threshold_ratio=np.exp(-1),
+        delta_t=0.005,
+        deformation_attempt_period=0.05,
+        initial_aspect_ratio=1.0,
+        aspect_ratio_max=2.7,
+        cell_speed_max=1.0,
+        trabajo_final=True,
+        spatial_dimension=3,
         backend=backend,
     )
 
@@ -103,8 +127,11 @@ def _run(output_dir, steps, with_overlap, backend):
     """Run one case and reload the saved physical state from checkpoint."""
     sim = _simulation(steps, backend)
     sim.simulate_parallel(
-        sql=False, number_of_processes=1, output_dir=str(output_dir),
-        dat_overlap_par=with_overlap, save_step_dat_overlap_par=2,
+        sql=False,
+        number_of_processes=1,
+        output_dir=str(output_dir),
+        dat_overlap_par=with_overlap,
+        save_step_dat_overlap_par=2,
     )
     checkpoints = list((output_dir / "checkpoints").glob("*.pkl"))
     assert len(checkpoints) == 1
@@ -126,10 +153,18 @@ def _assert_same_state(a, b):
 
 
 @pytest.mark.parametrize("backend", ["numpy", "numba"])
-@pytest.mark.parametrize("initial_output,new_output", [
-    (False, True), (True, False), (False, False), (True, True),
-])
-def test_checkpoint_output_change(backend, initial_output, new_output, tmp_path):
+@pytest.mark.parametrize(
+    "initial_output,new_output",
+    [
+        (False, True),
+        (True, False),
+        (False, False),
+        (True, True),
+    ],
+)
+def test_checkpoint_output_change(
+    backend, initial_output, new_output, tmp_path
+):
     if backend == "numba":
         pytest.importorskip("numba")
     partial = tmp_path / "partial"

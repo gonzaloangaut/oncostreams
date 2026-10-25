@@ -20,14 +20,20 @@ def make_minimal_culture(dimension, seed):
     culture.cell_positions = np.zeros((n, 3), dtype=np.float64)
     culture.cell_positions[:, :2] = rng.uniform(0.0, culture.side, (n, 2))
     culture.cell_positions[:4, :2] = [
-        [0.01, 11.99], [11.99, 0.01], [2.99, 3.01], [6.01, 8.99]
+        [0.01, 11.99],
+        [11.99, 0.01],
+        [2.99, 3.01],
+        [6.01, 8.99],
     ]
     culture.cell_phies = rng.uniform(-np.pi, np.pi, n)
     culture.nematic_tensors = np.empty((n, 3, 3), dtype=np.float64)
     culture.update_nematic_tensors()
     culture.grid = SpatialHashGrid(
-        culture=culture, bounds=culture.side, cube_size=3.0,
-        torus=True, spatial_dimension=dimension,
+        culture=culture,
+        bounds=culture.side,
+        cube_size=3.0,
+        torus=True,
+        spatial_dimension=dimension,
     )
     for i, p in enumerate(culture.cell_positions):
         culture.grid.add_cell_to_hash_table(i, p)
@@ -55,7 +61,10 @@ def original_move(culture, dif_positions, dif_phies):
 
 def grid_signature(culture):
     """Capture bucket keys and ordered membership for exact comparisons."""
-    return [(key, tuple(indices)) for key, indices in culture.grid.hash_table.items()]
+    return [
+        (key, tuple(indices))
+        for key, indices in culture.grid.hash_table.items()
+    ]
 
 
 @pytest.mark.parametrize("dimension", [2, 3])

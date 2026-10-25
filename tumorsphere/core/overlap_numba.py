@@ -50,9 +50,9 @@ def calculate_overlap_numba(
         delta = phi_i - phi_j[k]
         cos_delta = np.cos(delta)
         beta = (
-            ds ** 2
+            ds**2
             - (d_i * eps_i - dj * ej) ** 2
-            - 4.0 * d_i * dj * eps_i * ej * (cos_delta ** 2)
+            - 4.0 * d_i * dj * eps_i * ej * (cos_delta**2)
         )
 
         wi = d_i * eps_i
@@ -64,13 +64,13 @@ def calculate_overlap_numba(
         ry = r[k, 1]
         rz = r[k, 2]
         quad = (
-            (1.0 - mxx) * rx ** 2
-            + (1.0 + mxx) * ry ** 2
+            (1.0 - mxx) * rx**2
+            + (1.0 + mxx) * ry**2
             - 2.0 * mxy * rx * ry
-            + rz ** 2
+            + rz**2
         )
 
-        imax = 4.0 * area ** 2 / (np.pi * np.sqrt(beta))
+        imax = 4.0 * area**2 / (np.pi * np.sqrt(beta))
         norm = np.exp(-(ds / beta) * quad)
         absolute[k] = imax * norm
         normalized[k] = norm

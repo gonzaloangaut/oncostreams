@@ -371,12 +371,9 @@ class Culture:
         cluster_range_factors = tuple(
             float(value) for value in cluster_range_factors
         )
-        if (
-            not cluster_range_factors
-            or any(
-                (not np.isfinite(value)) or value < 1.0
-                for value in cluster_range_factors
-            )
+        if not cluster_range_factors or any(
+            (not np.isfinite(value)) or value < 1.0
+            for value in cluster_range_factors
         ):
             raise ValueError(
                 "cluster_range_factors must contain finite values >= 1."
@@ -390,12 +387,8 @@ class Culture:
                 "cluster_alignment_angle_deg must be between 0 and 90."
             )
 
-        self.cluster_range_factors = tuple(
-            sorted(set(cluster_range_factors))
-        )
-        self.cluster_alignment_angle_deg = float(
-            cluster_alignment_angle_deg
-        )
+        self.cluster_range_factors = tuple(sorted(set(cluster_range_factors)))
+        self.cluster_alignment_angle_deg = float(cluster_alignment_angle_deg)
 
         self.delta_t = delta_t
         # Preserve the legacy behavior when None is provided:
@@ -778,13 +771,12 @@ class Culture:
             from tumorsphere.core.relative_positions_numba import (
                 periodic_relative_positions_numba,
             )
+
             return periodic_relative_positions_numba(
                 cell_position, neighbor_positions, float(self.side)
             )
         if backend != "numpy":
-            raise ValueError(
-                f"Unknown backend: {backend!r}"
-            )
+            raise ValueError(f"Unknown backend: {backend!r}")
 
         # Calculate the relative positions between all the neighbors and the cell
         relative_positions = cell_position - neighbor_positions
@@ -1116,6 +1108,7 @@ class Culture:
             from tumorsphere.core.elongation_grouped_numba import (
                 elongate_from_round_grouped,
             )
+
             return elongate_from_round_grouped(self, cell_index)
         if backend != "numpy":
             raise ValueError(f"Unknown backend: {backend!r}")
@@ -1632,7 +1625,9 @@ class Culture:
         """
         backend = self.backend
         if backend == "numba":
-            raise RuntimeError("Batch backends process full sweeps; call Culture.simulate()")
+            raise RuntimeError(
+                "Batch backends process full sweeps; call Culture.simulate()"
+            )
         if backend != "numpy":
             raise ValueError(f"Unknown backend: {backend!r}")
 
@@ -1705,8 +1700,7 @@ class Culture:
 
         # Initialize a union-find data structure for each cluster graph specification
         union_finds = {
-            spec: _UnionFind(number_of_cells)
-            for spec in graph_specs
+            spec: _UnionFind(number_of_cells) for spec in graph_specs
         }
 
         thresholds = {
@@ -1714,9 +1708,7 @@ class Culture:
             for range_factor in self.cluster_range_factors
         }
 
-        cos_threshold = np.cos(
-            np.deg2rad(self.cluster_alignment_angle_deg)
-        )
+        cos_threshold = np.cos(np.deg2rad(self.cluster_alignment_angle_deg))
 
         # The cluster observable can use a slightly longer range than the
         # dynamics. Ask the hash grid for enough buckets to cover the largest
@@ -1725,13 +1717,12 @@ class Culture:
             2.0
             * self.cell_radius
             * np.sqrt(
-                self.aspect_ratio_max
-                * (-np.log(self.overlap_threshold_ratio))
+                self.aspect_ratio_max * (-np.log(self.overlap_threshold_ratio))
             )
         )
 
-        cluster_search_radius = (
-            base_search_radius * max(self.cluster_range_factors)
+        cluster_search_radius = base_search_radius * max(
+            self.cluster_range_factors
         )
 
         bucket_radius = max(
@@ -1797,9 +1788,7 @@ class Culture:
                     if xi <= thresholds[range_factor]:
                         continue
 
-                    union_finds[
-                        (phenotype, "spatial", range_factor)
-                    ].union(
+                    union_finds[(phenotype, "spatial", range_factor)].union(
                         cell_index,
                         int(neighbor_index),
                     )
@@ -2384,7 +2373,8 @@ class Culture:
                     )
 
                     dif_positions, dif_phies = batch_interaction_step(
-                        self, self.delta_t,
+                        self,
+                        self.delta_t,
                     )
                 else:
                     # Reference per-cell path remains unchanged.
@@ -2451,8 +2441,7 @@ class Culture:
 
             # Save periodically and at the final integration step
             if checkpoint_path and (
-                i % checkpoint_interval_steps == 0
-                or i == num_times
+                i % checkpoint_interval_steps == 0 or i == num_times
             ):
                 self.save_checkpoint(
                     checkpoint_path=checkpoint_path,

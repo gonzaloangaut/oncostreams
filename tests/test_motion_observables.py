@@ -36,13 +36,18 @@ def test_constant_velocity_gives_ballistic_msd():
     step_length = speed * dt
 
     assert output.calculate_motion_parameters(_position(1.0), side) == (
-        0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
     )
 
     for step in range(1, 6):
         mean_dr, mean_dr2, p95_dr, max_dr, msd = (
             output.calculate_motion_parameters(
-                _position(1.0 + step * step_length), side,
+                _position(1.0 + step * step_length),
+                side,
             )
         )
         np.testing.assert_allclose(
@@ -77,7 +82,9 @@ def test_periodic_crossing_preserves_unwrapped_displacement():
         )
 
 
-def _record_synthetic_motion(output, *, step: int, wrapped_x: float, side: float):
+def _record_synthetic_motion(
+    output, *, step: int, wrapped_x: float, side: float
+):
     """Feed the motion output using the same recording entry point as Culture."""
     output.record_culture_state(
         tic=step,
@@ -96,13 +103,18 @@ def test_save_interval_does_not_change_msd_or_step_definition(tmp_path):
     dense_dir = tmp_path / "dense"
     sparse_dir = tmp_path / "sparse"
     dense = DatOutput_motion_parameters("dense", str(dense_dir), save_step=1)
-    sparse = DatOutput_motion_parameters("sparse", str(sparse_dir), save_step=4)
+    sparse = DatOutput_motion_parameters(
+        "sparse", str(sparse_dir), save_step=4
+    )
 
     for step in range(9):
         wrapped_x = (x0 + step * step_length) % side
         for output in (dense, sparse):
             _record_synthetic_motion(
-                output, step=step, wrapped_x=wrapped_x, side=side,
+                output,
+                step=step,
+                wrapped_x=wrapped_x,
+                side=side,
             )
 
     dense_files = dense_dir / "dat_motion_parameters"
@@ -113,12 +125,19 @@ def test_save_interval_does_not_change_msd_or_step_definition(tmp_path):
     for step in (0, 4, 8):
         dense_record = _saved_motion(dense_files, step)
         sparse_record = _saved_motion(sparse_files, step)
-        np.testing.assert_allclose(sparse_record, dense_record, rtol=0, atol=1e-12)
+        np.testing.assert_allclose(
+            sparse_record, dense_record, rtol=0, atol=1e-12
+        )
         if step:
             np.testing.assert_allclose(
                 sparse_record,
-                (step_length, step_length**2, step_length,
-                 step_length, (step * step_length) ** 2),
+                (
+                    step_length,
+                    step_length**2,
+                    step_length,
+                    step_length,
+                    (step * step_length) ** 2,
+                ),
                 rtol=0,
                 atol=1e-12,
             )
@@ -127,14 +146,16 @@ def test_save_interval_does_not_change_msd_or_step_definition(tmp_path):
 def _run_checkpoint_case(output_dir, *, steps: int, backend: str) -> None:
     """Exercise the public simulation/checkpoint path with motion output."""
     simulation = Simulation(
-        forces=[Anisotropic_Grosmann(
-            kRep=2.5,
-            bExp=3.0,
-            noise_eta=0.033,
-            d_phi=0.13,
-            shrinking=True,
-            lambda_core=1.0,
-        )],
+        forces=[
+            Anisotropic_Grosmann(
+                kRep=2.5,
+                bExp=3.0,
+                noise_eta=0.033,
+                d_phi=0.13,
+                shrinking=True,
+                lambda_core=1.0,
+            )
+        ],
         backend=backend,
         rng_seed=13579,
         num_of_realizations=1,

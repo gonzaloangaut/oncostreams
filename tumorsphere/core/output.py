@@ -968,7 +968,9 @@ class DatOutput_motion_parameters(TumorsphereOutput):
         """We do not record the individual deactivations."""
         pass
 
-    def calculate_motion_parameters(self, cell_positions, side, *, compute_statistics=True):
+    def calculate_motion_parameters(
+        self, cell_positions, side, *, compute_statistics=True
+    ):
         """
         Calculate motion observables using unwrapped trajectories.
 
@@ -1768,9 +1770,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
         )
 
         cluster_sizes_without_largest = sizes_sorted[1:]
-        number_without_largest = int(
-            cluster_sizes_without_largest.size
-        )
+        number_without_largest = int(cluster_sizes_without_largest.size)
 
         if number_without_largest == 0:
             mean_without_largest = np.nan
@@ -2285,9 +2285,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                     cell_phies=cell_phies,
                 )
             else:
-                number_of_clusters = int(
-                    size_statistics["number_of_clusters"]
-                )
+                number_of_clusters = int(size_statistics["number_of_clusters"])
                 order_statistics = {
                     "polar_orders": np.full(
                         number_of_clusters, np.nan, dtype=float
@@ -2308,9 +2306,7 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
 
             velocity_statistics = self.calculate_cluster_velocity_statistics(
                 cluster_list=cluster_list,
-                cell_instantaneous_velocities=(
-                    cell_instantaneous_velocities
-                ),
+                cell_instantaneous_velocities=(cell_instantaneous_velocities),
             )
 
             graph_results.append(
@@ -2427,18 +2423,12 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                         statistics["number_without_largest"],
                         statistics["mean_without_largest"],
                         statistics["finite_weighted_size"],
-                        order_statistics[
-                            "number_of_non_singleton_clusters"
-                        ],
-                        order_statistics[
-                            "mean_polar_order_non_singleton"
-                        ],
+                        order_statistics["number_of_non_singleton_clusters"],
+                        order_statistics["mean_polar_order_non_singleton"],
                         order_statistics[
                             "weighted_mean_polar_order_non_singleton"
                         ],
-                        order_statistics[
-                            "mean_nematic_order_non_singleton"
-                        ],
+                        order_statistics["mean_nematic_order_non_singleton"],
                         order_statistics[
                             "weighted_mean_nematic_order_non_singleton"
                         ],
@@ -2451,18 +2441,13 @@ class DatOutput_cluster_parameters(TumorsphereOutput):
                             "weighted_mean_cluster_speed_non_singleton"
                         ],
                         velocity_statistics["largest_cluster_speed"],
-                        velocity_statistics[
-                            "mean_cell_speed_non_singleton"
-                        ],
+                        velocity_statistics["mean_cell_speed_non_singleton"],
                         velocity_statistics[
                             "weighted_mean_cell_speed_non_singleton"
                         ],
-                        velocity_statistics[
-                            "largest_cluster_mean_cell_speed"
-                        ],
+                        velocity_statistics["largest_cluster_mean_cell_speed"],
                     ]
                     datfile.write(",".join(map(str, values)) + "\n")
-
 
 
 class DatOutput_deformation_parameters(TumorsphereOutput):
@@ -3054,7 +3039,6 @@ class DfOutput(TumorsphereOutput):
         df.to_csv(filename, index=False)
 
 
-
 def _output_key(output_object):
     """Return the public output name associated with one output object."""
     mapping = {
@@ -3152,6 +3136,7 @@ def reconfigure_output_demux(existing_output, requested_output):
         OutputDemux(requested_output.culture_name, merged_results),
         reconfiguration,
     )
+
 
 def create_output_demux(
     culture_name: str,

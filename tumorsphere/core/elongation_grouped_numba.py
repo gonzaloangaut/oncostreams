@@ -7,6 +7,7 @@ maximum normalized overlap, with exact ties broken using the culture
 RNG. The candidate and geometry caches are transient and kept current
 on grid and shape changes.
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -16,18 +17,18 @@ from numba import njit
 
 
 @lru_cache(maxsize=128)
-def _cached_proposal_geometry(cell_area, old_aspect_ratio, delta_aspect_ratio,
-                              aspect_ratio_max):
+def _cached_proposal_geometry(
+    cell_area, old_aspect_ratio, delta_aspect_ratio, aspect_ratio_max
+):
     """Cache proposal shape constants without changing arithmetic order."""
-    new_aspect_ratio = min(old_aspect_ratio + delta_aspect_ratio,
-                           aspect_ratio_max)
+    new_aspect_ratio = min(
+        old_aspect_ratio + delta_aspect_ratio, aspect_ratio_max
+    )
     displacement_length = np.sqrt(
         (cell_area * new_aspect_ratio) / np.pi
     ) - np.sqrt((cell_area * old_aspect_ratio) / np.pi)
-    d_i = (cell_area / np.pi) * (
-        new_aspect_ratio + 1 / new_aspect_ratio
-    )
-    eps_i = (new_aspect_ratio ** 2 - 1) / (new_aspect_ratio ** 2 + 1)
+    d_i = (cell_area / np.pi) * (new_aspect_ratio + 1 / new_aspect_ratio)
+    eps_i = (new_aspect_ratio**2 - 1) / (new_aspect_ratio**2 + 1)
     return new_aspect_ratio, displacement_length, d_i, eps_i
 
 
@@ -38,13 +39,16 @@ def _shared_elongation_geometry(culture):
     the existing interaction candidate cache.
     """
     grid = culture.grid
-    cached = getattr(grid, '_elongation_geometry_cache', None)
+    cached = getattr(grid, "_elongation_geometry_cache", None)
     if cached is None or len(cached[0]) != len(culture.cells):
         cached = (
-            np.array([cell.squared_diagonal for cell in culture.cells],
-                     dtype=np.float64),
-            np.array([cell.anisotropy for cell in culture.cells],
-                     dtype=np.float64),
+            np.array(
+                [cell.squared_diagonal for cell in culture.cells],
+                dtype=np.float64,
+            ),
+            np.array(
+                [cell.anisotropy for cell in culture.cells], dtype=np.float64
+            ),
         )
         grid._elongation_geometry_cache = cached
     return cached
@@ -56,7 +60,7 @@ def _cached_elongation_neighbors(grid, bucket_key, position):
     Membership (and insertion order) is unchanged until an add/remove call.
     SpatialHashGrid clears this cache after every such mutation.
     """
-    cache = getattr(grid, '_elongation_bucket_cache', None)
+    cache = getattr(grid, "_elongation_bucket_cache", None)
     if cache is None:
         cache = {}
         grid._elongation_bucket_cache = cache
@@ -82,22 +86,40 @@ def compiled_proposals(old_position, displacement_length, phis, side):
     for a in range(count):
         phi = phis[a]
         positions[a] = np.mod(
-            old_position + np.array([
-                displacement_length * np.cos(phi),
-                displacement_length * np.sin(phi),
-                0.0,
-            ]), side,
+            old_position
+            + np.array(
+                [
+                    displacement_length * np.cos(phi),
+                    displacement_length * np.sin(phi),
+                    0.0,
+                ]
+            ),
+            side,
         )
         qxx[a] = np.cos(2 * phi)
         qxy[a] = np.sin(2 * phi)
     return positions, qxx, qxy
 
+
 @njit(cache=True, fastmath=False)
 def grouped_proposal_scores(
-    proposed_positions, proposed_phies, proposed_qxx, proposed_qxy,
-    trial_buckets, ptr, neighbor_indices,
-    positions, phies, diagonals, anisotropies, qxx, qxy,
-    d_i, eps_i, side, threshold,
+    proposed_positions,
+    proposed_phies,
+    proposed_qxx,
+    proposed_qxy,
+    trial_buckets,
+    ptr,
+    neighbor_indices,
+    positions,
+    phies,
+    diagonals,
+    anisotropies,
+    qxx,
+    qxy,
+    d_i,
+    eps_i,
+    side,
+    threshold,
 ):
     """Compute all independent proposals of ONE cell within one Numba call.
 
@@ -139,14 +161,21 @@ def grouped_proposal_scores(
             else:
                 delta = proposed_phies[a] - phies[j]
                 cos_delta = np.cos(delta)
-            beta = (ds ** 2 - (d_i * eps_i - dj * ej) ** 2
-                    - 4.0 * d_i * dj * eps_i * ej * (cos_delta ** 2))
+            beta = (
+                ds**2
+                - (d_i * eps_i - dj * ej) ** 2
+                - 4.0 * d_i * dj * eps_i * ej * (cos_delta**2)
+            )
             wi = d_i * eps_i
             wj = dj * ej
             mxx = (wi * proposed_qxx[a] + wj * qxx[j]) / ds
             mxy = (wi * proposed_qxy[a] + wj * qxy[j]) / ds
-            quad = ((1.0 - mxx) * dx ** 2 + (1.0 + mxx) * dy ** 2
-                    - 2.0 * mxy * dx * dy + dz ** 2)
+            quad = (
+                (1.0 - mxx) * dx**2
+                + (1.0 + mxx) * dy**2
+                - 2.0 * mxy * dx * dy
+                + dz**2
+            )
             norm = np.exp(-(ds / beta) * quad)
             if np.isnan(norm):
                 maximum = np.nan
@@ -161,8 +190,8 @@ def grouped_proposal_scores(
 
 def elongate_from_round_grouped(self, cell_index: int) -> bool:
     """Replace elongate_from_round_fast; never modifies state until acceptance."""
-    if self.backend != 'numba':
-        raise RuntimeError('Grouped elongation requires backend=numba')
+    if self.backend != "numba":
+        raise RuntimeError("Grouped elongation requires backend=numba")
     cell = self.cells[cell_index]
     n_attempts = self.cell_max_def_attempts
     if n_attempts <= 0:
@@ -173,7 +202,9 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
     old_bucket = self.grid.get_hash_key(old_position)
     new_aspect_ratio, displacement_length, d_i, eps_i = (
         _cached_proposal_geometry(
-            self.cell_area, old_aspect_ratio, self.delta_aspect_ratio,
+            self.cell_area,
+            old_aspect_ratio,
+            self.delta_aspect_ratio,
             self.aspect_ratio_max,
         )
     )
@@ -191,7 +222,10 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
         new_phis = self.rng.uniform(low=0, high=2 * np.pi, size=n_attempts)
     phis = np.asarray(new_phis, dtype=np.float64)
     positions, proposed_qxx, proposed_qxy = compiled_proposals(
-        old_position, displacement_length, phis, float(self.side),
+        old_position,
+        displacement_length,
+        phis,
+        float(self.side),
     )
     for a in range(n_attempts):
         new_position = positions[a]
@@ -200,8 +234,13 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
         if bi is None:
             bi = len(bucket_ids)
             bucket_ids[key] = bi
-            idx = [int(j) for j in _cached_elongation_neighbors(
-                self.grid, key, new_position) if int(j) != cell_index]
+            idx = [
+                int(j)
+                for j in _cached_elongation_neighbors(
+                    self.grid, key, new_position
+                )
+                if int(j) != cell_index
+            ]
             flat_neighbors.extend(idx)
             ptr.append(len(flat_neighbors))
         trial_buckets[a] = bi
@@ -212,15 +251,25 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
     diag, eps = _shared_elongation_geometry(self)
     qs = self.nematic_tensors
     scores = grouped_proposal_scores(
-        positions, phis, proposed_qxx, proposed_qxy,
-        trial_buckets, np.asarray(ptr, dtype=np.intp), indices,
-        self.cell_positions, self.cell_phies, diag, eps,
+        positions,
+        phis,
+        proposed_qxx,
+        proposed_qxy,
+        trial_buckets,
+        np.asarray(ptr, dtype=np.intp),
+        indices,
+        self.cell_positions,
+        self.cell_phies,
+        diag,
+        eps,
         # Read directly from the live tensor array: these non-contiguous
         # views avoid two O(N) copies for every round-cell attempt.
         # Numba supports strided inputs; arithmetic/order stay unchanged.
         qs[:, 0, 0],
         qs[:, 0, 1],
-        float(d_i), float(eps_i), float(self.side),
+        float(d_i),
+        float(eps_i),
+        float(self.side),
         float(self.overlap_threshold_ratio),
     )
 
@@ -249,4 +298,3 @@ def elongate_from_round_grouped(self, cell_index: int) -> bool:
         self.grid.remove_cell_from_hash_table(cell_index, old_position)
         self.grid.add_cell_to_hash_table(cell_index, chosen_position)
     return True
-

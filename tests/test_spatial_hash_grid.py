@@ -27,12 +27,10 @@ def test_periodic_neighbors_match_original(n, radius):
 
     # Place one cell at the center of every bucket.
     for index, coords in enumerate(product(range(n), repeat=3)):
-        position = cube_size * (
-            np.asarray(coords, dtype=float) + 0.5
-        )
+        position = cube_size * (np.asarray(coords, dtype=float) + 0.5)
         grid.add_cell_to_hash_table(index, position)
 
-    # Test positions are chosen to be near the corners of the domain, 
+    # Test positions are chosen to be near the corners of the domain,
     # as well as a random position.
     positions = [
         np.array([0.01, 0.01, 0.01]),
@@ -41,11 +39,9 @@ def test_periodic_neighbors_match_original(n, radius):
         np.array([1.2, 3.4, 5.6]),
     ]
 
-    offsets = np.array(
-        list(product(range(-radius, radius + 1), repeat=3))
-    )
+    offsets = np.array(list(product(range(-radius, radius + 1), repeat=3)))
 
-    # Test that the neighbors returned by the new implementation 
+    # Test that the neighbors returned by the new implementation
     # match the original implementation.
     for position in positions:
         bucket = grid.get_bucket_position(position)
@@ -57,13 +53,11 @@ def test_periodic_neighbors_match_original(n, radius):
         )
         adjacent = np.unique(adjacent, axis=0)
 
-        expected = list(chain.from_iterable(
-            grid.hash_table[b.tobytes()] for b in adjacent
-        ))
-
-        obtained = list(
-            grid.find_neighbors(position, bucket_radius=radius)
+        expected = list(
+            chain.from_iterable(grid.hash_table[b.tobytes()] for b in adjacent)
         )
+
+        obtained = list(grid.find_neighbors(position, bucket_radius=radius))
 
         assert obtained == expected
 
@@ -88,15 +82,11 @@ def test_neighbor_cache_tracks_moving_cells():
     assert list(grid.find_neighbors(query)) == [10]
     assert len(grid._neighbor_bucket_cache) == 1
 
-    cached_keys = next(
-        iter(grid._neighbor_bucket_cache.values())
-    )
+    cached_keys = next(iter(grid._neighbor_bucket_cache.values()))
 
     # Repeated query reuses the same cached keys.
     assert list(grid.find_neighbors(query)) == [10]
-    assert next(
-        iter(grid._neighbor_bucket_cache.values())
-    ) is cached_keys
+    assert next(iter(grid._neighbor_bucket_cache.values())) is cached_keys
 
     # Move the cell outside the queried neighborhood.
     grid.remove_cell_from_hash_table(10, near)
@@ -170,14 +160,14 @@ def test_2d_grid_matches_3d_for_planar_cells(n, radius):
     )
 
     # Place one cell in each XY bucket, always with z=0.
-    for index, (i, j) in enumerate(
-        product(range(n), repeat=2)
-    ):
-        position = np.array([
-            cube_size * (i + 0.5),
-            cube_size * (j + 0.5),
-            0.0,
-        ])
+    for index, (i, j) in enumerate(product(range(n), repeat=2)):
+        position = np.array(
+            [
+                cube_size * (i + 0.5),
+                cube_size * (j + 0.5),
+                0.0,
+            ]
+        )
 
         grid_2d.add_cell_to_hash_table(index, position)
         grid_3d.add_cell_to_hash_table(index, position)
@@ -206,13 +196,9 @@ def test_spatial_grid_dimension():
 
     position = np.array([5.0, 7.0, 0.0])
 
-    grid_2d = SpatialHashGrid(
-        spatial_dimension=2
-    )
+    grid_2d = SpatialHashGrid(spatial_dimension=2)
 
-    grid_3d = SpatialHashGrid(
-        spatial_dimension=3
-    )
+    grid_3d = SpatialHashGrid(spatial_dimension=3)
 
     assert grid_2d.get_bucket_position(position).shape == (2,)
     assert grid_3d.get_bucket_position(position).shape == (3,)
@@ -224,9 +210,7 @@ def test_spatial_grid_dimension():
 def test_2d_grid_rejects_nonzero_z():
     """A planar grid must not silently ignore a nonzero z."""
 
-    grid = SpatialHashGrid(
-        spatial_dimension=2
-    )
+    grid = SpatialHashGrid(spatial_dimension=2)
 
     position = np.array([1.0, 2.0, 0.5])
 
@@ -237,9 +221,7 @@ def test_2d_grid_rejects_nonzero_z():
 def test_legacy_grid_defaults_to_3d():
     """Old checkpoints without dimension metadata must remain 3D."""
 
-    grid = SpatialHashGrid(
-        spatial_dimension=3
-    )
+    grid = SpatialHashGrid(spatial_dimension=3)
 
     old_state = grid.__dict__.copy()
     old_state.pop("spatial_dimension")
@@ -253,13 +235,18 @@ def test_legacy_grid_defaults_to_3d():
 
 # Ordered candidate-CSR regressions (formerly test_batched_neighbor_keys.py).
 
+
 @pytest.mark.parametrize("dimension", [2, 3])
 @pytest.mark.parametrize("rho", [0.30, 0.84, 0.90])
 @pytest.mark.parametrize("eta", [0.0, 0.033])
 def test_ordered_csr_matches_scalar_candidate_queries(dimension, rho, eta):
     culture = make_culture(
-        'numba', seed=17, dimension=dimension,
-        rho=rho, eta=eta, n=64,
+        "numba",
+        seed=17,
+        dimension=dimension,
+        rho=rho,
+        eta=eta,
+        n=64,
     )
     run(culture, 0, 12)
     grid = culture.grid
@@ -294,8 +281,12 @@ def test_ordered_csr_matches_scalar_candidate_queries(dimension, rho, eta):
 
 def test_ordered_csr_after_grid_membership_change():
     culture = make_culture(
-        'numba', seed=29, dimension=2,
-        rho=0.84, eta=0.0, n=64,
+        "numba",
+        seed=29,
+        dimension=2,
+        rho=0.84,
+        eta=0.0,
+        n=64,
     )
     run(culture, 0, 10)
     grid = culture.grid

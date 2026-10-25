@@ -261,9 +261,7 @@ class Simulation:
         self.cluster_range_factors = tuple(
             float(value) for value in cluster_range_factors
         )
-        self.cluster_alignment_angle_deg = float(
-            cluster_alignment_angle_deg
-        )
+        self.cluster_alignment_angle_deg = float(cluster_alignment_angle_deg)
 
         # Initialization mode
         valid_initialization_modes = {
@@ -363,8 +361,7 @@ class Simulation:
             if reproduction or not movement:
                 raise ValueError("backend='numba' requires fixed-N movement")
             if forces is None or any(
-                not isinstance(force, Anisotropic_Grosmann)
-                for force in forces
+                not isinstance(force, Anisotropic_Grosmann) for force in forces
             ):
                 raise ValueError(
                     "backend='numba' only supports Anisotropic_Grosmann forces"
@@ -1189,36 +1186,35 @@ def simulate_single_culture(
         "elongation_sleep_steps",
     )
 
-    expected_config = {
-        name: getattr(sim, name)
-        for name in parameter_names
-    }
+    expected_config = {name: getattr(sim, name) for name in parameter_names}
 
     # Record the effective values passed to this realization
-    expected_config.update({
-        "checkpoint_config_version": 4,
-        "initial_number_of_cells": actual_number_of_cells,
-        "initial_fraction_elongated": sim.initial_fraction_elongated[t],
-        "prob_stem": sim.prob_stem[i],
-        "prob_diff": sim.prob_diff[k],
-        "rng_seed": seed,
-        "stabilization_time": effective_stabilization_time,
-        "culture_bounds": culture_bounds,
-        "grid_cube_size": grid_cube_size,
-        "grid_torus": grid_torus,
-        "grid_spatial_dimension": sim.spatial_dimension,
-        "deformation_attempt_period": (
-            sim.delta_t
-            if sim.deformation_attempt_period is None
-            else sim.deformation_attempt_period
-        ),
-        "delta_aspect_ratio": (
-            sim.aspect_ratio_max - 1.0
-            if sim.trabajo_final
-            else sim.delta_aspect_ratio
-        ),
-        "requested_number_of_removed_cells": number_of_removed_cells,
-    })
+    expected_config.update(
+        {
+            "checkpoint_config_version": 4,
+            "initial_number_of_cells": actual_number_of_cells,
+            "initial_fraction_elongated": sim.initial_fraction_elongated[t],
+            "prob_stem": sim.prob_stem[i],
+            "prob_diff": sim.prob_diff[k],
+            "rng_seed": seed,
+            "stabilization_time": effective_stabilization_time,
+            "culture_bounds": culture_bounds,
+            "grid_cube_size": grid_cube_size,
+            "grid_torus": grid_torus,
+            "grid_spatial_dimension": sim.spatial_dimension,
+            "deformation_attempt_period": (
+                sim.delta_t
+                if sim.deformation_attempt_period is None
+                else sim.deformation_attempt_period
+            ),
+            "delta_aspect_ratio": (
+                sim.aspect_ratio_max - 1.0
+                if sim.trabajo_final
+                else sim.delta_aspect_ratio
+            ),
+            "requested_number_of_removed_cells": number_of_removed_cells,
+        }
+    )
 
     # Compare the force parameters directly, without rounded name strings
     force = sim.forces[m]
@@ -1314,7 +1310,12 @@ def simulate_single_culture(
                 "Checkpoint force metadata disagrees with serialized Force class"
             )
         for name in (
-            "kRep", "bExp", "noise_eta", "d_phi", "shrinking", "lambda_core",
+            "kRep",
+            "bExp",
+            "noise_eta",
+            "d_phi",
+            "shrinking",
+            "lambda_core",
         ):
             if saved_dynamic_config.get(f"force.{name}") != getattr(
                 culture.force, name, None
@@ -1326,7 +1327,9 @@ def simulate_single_culture(
         if stored_backend == "numba" and not isinstance(
             culture.force, Anisotropic_Grosmann
         ):
-            raise ValueError("Checkpoint backend=numba requires Anisotropic_Grosmann")
+            raise ValueError(
+                "Checkpoint backend=numba requires Anisotropic_Grosmann"
+            )
 
         differences = []
 
@@ -1337,9 +1340,7 @@ def simulate_single_culture(
                 key not in saved_dynamic_config
                 or key not in expected_dynamic_config
             ):
-                differences.append(
-                    f"{key}: missing from one configuration"
-                )
+                differences.append(f"{key}: missing from one configuration")
             elif saved_dynamic_config[key] != expected_dynamic_config[key]:
                 differences.append(
                     f"{key}: checkpoint={saved_dynamic_config[key]!r}, "
@@ -1493,17 +1494,15 @@ def simulate_single_culture(
             deformation_probe_steps=(sim.deformation_probe_steps),
             elongation_sleep_steps=(sim.elongation_sleep_steps),
             cluster_range_factors=sim.cluster_range_factors,
-            cluster_alignment_angle_deg=(
-                sim.cluster_alignment_angle_deg
-            ),
+            cluster_alignment_angle_deg=(sim.cluster_alignment_angle_deg),
             backend=sim.backend,
         )
         # Persist only model/dynamical compatibility metadata. Output policy
         # is intentionally reconstructed from the current simulate_parallel()
         # call whenever a checkpoint is resumed.
-        sim.cultures[
-            current_realization_name
-        ]._checkpoint_model_config = expected_config.copy()
+        sim.cultures[current_realization_name]._checkpoint_model_config = (
+            expected_config.copy()
+        )
 
         start_tic = 0
     sim.cultures[current_realization_name].simulate(

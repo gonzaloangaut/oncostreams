@@ -32,12 +32,17 @@ SIDES = (7.0, 12.5, 101.0)
 # Balanced deterministic coverage: 60 cases instead of 180. Every seed
 # and planar/nonplanar mode sees all three box sizes across neighbor counts.
 RELATIVE_POSITION_CASES = [
-    (seed, n, SIDES[(seed_i + count_i + int(nonplanar)) % len(SIDES)],
-     nonplanar)
+    (
+        seed,
+        n,
+        SIDES[(seed_i + count_i + int(nonplanar)) % len(SIDES)],
+        nonplanar,
+    )
     for seed_i, seed in enumerate(SEEDS)
     for count_i, n in enumerate(NEIGHBOR_COUNTS)
     for nonplanar in (False, True)
 ]
+
 
 @pytest.mark.parametrize("seed,n,side,nonplanar", RELATIVE_POSITION_CASES)
 def test_random_float64_reference_bitwise(seed, n, side, nonplanar):
@@ -64,16 +69,19 @@ def test_boundaries_and_empty(side):
     above = np.nextafter(half, float("inf"))
     below = np.nextafter(half, float("-inf"))
     cell = np.array([0.0, 0.0, 3.5], dtype=np.float64)
-    neighbors = np.array([
-        [half, half, 1.0],
-        [-half, -half, 2.0],
-        [above, above, 4.0],
-        [-above, -above, 5.0],
-        [below, below, 7.0],
-        [-below, -below, 8.0],
-        [side, -side, 0.0],
-        [0.0, 0.0, 3.5],
-    ], dtype=np.float64)
+    neighbors = np.array(
+        [
+            [half, half, 1.0],
+            [-half, -half, 2.0],
+            [above, above, 4.0],
+            [-above, -above, 5.0],
+            [below, below, 7.0],
+            [-below, -below, 8.0],
+            [side, -side, 0.0],
+            [0.0, 0.0, 3.5],
+        ],
+        dtype=np.float64,
+    )
     np.testing.assert_array_equal(
         actual_backend(cell, neighbors, side),
         numpy_reference(cell, neighbors, side),
@@ -87,5 +95,6 @@ def test_unknown_backend_rejected():
     with pytest.raises(ValueError, match="Unknown backend"):
         Culture.calculate_relative_positions(
             SimpleNamespace(side=10.0, backend="cuda"),
-            cell, neighbors,
+            cell,
+            neighbors,
         )

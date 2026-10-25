@@ -168,12 +168,11 @@ class SpatialHashGrid:
         # Convert their *restored* order once, so future checkpoints are stable.
         # Exact continuation relative to a live pre-migration run is not
         # guaranteed for those legacy checkpoints.
-        if (
-            getattr(self.hash_table, "default_factory", None) is not OrderedIndexSet
-            or any(
-                not isinstance(bucket, OrderedIndexSet)
-                for bucket in self.hash_table.values()
-            )
+        if getattr(
+            self.hash_table, "default_factory", None
+        ) is not OrderedIndexSet or any(
+            not isinstance(bucket, OrderedIndexSet)
+            for bucket in self.hash_table.values()
         ):
             old_table = self.hash_table
             stable_table = defaultdict(OrderedIndexSet)
@@ -203,9 +202,7 @@ class SpatialHashGrid:
 
         if self.spatial_dimension == 2:
             if len(position) == 3 and position[2] != 0:
-                raise ValueError(
-                    "A 2D spatial grid requires z=0."
-                )
+                raise ValueError("A 2D spatial grid requires z=0.")
 
             position = position[:2]
 
@@ -326,7 +323,10 @@ class SpatialHashGrid:
         Iterable[int]
             Candidate cell indices, including the reference cell if present.
         """
-        if not isinstance(bucket_radius, (int, np.integer)) or bucket_radius < 0:
+        if (
+            not isinstance(bucket_radius, (int, np.integer))
+            or bucket_radius < 0
+        ):
             raise ValueError("bucket_radius must be a non-negative integer.")
 
         bucket_radius = int(bucket_radius)
@@ -359,17 +359,13 @@ class SpatialHashGrid:
 
                 if self.number_of_buckets >= 2 * bucket_radius + 1:
                     # Preserve the lexicographic order of np.unique.
-                    adj_buckets = adj_buckets[
-                        np.lexsort(adj_buckets.T[::-1])
-                    ]
+                    adj_buckets = adj_buckets[np.lexsort(adj_buckets.T[::-1])]
                 else:
                     # Remove duplicates when periodic wrapping requires it.
                     adj_buckets = np.unique(adj_buckets, axis=0)
 
                 # Cache bucket keys, never their cell contents.
-                neighbor_keys = tuple(
-                    b.tobytes() for b in adj_buckets
-                )
+                neighbor_keys = tuple(b.tobytes() for b in adj_buckets)
 
                 self._neighbor_bucket_cache[cache_key] = neighbor_keys
 

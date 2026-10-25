@@ -9,6 +9,7 @@ is invalidated. This also catches changes to OrderedIndexSet insertion order.
 
 The owning SpatialHashGrid excludes this cache from pickle/checkpoints.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -26,8 +27,11 @@ class OrderedNeighborCache:
 
     def _refresh(self, grid, index, position, center, version):
         """Rebuild a stale entry while preserving reference neighbor order."""
-        raw = [int(j) for j in grid.find_neighbors(position=position)
-               if int(j) != index]
+        raw = [
+            int(j)
+            for j in grid.find_neighbors(position=position)
+            if int(j) != index
+        ]
         earlier = sorted(j for j in raw if j < index)
         later = [j for j in raw if j > index]
         ordered = tuple(earlier + later)
@@ -52,7 +56,7 @@ class OrderedNeighborCache:
         calls. Entries, hit/miss counters, and invalidation remain identical.
         """
         buckets = np.floor(
-            positions[:, :grid.spatial_dimension] / grid.cube_size
+            positions[:, : grid.spatial_dimension] / grid.cube_size
         ).astype(int)
         ptr = [0]
         neighbors = []
@@ -60,12 +64,20 @@ class OrderedNeighborCache:
             center = bucket.tobytes()
             version = self._versions.get(center, 0)
             saved = self._entries.get(index)
-            if saved is not None and saved[0] == center and saved[1] == version:
+            if (
+                saved is not None
+                and saved[0] == center
+                and saved[1] == version
+            ):
                 self.hits += 1
                 ordered = saved[2]
             else:
                 ordered = self._refresh(
-                    grid, index, positions[index], center, version,
+                    grid,
+                    index,
+                    positions[index],
+                    center,
+                    version,
                 )
             neighbors.extend(ordered)
             ptr.append(len(neighbors))
@@ -74,7 +86,9 @@ class OrderedNeighborCache:
     def modified_bucket(self, grid, position) -> None:
         """Invalidate centers affected by a successful bucket add/remove."""
         if not (grid.torus and grid.bounds is not None):
-            raise RuntimeError('Optimized batch interaction requires a periodic bounded grid')
+            raise RuntimeError(
+                "Optimized batch interaction requires a periodic bounded grid"
+            )
 
         changed = grid.get_bucket_position(position)
         # grid.offsets contains all Moore-neighborhood offsets in 2D or 3D.

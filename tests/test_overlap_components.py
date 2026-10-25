@@ -61,8 +61,7 @@ def scalar_overlap_reference(culture, index, neighbors, relative_positions):
         beta = (
             total_d**2
             - (d_i * eps_i - d_j * eps_j) ** 2
-            - 4.0 * d_i * d_j * eps_i * eps_j
-            * math.cos(phi_i - phi_j) ** 2
+            - 4.0 * d_i * d_j * eps_i * eps_j * math.cos(phi_i - phi_j) ** 2
         )
 
         m_xx = (
@@ -88,9 +87,10 @@ def scalar_overlap_reference(culture, index, neighbors, relative_positions):
         maxima.append(maximum)
         absolute.append(norm * maximum)
 
-    return tuple(np.asarray(values, dtype=float) for values in (
-        absolute, normalized, maxima
-    ))
+    return tuple(
+        np.asarray(values, dtype=float)
+        for values in (absolute, normalized, maxima)
+    )
 
 
 def assert_overlap_matches_reference(culture, index, neighbors, positions):
@@ -121,7 +121,9 @@ def test_overlap_reference_for_mixed_shapes(area, reference_index, nonzero_z):
     )
 
 
-@pytest.mark.parametrize("reference_index,neighbor_index", [(0, 1), (1, 2), (3, 5), (4, 0)])
+@pytest.mark.parametrize(
+    "reference_index,neighbor_index", [(0, 1), (1, 2), (3, 5), (4, 0)]
+)
 def test_overlap_threshold_decisions(reference_index, neighbor_index):
     """The two implementations agree on either side of exp(-1)."""
     culture = make_culture()
@@ -132,23 +134,27 @@ def test_overlap_threshold_decisions(reference_index, neighbor_index):
     eps_i, eps_j = i.anisotropy, j.anisotropy
     total_d = d_i + d_j
     beta = (
-        total_d**2 - (d_i * eps_i - d_j * eps_j) ** 2
+        total_d**2
+        - (d_i * eps_i - d_j * eps_j) ** 2
         - 4.0 * d_i * d_j * eps_i * eps_j * np.cos(phi_i - phi_j) ** 2
     )
     m_xx = (
-        d_i * eps_i * np.cos(2.0 * phi_i)
-        + d_j * eps_j * np.cos(2.0 * phi_j)
+        d_i * eps_i * np.cos(2.0 * phi_i) + d_j * eps_j * np.cos(2.0 * phi_j)
     ) / total_d
     coefficient = total_d / beta * (1.0 - m_xx)
     threshold = math.exp(-1.0)
     distance = math.sqrt(-math.log(threshold) / coefficient)
-    positions = np.array([
-        [distance * (1.0 - 1e-5), 0.0, 0.0],
-        [distance * (1.0 + 1e-5), 0.0, 0.0],
-    ])
+    positions = np.array(
+        [
+            [distance * (1.0 - 1e-5), 0.0, 0.0],
+            [distance * (1.0 + 1e-5), 0.0, 0.0],
+        ]
+    )
     neighbors = [neighbor_index, neighbor_index]
 
-    assert_overlap_matches_reference(culture, reference_index, neighbors, positions)
+    assert_overlap_matches_reference(
+        culture, reference_index, neighbors, positions
+    )
     _, normalized, _ = culture.calculate_overlap_components(
         reference_index, neighbors, positions
     )
@@ -177,6 +183,7 @@ def test_overlap_empty_neighbors():
 
 
 # Compiled-overlap equivalence tests (formerly test_numba_overlap.py).
+
 
 @pytest.mark.parametrize("nonplanar", [False, True])
 @pytest.mark.parametrize("n_neighbors", [0, 1, 2, 5, 10, 20])
@@ -214,9 +221,13 @@ def test_numba_vs_numpy_overlap_components(seed, n_neighbors, nonplanar):
     neighbors = list(range(1, n))
 
     culture.backend = "numpy"
-    ref = culture.calculate_overlap_components(0, neighbors, relative_positions)
+    ref = culture.calculate_overlap_components(
+        0, neighbors, relative_positions
+    )
     culture.backend = "numba"
-    got = culture.calculate_overlap_components(0, neighbors, relative_positions)
+    got = culture.calculate_overlap_components(
+        0, neighbors, relative_positions
+    )
     for reference, actual in zip(ref, got):
         np.testing.assert_allclose(actual, reference, rtol=2e-12, atol=1e-14)
         assert actual.shape == (n_neighbors,)
