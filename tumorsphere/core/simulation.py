@@ -851,7 +851,18 @@ class Simulation:
 
             removed_cells_values = self.requested_number_of_removed_cells
 
-        with mp.Pool(number_of_processes) as p:
+        # A single worker is used by several checkpoint/output tests.
+        # Use ``spawn`` in that case to avoid forking a multithreaded parent
+        # process (for example after Numba has initialized worker threads).
+        # Keep the existing multiprocessing behavior for production runs with
+        # more than one worker.
+        pool_context = (
+            mp.get_context("spawn")
+            if number_of_processes == 1
+            else mp
+        )
+
+        with pool_context.Pool(number_of_processes) as p:
             p.map(
                 simulate_single_culture,
                 [
