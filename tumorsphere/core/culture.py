@@ -2247,11 +2247,12 @@ class Culture:
                     self.reproduce(cell_index=index, tic=i)
 
             if self.movement:
-                # We wait for the system to stabilize if neccessary
+                # Deformation is evaluated before integrating step i, so the
+                # current mechanical state is the state at tic i - 1.
                 if (
                     i > self.stabilization_time
                     and self.deformation
-                    and self._is_deformation_attempt_step(i)
+                    and self._is_deformation_attempt_step(i - 1)
                 ):
                     self.deformation_attempt_count += 1
                     # Boolean to see if the elongation is sleeping

@@ -1,8 +1,9 @@
-"""Frozen fixed-N dynamics regressions independent of retired backends.
+"""Frozen fixed-N dynamics regressions for the current physical protocol.
 
-The committed ``tests/data/fixed_n_dynamics_v1.npz`` was generated and
-verified before backend retirement. Do not regenerate the fixture in normal
-testing; changes require separate scientific review on the historical branch.
+The committed ``tests/data/fixed_n_dynamics.npz`` records the corrected
+deformation schedule, where a sweep acts on the state at the requested
+physical time. Regenerate the fixture only after an intentional dynamics
+change and explicit NumPy/Numba cross-check.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from tests._helpers import (
     run_steps,
 )
 
-FIXTURE = Path(__file__).parent / "data" / "fixed_n_dynamics_v1.npz"
+FIXTURE = Path(__file__).parent / "data" / "fixed_n_dynamics.npz"
 STEPS = (1, 6, 17, 32)
 
 # Fixed, deliberately small simulations: different noise channels, densities,
@@ -122,12 +123,12 @@ def golden():
         )
     with np.load(FIXTURE, allow_pickle=False) as archive:
         manifest = json.loads(str(archive["manifest"].item()))
-        assert manifest["schema"] == 1
+        assert manifest["schema"] == 2
         assert manifest["cases"] == CASES
         assert manifest["steps"] == list(STEPS)
-        assert manifest["legacy_verified"], (
-            "Golden fixture must be verified against the retiring "
-            "implementations before removing them."
+        assert manifest["deformation_schedule"] == "physical_state_time"
+        assert manifest["backends_verified"], (
+            "Golden fixture must be cross-checked between NumPy and Numba."
         )
         # Copy arrays out before the archive is closed.
         data = {
