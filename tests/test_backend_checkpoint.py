@@ -218,3 +218,15 @@ def test_new_culture_uses_complete_backend_configuration(backend, tmp_path):
 def test_direct_culture_rejects_removed_backends(backend):
     with pytest.raises(ValueError, match="backend must"):
         Culture(output=None, force=None, grid=None, backend=backend)
+
+def test_simulate_parallel_forwards_checkpoint_period(tmp_path):
+    """The public parallel API must forward checkpoint timing to Culture."""
+    simulation = make_simulation("numpy", 1)
+
+    with pytest.raises(ValueError, match="checkpoint_period"):
+        simulation.simulate_parallel(
+            sql=False,
+            number_of_processes=1,
+            checkpoint_period=0.0,
+            output_dir=str(tmp_path),
+        )

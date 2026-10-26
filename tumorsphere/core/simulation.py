@@ -772,6 +772,7 @@ class Simulation:
         save_step_ovito: int = 1,
         df: bool = False,
         number_of_processes: int = None,
+        checkpoint_period: float = 10.0,
         output_dir: str = ".",
     ) -> None:
         """Execute independent configured culture realizations in parallel.
@@ -796,6 +797,9 @@ class Simulation:
             Enable local order, OVITO and dataframe outputs.
         number_of_processes : int or None, optional
             Number of worker processes; None uses the pool default.
+        checkpoint_period : float, optional
+            Positive interval between checkpoints in simulation time units.
+            Defaults to 10.0.
         output_dir : str, optional
             Root directory for output files and checkpoints.
 
@@ -888,6 +892,7 @@ class Simulation:
                         save_step_ovito,
                         m,
                         output_dir,
+                        checkpoint_period,
                         self.culture_bounds,
                         self.grid_cube_size,
                         self.grid_torus,
@@ -1028,6 +1033,7 @@ def simulate_single_culture(
         save_step_ovito,
         m,
         output_dir,
+        checkpoint_period,
         culture_bounds,
         grid_cube_size,
         grid_torus,
@@ -1520,4 +1526,5 @@ def simulate_single_culture(
         sim.num_of_steps_per_realization,
         start_tic,
         checkpoint_path_save,
+        checkpoint_period=checkpoint_period,
     )
