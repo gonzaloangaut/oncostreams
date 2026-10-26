@@ -4,6 +4,7 @@
 From the repository root, after installing the package with the Numba extra::
 
     python benchmarks/performance.py benchmark
+    python benchmarks/performance.py scaling --backend numba --sizes 256 512 1000
     python benchmarks/performance.py profile --backend numpy
     python benchmarks/performance.py profile --backend numba
 
@@ -21,6 +22,7 @@ Commit only selected reference summaries and readable profiles, not every run.
 from __future__ import annotations
 
 import argparse
+import csv
 import cProfile
 import hashlib
 import io
@@ -632,6 +634,158 @@ def profile(args: argparse.Namespace) -> None:
     print(f"Saved profiles: {directory}")
 
 
+def scaling(args: argparse.Namespace) -> None:
+    """Measure empirical wall-clock scaling at fixed density and parameters.
+
+    Each (N, backend) uses the existing isolated benchmark worker. Optional
+    profiling is a separate instrumented run and is never used for timing fits.
+    """
+    sizes = list(dict.fromkeys(args.sizes))
+    if len(sizes) < 2:
+        raise ValueError("--sizes requires at least two distinct cell counts")
+    if args.profile_n and not set(args.profile_n).issubset(sizes):
+        raise ValueError("--profile-n values must also appear in --sizes")
+
+    backends = (
+        ("numpy", "numba") if args.backend == "both" else (args.backend,)
+    )
+    # Validate the whole sweep before generating files or running simulations.
+    cases = []
+    for n in sizes:
+        case = argparse.Namespace(**vars(args))
+        case.n = n
+        validate(case)
+        cases.append(case)
+
+    directory = result_directory(args, "scaling")
+    rows = []
+    per_backend = {backend: [] for backend in backends}
+    for case in cases:
+        n = case.n
+        print(f"\nSCALING N={n}", flush=True)
+        records = {
+            backend: run_child(
+                case, backend, "benchmark", directory / f"n{n}_{backend}.json"
+            )
+            for backend in backends
+        }
+        if len(backends) == 2:
+            reference, optimized = records["numpy"], records["numba"]
+            if (
+                reference["initial_microstate_sha256"]
+                != optimized["initial_microstate_sha256"]
+            ):
+                raise RuntimeError(
+                    f"N={n}: backends have different initial states"
+                )
+            for key in ("config", "environment"):
+                if reference[key] != optimized[key]:
+                    raise RuntimeError(f"N={n}: backend {key} mismatch")
+            if reference["git"]["commit"] != optimized["git"]["commit"]:
+                raise RuntimeError(f"N={n}: backends use different commits")
+
+        row = {
+            "n": n,
+            "numpy_ms_per_step": None,
+            "numba_ms_per_step": None,
+            "numpy_us_per_cell_step": None,
+            "numba_us_per_cell_step": None,
+            "speedup_numpy_over_numba": None,
+        }
+        for backend, record in records.items():
+            ms = record["median_ms_per_step"]
+            row[f"{backend}_ms_per_step"] = ms
+            row[f"{backend}_us_per_cell_step"] = 1000.0 * ms / n
+            per_backend[backend].append((n, ms))
+            print(
+                f"  {backend}: {ms:.3f} ms/step; {1000.0 * ms / n:.3f} us/cell/step"
+            )
+        if len(backends) == 2:
+            row["speedup_numpy_over_numba"] = (
+                row["numpy_ms_per_step"] / row["numba_ms_per_step"]
+            )
+            print(f"  speedup: {row['speedup_numpy_over_numba']:.2f}x")
+        rows.append(row)
+
+        if n in args.profile_n:
+            # cProfile measures a DIFFERENT, instrumented run.
+            for backend in backends:
+                run_child(
+                    case,
+                    backend,
+                    "profile",
+                    directory / f"n{n}_profile_{backend}.json",
+                    profile_stats=directory / f"n{n}_profile_{backend}.prof",
+                )
+
+    # Fit log(t) = alpha * log(N) + b. This is an empirical, finite-range
+    # exponent, not a proof of an asymptotic complexity class.
+    fits = {}
+    for backend, points in per_backend.items():
+        ordered = sorted(points)
+        xs = np.log([n for n, ms in ordered])
+        ys = np.log([ms for n, ms in ordered])
+        alpha, intercept = np.polyfit(xs, ys, deg=1)
+        local = [
+            {
+                "n_low": ordered[j - 1][0],
+                "n_high": ordered[j][0],
+                "alpha": float((ys[j] - ys[j - 1]) / (xs[j] - xs[j - 1])),
+            }
+            for j in range(1, len(ordered))
+        ]
+        fits[backend] = {
+            "alpha_loglog_fit": float(alpha),
+            "prefactor_ms": float(np.exp(intercept)),
+            "local_exponents": local,
+        }
+        print(
+            f"{backend}: fitted alpha={alpha:.3f} over N={ordered[0][0]}..{ordered[-1][0]}"
+        )
+
+    columns = [
+        "n",
+        "numpy_ms_per_step",
+        "numba_ms_per_step",
+        "numpy_us_per_cell_step",
+        "numba_us_per_cell_step",
+        "speedup_numpy_over_numba",
+    ]
+    with (directory / "scaling.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as output:
+        writer = csv.DictWriter(output, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(sorted(rows, key=lambda row: row["n"]))
+
+    summary = {
+        "mode": "scaling",
+        "sizes_run_order": sizes,
+        "backends": list(backends),
+        "rows": sorted(rows, key=lambda row: row["n"]),
+        "effective_exponents": fits,
+        "shared_configuration": {
+            key: value
+            for key, value in config_from_args(cases[0]).items()
+            if key != "n"
+        },
+        "git": git_metadata(),
+        "environment": environment(),
+        "note": (
+            "Fixed density; the periodic box side increases as sqrt(N). "
+            "Times are median uninstrumented ms/step after warmup. "
+            "Fits are effective exponents for the sampled N range, not "
+            "guaranteed asymptotic complexity. Profile times are excluded. "
+            "Outputs and checkpoints are disabled during timed runs."
+        ),
+    }
+    (directory / "scaling_summary.json").write_text(
+        json.dumps(summary, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"Saved scaling: {directory / 'scaling_summary.json'}")
+    print(f"Saved table: {directory / 'scaling.csv'}")
+
+
 def main() -> None:
     """
     Command-line interface for benchmarking and profiling the Oncostreams simulation.
@@ -646,6 +800,33 @@ def main() -> None:
     )
     add_physical_options(bm)
     bm.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+
+    sc = commands.add_parser(
+        "scaling",
+        help="Measure time-per-step scaling with cell count at fixed density",
+    )
+    add_physical_options(sc)
+    sc.add_argument(
+        "--sizes",
+        nargs="+",
+        type=int,
+        default=[256, 512, 1000, 2000, 4000],
+        help="Cell counts in run order (default: 256 512 1000 2000 4000)",
+    )
+    sc.add_argument(
+        "--backend",
+        choices=("numpy", "numba", "both"),
+        default="numba",
+        help="Backend(s) to time (default: numba; NumPy may be slow for large N)",
+    )
+    sc.add_argument(
+        "--profile-n",
+        nargs="*",
+        type=int,
+        default=[],
+        help="Also profile selected sizes from --sizes (separate from benchmark)",
+    )
+    sc.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
 
     pr = commands.add_parser(
         "profile", help="Save cProfile output for NumPy, Numba or both"
@@ -691,6 +872,8 @@ def main() -> None:
             benchmark(args)
         elif args.command == "profile":
             profile(args)
+        elif args.command == "scaling":
+            scaling(args)
     except ValueError as exc:
         parser.error(str(exc))
 

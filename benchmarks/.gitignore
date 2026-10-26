@@ -1,6 +1,7 @@
 # Local benchmark and profiling runs
 results/benchmark-*/
 results/profile-*/
+results/scaling-*/
 
 # Binary profiling files
 results/**/*.prof
