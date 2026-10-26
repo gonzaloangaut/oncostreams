@@ -1046,6 +1046,111 @@ class DatOutput_motion_parameters(TumorsphereOutput):
             msd_t0,
         )
 
+    @staticmethod
+    def calculate_velocity_parameters(
+        cells,
+        active_cell_indexes,
+    ):
+        """Calculate statistics from the already-computed mechanical velocity.
+
+        ``Culture.cell_instantaneous_velocities`` is ``dif_positions / delta_t``.
+        It contains self-propulsion and interaction-induced motion for the
+        current integration step, but not the finite cell-center shift produced
+        by an instantaneous deformation before the mechanical update.
+
+        These reductions are evaluated only on motion-output steps.
+        """
+        active_indices = np.asarray(
+            active_cell_indexes,
+            dtype=int,
+        )
+
+        if active_indices.size == 0 or len(cells) == 0:
+            nan = float("nan")
+            return (nan,) * 8
+
+        culture = cells[int(active_indices[0])].culture
+        velocities_xy = np.asarray(
+            culture.cell_instantaneous_velocities[
+                active_indices,
+                :2,
+            ],
+            dtype=float,
+        )
+
+        speed_squared = np.sum(
+            velocities_xy**2,
+            axis=1,
+        )
+        speeds = np.sqrt(speed_squared)
+
+        mean_speed = float(np.mean(speeds))
+        rms_speed = float(np.sqrt(np.mean(speed_squared)))
+        p95_speed = float(np.percentile(speeds, 95))
+        max_speed = float(np.max(speeds))
+
+        summed_velocity = np.sum(
+            velocities_xy,
+            axis=0,
+        )
+        system_drift_speed = float(
+            np.linalg.norm(summed_velocity) / active_indices.size
+        )
+
+        total_speed = float(np.sum(speeds))
+        velocity_polarization = (
+            float(np.linalg.norm(summed_velocity) / total_speed)
+            if total_speed > 0.0
+            else float("nan")
+        )
+
+        elongated_mask = np.fromiter(
+            (
+                not cells[int(index)].is_round
+                for index in active_indices
+            ),
+            dtype=bool,
+            count=active_indices.size,
+        )
+
+        if np.any(elongated_mask):
+            elongated_velocities = velocities_xy[elongated_mask]
+            elongated_speeds = speeds[elongated_mask]
+
+            elongated_mean_speed = float(
+                np.mean(elongated_speeds)
+            )
+
+            elongated_total_speed = float(
+                np.sum(elongated_speeds)
+            )
+            elongated_summed_velocity = np.sum(
+                elongated_velocities,
+                axis=0,
+            )
+            elongated_velocity_polarization = (
+                float(
+                    np.linalg.norm(elongated_summed_velocity)
+                    / elongated_total_speed
+                )
+                if elongated_total_speed > 0.0
+                else float("nan")
+            )
+        else:
+            elongated_mean_speed = float("nan")
+            elongated_velocity_polarization = float("nan")
+
+        return (
+            mean_speed,
+            rms_speed,
+            p95_speed,
+            max_speed,
+            system_drift_speed,
+            velocity_polarization,
+            elongated_mean_speed,
+            elongated_velocity_polarization,
+        )
+
     def record_culture_state(
         self,
         tic,
@@ -1072,6 +1177,20 @@ class DatOutput_motion_parameters(TumorsphereOutput):
         if not should_save:
             return
 
+        (
+            mean_speed,
+            rms_speed,
+            p95_speed,
+            max_speed,
+            system_drift_speed,
+            velocity_polarization,
+            elongated_mean_speed,
+            elongated_velocity_polarization,
+        ) = self.calculate_velocity_parameters(
+            cells=cells,
+            active_cell_indexes=active_cell_indexes,
+        )
+
         os.makedirs(
             f"{self.output_dir}/dat_motion_parameters",
             exist_ok=True,
@@ -1088,7 +1207,15 @@ class DatOutput_motion_parameters(TumorsphereOutput):
                 "mean_squared_step_displacement,"
                 "p95_step_displacement,"
                 "max_step_displacement,"
-                "msd_t0\n"
+                "msd_t0,"
+                "mean_instantaneous_speed,"
+                "rms_instantaneous_speed,"
+                "p95_instantaneous_speed,"
+                "max_instantaneous_speed,"
+                "system_drift_speed,"
+                "velocity_polarization,"
+                "elongated_mean_instantaneous_speed,"
+                "elongated_velocity_polarization\n"
             )
 
             datfile.write(
@@ -1096,7 +1223,15 @@ class DatOutput_motion_parameters(TumorsphereOutput):
                 f"{mean_squared_step_displacement},"
                 f"{p95_step_displacement},"
                 f"{max_step_displacement},"
-                f"{msd_t0}\n"
+                f"{msd_t0},"
+                f"{mean_speed},"
+                f"{rms_speed},"
+                f"{p95_speed},"
+                f"{max_speed},"
+                f"{system_drift_speed},"
+                f"{velocity_polarization},"
+                f"{elongated_mean_speed},"
+                f"{elongated_velocity_polarization}\n"
             )
 
     def record_cell(

@@ -7,6 +7,8 @@ They do not test convergence of the physical integrator.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -21,12 +23,60 @@ def _position(x: float, y: float = 0.0) -> np.ndarray:
 
 
 def _saved_motion(path, step: int) -> np.ndarray:
-    """Read the five motion observables from the file for a given step."""
+    """Read the legacy displacement observables from a motion file."""
     matches = list(path.glob(f"motion_*_step={step:05d}.dat"))
     assert len(matches) == 1, (step, matches)
     data = np.loadtxt(matches[0], delimiter=",", skiprows=1, ndmin=1)
-    assert data.shape == (5,)
-    return data
+    assert data.shape == (13,)
+    return data[:5]
+
+
+def test_instantaneous_velocity_statistics():
+    """Velocity summaries use the mechanical velocity already on Culture."""
+    velocities = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0],
+        ]
+    )
+    culture = SimpleNamespace(
+        cell_instantaneous_velocities=velocities
+    )
+    cells = [
+        SimpleNamespace(
+            culture=culture,
+            is_round=is_round,
+        )
+        for is_round in (False, False, True, True)
+    ]
+
+    result = DatOutput_motion_parameters.calculate_velocity_parameters(
+        cells=cells,
+        active_cell_indexes=[0, 1, 2, 3],
+    )
+
+    speeds = np.array([1.0, 1.0, 1.0, 2.0])
+    summed_velocity = np.array([1.0, 2.0])
+
+    expected = (
+        np.mean(speeds),
+        np.sqrt(np.mean(speeds**2)),
+        np.percentile(speeds, 95),
+        np.max(speeds),
+        np.linalg.norm(summed_velocity) / 4,
+        np.linalg.norm(summed_velocity) / np.sum(speeds),
+        1.0,
+        1.0,
+    )
+
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=0,
+        atol=1e-12,
+    )
 
 
 def test_constant_velocity_gives_ballistic_msd():
