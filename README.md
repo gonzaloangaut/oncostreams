@@ -74,6 +74,9 @@ deformation attempts) is:
 These are medians from three repetitions after 60 warmup steps, timing 150
 steps without file output or checkpoints. Initialization and JIT compilation
 are excluded. Speedups are not guaranteed for other regimes or full runs.
+The table above compares a historical `main` revision against accelerated
+code; the scaling study below compares current NumPy and Numba backends
+on the same commit. The speedups refer to different experiments.
 
 For a reproducible comparison of NumPy and Numba on the **same current code**,
 run `python benchmarks/performance.py benchmark`. To generate Python-level
@@ -82,8 +85,49 @@ same-commit benchmark and readable profiles are available in
 [`benchmarks/results/reference/`](benchmarks/results/reference/).
 Profiling times are instrumented and should not be used to calculate speedups.
 
-Checkpoint formats also changed: this branch requires checkpoint configuration
-version 4, so checkpoints made by the historical `main` implementation
+### Scaling with cell count
+
+Use the `scaling` subcommand to measure execution time as the number of cells
+increases **at fixed density**. For example:
+
+```bash
+python benchmarks/performance.py scaling \
+    --backend numba --sizes 256 512 1000 2000 4000 \
+    --warmup 60 --steps 150 --repeats 3
+```
+
+The reference measurements use `rho=0.85`, `delta_t=0.005`, a deformation
+period of `0.05`, five deformation attempts, translational noise `eta=0.033`,
+no rotational noise, and a fixed number of cells. Times are medians of three
+runs after 60 warmup steps, with 150 timed steps per run; initialization,
+file output, checkpoints, and JIT compilation during warmup are excluded.
+
+| Backend | Cell-count range | Effective scaling exponent |
+| --- | ---: | ---: |
+| NumPy | 256–1,000 | 1.011 |
+| Numba | 256–4,000 | 1.002 |
+| Numba | 4,000–10,000 | 1.058 |
+
+The fitted exponent refers to `t_step ~ N^alpha` **within the measured range**;
+these results are consistent with approximately linear scaling, but do not
+establish an asymptotic complexity bound. For `N=256–1,000`, the same-code
+Numba acceleration is **29.25–32.31x** relative to NumPy. At `N=10,000`,
+Numba runs at **62.54 ms/step** (median); this short benchmark is not an
+end-to-end throughput estimate for long simulations with output enabled.
+
+![Fixed-density runtime scaling](benchmarks/results/reference/scaling/runtime_scaling.png)
+
+The three original sweeps, including their per-run measurements, configuration,
+commit identifiers, and environment metadata, are archived in
+[`benchmarks/results/reference/scaling/`](benchmarks/results/reference/scaling/).
+The two Numba sweeps share an overlapping `N=4,000` point and were performed
+separately. Error bars in the figure are sample standard deviations of the
+three uninstrumented timing repetitions. The profiling mode is intended for
+bottleneck analysis, not for estimating the scaling exponents.
+
+Checkpoint formats also changed: the current implementation requires
+checkpoint configuration version 4, so checkpoints made by the historical
+`main` implementation
 cannot be resumed directly. Resume tests cover checkpoints made with the
 current implementation.
 

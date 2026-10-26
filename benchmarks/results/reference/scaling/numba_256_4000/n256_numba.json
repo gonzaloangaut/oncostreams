@@ -1,0 +1,69 @@
+{
+  "mode": "benchmark",
+  "backend": "numba",
+  "git": {
+    "commit": "39ad674fa8e21cd34db2227433893990642b84a4",
+    "dirty": false
+  },
+  "config": {
+    "n": 256,
+    "rho": 0.85,
+    "seed": 23,
+    "dimension": 3,
+    "delta_t": 0.005,
+    "deformation_period": 0.05,
+    "attempts": 5,
+    "initial_fraction": 0.5,
+    "eta": 0.033,
+    "d_phi": null,
+    "warmup": 60,
+    "steps": 150,
+    "repeats": 3,
+    "aspect_ratio_max": 2.7,
+    "cell_radius": 1.0,
+    "force": {
+      "name": "Anisotropic_Grosmann",
+      "kRep": 2.5,
+      "bExp": 3.0,
+      "lambda_core": 1.0,
+      "shrinking": true
+    },
+    "overlap_threshold_ratio": "exp(-1)",
+    "trabajo_final": true,
+    "fixed_n": true,
+    "movement": true,
+    "periodic": true,
+    "outputs": false,
+    "checkpoints": false
+  },
+  "environment": {
+    "python": "3.12.3",
+    "numpy": "2.3.5",
+    "numba": "0.68.0",
+    "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "processor": "x86_64",
+    "cpu_count": 12
+  },
+  "initial_microstate_sha256": "fdf3cdb352f637033c7a6bd4ffd5edb4a884903a66572394d0556b5b08ae8cb2",
+  "warmed_microstate_sha256": [
+    "cfabb73f611dae1ee99fdd9ea7bc3a3fb0ad71d616f4347a2144652d9e596ce8",
+    "cfabb73f611dae1ee99fdd9ea7bc3a3fb0ad71d616f4347a2144652d9e596ce8",
+    "cfabb73f611dae1ee99fdd9ea7bc3a3fb0ad71d616f4347a2144652d9e596ce8"
+  ],
+  "fraction_elongated_after_warmup": [
+    0.359375,
+    0.359375,
+    0.359375
+  ],
+  "ms_per_step": [
+    1.5843386266593977,
+    1.554723093334663,
+    2.0003991599999913
+  ],
+  "median_ms_per_step": 1.5843386266593977,
+  "min_ms_per_step": 1.554723093334663,
+  "max_ms_per_step": 2.0003991599999913,
+  "stdev_ms_per_step": 0.2492022617661023,
+  "measured_at": "2026-10-25T21:45:44.767253-03:00"
+}
