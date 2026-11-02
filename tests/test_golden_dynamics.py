@@ -1,8 +1,8 @@
 """Frozen fixed-N dynamics regressions for the current physical protocol.
 
-The committed ``tests/data/fixed_n_dynamics.npz`` records the corrected
-deformation schedule, where a sweep acts on the state at the requested
-physical time. Regenerate the fixture only after an intentional dynamics
+The committed ``tests/data/fixed_n_dynamics.npz`` records scheduled active
+elongation together with mechanically triggered contraction processed at each
+integration step. Regenerate the fixture only after an intentional dynamics
 change and explicit NumPy/Numba cross-check.
 """
 
@@ -22,6 +22,7 @@ from tests._helpers import (
 
 FIXTURE = Path(__file__).parent / "data" / "fixed_n_dynamics.npz"
 STEPS = (1, 6, 17, 32)
+ELONGATION_PERIOD = 0.05
 
 # Fixed, deliberately small simulations: different noise channels, densities,
 # deformation attempts, and spatial grid dimensions. These exercise the full
@@ -80,7 +81,7 @@ def _culture(settings):
         eta=settings["eta"],
         d_phi=settings["d_phi"],
         attempts=settings["attempts"],
-        deformation_period=0.005,
+        deformation_period=ELONGATION_PERIOD,
         output_dir=None,
     )
 
@@ -126,7 +127,8 @@ def golden():
         assert manifest["schema"] == 2
         assert manifest["cases"] == CASES
         assert manifest["steps"] == list(STEPS)
-        assert manifest["deformation_schedule"] == "physical_state_time"
+        assert manifest["deformation_schedule"] == "scheduled_elongation_continuous_contraction"
+        assert manifest["elongation_period"] == ELONGATION_PERIOD
         assert manifest["backends_verified"], (
             "Golden fixture must be cross-checked between NumPy and Numba."
         )

@@ -391,12 +391,13 @@ class Culture:
         self.cluster_alignment_angle_deg = float(cluster_alignment_angle_deg)
 
         self.delta_t = delta_t
-        # Preserve the legacy behavior when None is provided:
-        # perform one deformation sweep per integration step.
+        # Historical public name retained for backwards compatibility.
+        # This period now controls scheduled elongation attempts only.
+        # Mechanical contractions are processed every integration step.
         if deformation_attempt_period is None:
             deformation_attempt_period = self.delta_t
 
-        # Convert the physical deformation period into integration steps
+        # Convert the physical elongation-attempt period into integration steps
         interval_in_steps = deformation_attempt_period / self.delta_t
 
         rounded_interval = int(round(interval_in_steps))
@@ -2247,101 +2248,135 @@ class Culture:
                     self.reproduce(cell_index=index, tic=i)
 
             if self.movement:
-                # Deformation is evaluated before integrating step i, so the
-                # current mechanical state is the state at tic i - 1.
+                # Mechanical contraction and active elongation are deliberately
+                # separated. ``cell.shrink`` stores the contraction condition
+                # computed by the mechanical dynamics in the preceding step.
+                #
+                # Process that response before integrating the new step. This
+                # prevents a transient blocking event from being lost simply
+                # because it occurred between two scheduled elongation sweeps.
+                contracted_cell_indexes = set()
+                contraction_occurred = False
+
+                if i > self.stabilization_time and self.deformation:
+                    pending_contraction_indexes = [
+                        index
+                        for index in self.active_cell_indexes
+                        if (
+                            not self.cells[index].is_round
+                            and self.cells[index].shrink
+                        )
+                    ]
+
+                    if pending_contraction_indexes:
+                        # Contractions can change the geometry seen by later
+                        # cells, so preserve the previous random-order policy.
+                        for index in self.rng.permutation(
+                            pending_contraction_indexes
+                        ):
+                            cell = self.cells[index]
+                            success = self.shrink_from_elliptical(index)
+
+                            if success:
+                                contraction_occurred = True
+                                contracted_cell_indexes.add(int(index))
+
+                                self.deformation_event_counts[
+                                    "contraction_events"
+                                ] += 1
+
+                                if cell.is_round:
+                                    self.deformation_event_counts[
+                                        "contraction_to_round_events"
+                                    ] += 1
+
+                    # A contraction changes the geometry immediately. If the
+                    # optional elongation-sleep optimization is enabled, wake
+                    # it without waiting for the next scheduled sweep.
+                    if (
+                        contraction_occurred
+                        and self.elongation_sleep_steps > 0
+                    ):
+                        self.elongation_sleep_remaining = 0
+                        self.steps_without_deformation = 0
+
+                # The historical deformation clock now governs active
+                # elongation attempts only. The state is still evaluated at
+                # tic i - 1, so the physical schedule remains aligned exactly
+                # as before.
                 if (
                     i > self.stabilization_time
                     and self.deformation
                     and self._is_deformation_attempt_step(i - 1)
                 ):
                     self.deformation_attempt_count += 1
-                    # Boolean to see if the elongation is sleeping
+
                     elongation_is_sleeping = (
                         self.deformation_attempt_count
-                        > (self.deformation_warmup_steps)
+                        > self.deformation_warmup_steps
                         and self.elongation_sleep_remaining > 0
                     )
 
-                    # Boolean to determine if any deformation occurred
-                    deformation_occurred = False
+                    # Include a contraction that happened at the beginning of
+                    # this same step in the optional sleep bookkeeping.
+                    deformation_occurred = contraction_occurred
 
-                    # Run for every cell
                     active_cell_indexes = self.rng.permutation(
                         self.active_cell_indexes
                     )
 
                     for index in active_cell_indexes:
+                        # A cell that just contracted in this step is not
+                        # allowed to immediately undo that response by
+                        # elongating in the coincident scheduled sweep.
+                        if int(index) in contracted_cell_indexes:
+                            continue
+
                         cell = self.cells[index]
 
                         if cell.is_round:
-                            # Round cells only try to elongate while elongation is active
                             if not elongation_is_sleeping:
-                                # Add to the count of deformation events
                                 self.deformation_event_counts[
                                     "round_elongation_attempts"
                                 ] += 1
 
-                                # Try to elongate it
                                 success = self.elongate_from_round(index)
 
                                 if success:
-                                    # Deformation succesful
                                     deformation_occurred = True
-
                                     self.deformation_event_counts[
                                         "round_elongation_successes"
                                     ] += 1
 
-                        else:
-                            # Contractions are always allowed, including during sleep
-                            success = self.shrink_from_elliptical(index)
+                        elif (
+                            not elongation_is_sleeping
+                            and cell.aspect_ratio < self.aspect_ratio_max
+                        ):
+                            # This branch matters for gradual-deformation mode.
+                            # In trabajo_final mode, elongated cells are already
+                            # at the maximum aspect ratio.
+                            self.deformation_event_counts[
+                                "elliptical_elongation_attempts"
+                            ] += 1
+
+                            success = self.elongate_from_elliptical(index)
 
                             if success:
-                                # Deformation succesful
                                 deformation_occurred = True
-
                                 self.deformation_event_counts[
-                                    "contraction_events"
+                                    "elliptical_elongation_successes"
                                 ] += 1
-
-                                # Check if the final state is a round cell
-                                if cell.is_round:
-                                    self.deformation_event_counts[
-                                        "contraction_to_round_events"
-                                    ] += 1
-
-                            # If the cell cant shrink, it tries to elongate
-                            elif (
-                                not elongation_is_sleeping
-                                and cell.aspect_ratio < self.aspect_ratio_max
-                            ):
-
-                                self.deformation_event_counts[
-                                    "elliptical_elongation_attempts"
-                                ] += 1
-
-                                success = self.elongate_from_elliptical(index)
-
-                                if success:
-                                    # Deformation succesful
-                                    deformation_occurred = True
-
-                                    self.deformation_event_counts[
-                                        "elliptical_elongation_successes"
-                                    ] += 1
 
                     # Adaptive elongation sleeping is an optional optimization.
                     # With the default ``elongation_sleep_steps == 0`` this
                     # whole mechanism is bypassed, so elongation is attempted
-                    # at every scheduled deformation sweep.
+                    # at every scheduled elongation sweep.
                     if (
                         self.elongation_sleep_steps > 0
                         and self.deformation_attempt_count
                         > self.deformation_warmup_steps
                     ):
                         if elongation_is_sleeping:
-                            # A contraction changes the geometry, so elongation
-                            # is reactivated from the next deformation sweep.
                             if deformation_occurred:
                                 self.elongation_sleep_remaining = 0
                                 self.steps_without_deformation = 0
@@ -2349,8 +2384,6 @@ class Culture:
                                 self.elongation_sleep_remaining -= 1
 
                         else:
-                            # While elongation is active, count consecutive
-                            # deformation sweeps without a successful change.
                             if deformation_occurred:
                                 self.steps_without_deformation = 0
                             else:
